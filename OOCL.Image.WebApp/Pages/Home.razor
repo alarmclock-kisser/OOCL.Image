@@ -1,0 +1,873 @@
+﻿@page "/"
+@using System.Linq
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using OOCL.Image.Client
+@using OOCL.Image.Shared
+@using Radzen
+@using Radzen.Blazor
+@using Microsoft.JSInterop
+@using System.Globalization
+@inject ApiClient Api
+@inject WebAppConfig Config
+@inject NotificationService Notifications
+@inject IJSRuntime JS
+@inject DialogService DialogService
+
+<PageTitle>Home</PageTitle>
+
+<link rel="stylesheet" href="~/css/site.css" />
+<link rel="icon" type="image/x-icon" href="favicon.ico" />
+
+<RadzenCard Style="max-width:1200px;margin:auto;margin-top:2rem;">
+    <!-- OpenCL Device Row -->
+    <div class="d-flex flex-row gap-3 align-items-stretch mb-4">
+        <!-- Device Selection -->
+        <RadzenCard Style="min-width:320px;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
+            <div>
+                <h4>OpenCL Device</h4>
+                <RadzenDropDown TValue="int" Data="@devices" @bind-Value="selectedDeviceIndex"
+                                TextProperty="DeviceName" ValueProperty="DeviceId"
+                                Style="width:100%;margin-bottom:0.5rem;"
+                                Change="@OnDeviceChanged">
+                    <Template Context="device">
+                        @device.DeviceName (@device.DeviceType)
+                    </Template>
+                </RadzenDropDown>
+            </div>
+        </RadzenCard>
+        <!-- Status Info -->
+        <RadzenCard Style="min-width:220px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+            <div class="status-info-box">
+                <b>Status:</b> @openClServiceInfo.DeviceName <br />
+                <b>Platform:</b> @openClServiceInfo.PlatformName <br />
+                <b>Initialized:</b> @(openClServiceInfo.Initialized ? "Yes" : "No")
+            </div>
+        </RadzenCard>
+        <!-- Actions Vertical -->
+        <RadzenCard Style="min-width:140px;flex:0 0 140px;display:flex;flex-direction:column;gap:0.5rem;align-items:stretch;justify-content:center;">
+            <RadzenButton Icon="play_arrow" Text="Initialize" Click="@InitializeDevice" Style="margin-bottom:0.5rem;" />
+            <RadzenButton Icon="close" Text="Dispose" ButtonStyle="ButtonStyle.Danger" Click="@ReleaseDevice" Style="margin-bottom:0.5rem;" />
+            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Click="@ReloadDevices" />
+        </RadzenCard>
+    </div>
+
+    <!-- Generic Image Kernel Execution Card -->
+    <RadzenCard Style="margin-bottom:1.5rem;">
+        <h4>Generic Image Kernel Execution</h4>
+        <div class="d-flex flex-row align-items-center gap-3 mb-2">
+            <RadzenDropDown TValue="string" Data="@kernelNames" @bind-Value="selectedKernelName" Style="min-width:220px;" Change="@OnKernelChanged" Placeholder="Select kernel..." />
+            <span style="font-size:0.95em;color:var(--fg);">
+                @if (selectedKernelInfo != null)
+                {
+                    @selectedKernelInfo.FunctionName
+                }
+            </span>
+        </div>
+        <div class="d-flex flex-row align-items-center gap-2 mb-2">
+            <RadzenCheckBox @bind-Value="useExistingImage" TValue="bool" Change="@(args => OnUseExistingImageChanged(args))" />
+            <span>@(useExistingImage ? "on existing image" : "on new blank")</span>
+        </div>
+        @if (!useExistingImage)
+        {
+            <div class="d-flex flex-column gap-1 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <label style="font-size:0.95em;">Color:</label>
+                    <label style="font-size:0.95em;">@GetRgbLabel(colorHexForNewImage)</label>
+                </div>
+                <div class="d-flex flex-row align-items-center gap-2">
+                    <RadzenColorPicker Value="@colorHexForNewImage" ValueChanged="@( (string v) => OnBaseColorChanged(v) )" Style="min-width:120px;" ShowRGBA="true" />
+                </div>
+            </div>
+        }
+        @if (kernelArgViewModels.Any(a => !a.IsPointer && IsColorGroupRepresentative(a) || !a.IsPointer && !a.IsColor))
+        {
+            <div class="d-flex flex-row gap-2 mb-2 flex-wrap">
+                @foreach (var arg in kernelArgViewModels.Where(a => !a.IsPointer && (IsColorGroupRepresentative(a) || !a.IsColor)).OrderBy(a => a.Index))
+                {
+                    if (IsColorGroupRepresentative(arg))
+                    {
+                        <!-- Color Picker removed for "from blank image" as requested -->
+                    }
+                    else if (IsWidthOrHeight(arg))
+                    {
+                        if (!useExistingImage)
+                        {
+                            <div style="display:flex;flex-direction:column;align-items:flex-start;">
+                                <label style="font-size:0.95em;">@arg.Name<br /><span style="font-size:0.85em;color:gray;">(@arg.Type)</span></label>
+                                <RadzenNumeric TValue="decimal"
+                                    style="min-width:90px;"
+                                    Value="@arg.Value"
+                                    ValueChanged="@(v => OnDimensionNumericChanged(arg, v))"
+                                    Min="@arg.Min" Max="@arg.Max"
+                                    Step="1"
+                                    Change="(_ => StateHasChanged())" />
+                            </div>
+                        }
+                        else
+                        {
+                            // hidden when using existing image
+                        }
+                    }
+                    else
+                    {
+                        <div style="display:flex;flex-direction:column;align-items:flex-start;">
+                            <label style="font-size:0.95em;">@arg.Name<br /><span style="font-size:0.85em;color:gray;">(@arg.Type)</span></label>
+                            <RadzenNumeric TValue="decimal" style="min-width:90px;" @bind-Value="arg.Value" Step="@arg.StepString" Min="@arg.Min" Max="@arg.Max" Change="(_ => StateHasChanged())" />
+                        </div>
+                    }
+                }
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(kernelInfoText))
+        {
+            <RadzenTextArea @bind-Value="kernelInfoText" Rows="6" ReadOnly="true" Style="width:100%;font-family:monospace;font-size:0.75rem;white-space:pre;" />
+        }
+        <RadzenButton Icon="play_arrow" Text="Execute" Click="@ExecuteKernel" Disabled="@(!CanExecute)" Style="margin-top:0.5rem;margin-bottom:0.5rem;" />
+        <div style="margin-top:0.5rem;font-size:0.95em;">
+            <b>Last Processing-Time:</b> @lastKernelProcessingTimeMs ms
+        </div>
+    </RadzenCard>
+
+    <!-- Image Row -->
+    <div class="d-flex flex-row gap-3 align-items-stretch">
+        <!-- PictureBox -->
+        <RadzenCard Style="flex:2;min-width:320px;display:flex;align-items:center;justify-content:center;position:relative;min-height:320px;">
+            <div style="resize:both;overflow:auto;min-width:200px;min-height:200px;max-width:100%;max-height:500px;border:1px solid #ccc;background:#222;display:flex;align-items:center;justify-content:center;">
+                @if (imageData != null && !string.IsNullOrEmpty(imageData.Base64Data))
+                {
+                    <img src="data:@imageData.MimeType;base64,@imageData.Base64Data" style="max-width:100%;max-height:480px;object-fit:contain;" />
+                }
+                else
+                {
+                    <span style="color:#aaa;">No image selected or generated yet</span>
+                }
+            </div>
+        </RadzenCard>
+        <!-- Image List & Actions -->
+        <RadzenCard Style="flex:1;min-width:260px;display:flex;flex-direction:column;">
+            <div style="flex:1 1 auto;overflow-y:auto;max-height:260px;">
+                <RadzenListBox Data="@images" @bind-Value="selectedImageId" ValueProperty="Id" Style="height:240px;width:100%;" Change="@OnImageChanged">
+                    <Template Context="img">
+                        @($"{(string.IsNullOrEmpty(img.FilePath) ? img.Id.ToString() : img.FilePath)} — {img.CreatedAt:yyyy-MM-dd HH:mm:ss.fff}")
+                    </Template>
+                </RadzenListBox>
+            </div>
+            <div class="d-flex gap-2 mt-2" style="flex-wrap:wrap;">
+                <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
+                <RadzenButton Icon="download" Text="Download" Click="@DownloadImage" Disabled="@(!CanDownload)" />
+                <RadzenDropDown Data="@formats" @bind-Value="selectedFormat" Style="width:80px;" />
+                <RadzenNumeric TValue="int" @bind-Value="quality" Min="1" Max="100" Style="width:60px;" />
+            </div>
+            <div class="d-flex gap-2 mt-2" style="flex-wrap:wrap;">
+                <RadzenButton Icon="delete" Text="Remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveImage" Disabled="@(!CanRemove)" />
+                <RadzenButton Icon="clear" Text="Clear All" ButtonStyle="ButtonStyle.Secondary" Click="@ClearImages" />
+            </div>
+            <InputFile @ref="fileInput" id="fileInputHidden" style="display:none" OnChange="OnInputFileChange" />
+        </RadzenCard>
+    </div>
+</RadzenCard>
+
+@code {
+    private List<OpenClDeviceInfo> devices = new();
+    private int selectedDeviceIndex = 0;
+    private List<ImageObjInfo> images = new();
+    private Guid selectedImageId;
+    private ImageObjData? imageData;
+    private string selectedFormat = "png";
+    private int quality = 90;
+    private OpenClServiceInfo openClServiceInfo = new();
+    private List<string> formats = new() { "png", "jpg", "bmp" };
+    private InputFile? fileInput;
+
+    private List<OpenClKernelInfo> kernelInfos = new();
+    private List<string> kernelNames = new();
+    private string selectedKernelName = string.Empty;
+    private OpenClKernelInfo? selectedKernelInfo;
+    private List<KernelArgViewModel> kernelArgViewModels = new();
+    private double lastKernelProcessingTimeMs = 0;
+    private string kernelInfoText = string.Empty;
+    private bool useExistingImage = true;
+    private string colorHex = "#000000";
+    private string colorHexForNewImage = "#000000";
+
+    private bool CanExecute => !string.IsNullOrEmpty(selectedKernelName) && (useExistingImage ? selectedImageId != Guid.Empty : true);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDevices();
+        await LoadImages();
+        await LoadOpenClStatus();
+        await LoadKernels();
+
+        if (devices.Count > 0 && !string.IsNullOrWhiteSpace(Config.PreferredDevice))
+        {
+            var preferred = devices.FirstOrDefault(d => d.DeviceName != null && d.DeviceName.ToLower().Contains(Config.PreferredDevice.ToLower()));
+            selectedDeviceIndex = preferred?.DeviceId ?? devices[0].DeviceId;
+        }
+        else if (devices.Count > 0)
+        {
+            selectedDeviceIndex = devices[0].DeviceId;
+        }
+
+        await InitializeDevice();
+        await LoadOpenClStatus();
+        await UpdateImageData();
+    }
+
+    private async Task LoadDevices() => devices = (await Api.GetOpenClDevicesAsync()).ToList();
+
+    private async Task LoadImages()
+    {
+        // Optionally cleanup old images on the server according to config
+        try
+        {
+            if (Config?.MaxImagesToKeep > 0)
+            {
+                await Api.CleanupOldImages(Config.MaxImagesToKeep);
+            }
+        }
+        catch { }
+
+        images = (await Api.GetImageListAsync()).ToList();
+        // sort by CreatedAt ascending so newest is last
+        images = images.OrderBy(i => i.CreatedAt).ToList();
+        if (images.Count > 0)
+        {
+            selectedImageId = images.Last().Id; // default select newest
+            // update last processing time from the selected image info
+            lastKernelProcessingTimeMs = images.Last().LastProcessingTimeMs;
+        }
+        await UpdateImageData();
+    }
+
+    private async Task LoadOpenClStatus()
+    {
+        openClServiceInfo = await Api.GetOpenClServiceInfoAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadKernels()
+    {
+        kernelInfos = (await Api.GetOpenClKernelsAsync()).ToList();
+        kernelNames = kernelInfos.Select(k => k.FunctionName).ToList();
+        if (kernelNames.Count > 0)
+        {
+            selectedKernelName = kernelNames[0];
+            await OnKernelChanged(selectedKernelName);
+        }
+    }
+
+    private async Task OnDeviceChanged(object value)
+    {
+        selectedDeviceIndex = (int) value;
+        await InitializeDevice();
+        await LoadOpenClStatus();
+    }
+
+    private async Task InitializeDevice()
+    {
+        await Api.InitializeOpenClIndexAsync(selectedDeviceIndex);
+        await LoadOpenClStatus();
+    }
+
+    private async Task ReloadDevices()
+    {
+        await LoadDevices();
+        await LoadOpenClStatus();
+    }
+
+    private async Task ReleaseDevice()
+    {
+        await Api.DisposeOpenClAsync();
+        await LoadOpenClStatus();
+    }
+
+    private async Task DownloadImage()
+    {
+        if (selectedImageId == Guid.Empty) return;
+        var file = await Api.DownloadImageAsync(selectedImageId, selectedFormat);
+        if (file != null)
+        {
+            using var ms = new MemoryStream();
+            await file.Stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            var mime = file.Headers.TryGetValue("Content-Type", out var ct) ? ct.FirstOrDefault() ?? "application/octet-stream" : "application/octet-stream";
+            var fileName = $"image_{selectedImageId}.{selectedFormat}";
+            await JS.InvokeVoidAsync("downloadFileFromBase64", base64, mime, fileName);
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Download started", Duration = 2000 });
+        }
+    }
+
+    private async Task RemoveImage()
+    {
+        if (selectedImageId == Guid.Empty) return;
+        await Api.RemoveImageAsync(selectedImageId);
+        await LoadImages();
+        Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Image removed", Duration = 2000 });
+    }
+
+    private async Task ClearImages()
+    {
+        await Api.ClearImagesAsync();
+        await LoadImages();
+        Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "All images removed", Duration = 2000 });
+    }
+
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+        {
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "No file selected", Duration = 2000 });
+            return;
+        }
+        try
+        {
+            using var stream = file.OpenReadStream(20 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var fileParameter = new FileParameter(new MemoryStream(bytes), file.Name, file.ContentType);
+            await Api.UploadImageAsync(fileParameter);
+            await LoadImages();
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Image uploaded successfully", Duration = 2000 });
+        }
+        catch (Exception ex)
+        {
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = $"Upload failed: {ex.Message}", Duration = 4000 });
+        }
+    }
+
+    private async Task OnImageChanged(object value)
+    {
+        selectedImageId = (Guid) value;
+        await UpdateImageData();
+    }
+
+    private async Task UpdateImageData()
+    {
+        if (selectedImageId == Guid.Empty)
+        {
+            imageData = null;
+            StateHasChanged();
+            return;
+        }
+        imageData = await Api.GetImageDataAsync(selectedImageId, selectedFormat);
+        // also update last processing time from ImageObjInfo if available
+        var info = images.FirstOrDefault(i => i.Id == selectedImageId);
+        if (info != null)
+        {
+            lastKernelProcessingTimeMs = info.LastProcessingTimeMs;
+        }
+        StateHasChanged();
+    }
+
+    private async Task OnKernelChanged(object value)
+    {
+        selectedKernelName = value?.ToString() ?? string.Empty;
+        selectedKernelInfo = kernelInfos.FirstOrDefault(k => k.FunctionName == selectedKernelName);
+        kernelArgViewModels.Clear();
+        kernelInfoText = string.Empty;
+        colorHex = "#000000";
+        if (selectedKernelInfo?.ArgumentType != null && selectedKernelInfo.ArgumentType.Any())
+        {
+            var argTypes = selectedKernelInfo.ArgumentType.ToArray();
+            var argNames = selectedKernelInfo.ArgumentNames?.ToArray();
+            for (int i = 0; i < argTypes.Length; i++)
+            {
+                var t = argTypes[i];
+                var name = argNames != null && i < argNames.Length ? argNames[i] : $"arg{i}";
+                bool isPointer = t.Contains("*");
+                bool isColor = selectedKernelInfo.ColorInputArgNames != null && selectedKernelInfo.ColorInputArgNames.Contains(name);
+                decimal defaultValue = 0m;
+                var lname = name.ToLower();
+                // support types like int, int32, Int32, etc.
+                if (t.ToLower().Contains("int"))
+                {
+                    if (lname.Contains("width"))
+                        defaultValue = 720m; // Default width for blank images
+                    else if (lname.Contains("height"))
+                        defaultValue = 480m; // Default height for blank images
+                    else if (lname.Contains("coeff") || lname.Contains("itercoeff") || lname.Contains("coef"))
+                        defaultValue = 1m;
+                    else if (lname.Contains("zoom"))
+                        defaultValue = 1m;
+                }
+                else if (t.ToLower().Contains("float") || t.ToLower().Contains("double"))
+                {
+                    if (lname.Contains("zoom"))
+                        defaultValue = 1m;
+                }
+                kernelArgViewModels.Add(new KernelArgViewModel
+                {
+                    Index = i,
+                    Name = name,
+                    Type = t,
+                    Value = defaultValue,
+                    Step = GetStep(t),
+                    Min = GetMin(t),
+                    Max = GetMax(t),
+                    IsPointer = isPointer,
+                    IsColor = isColor
+                });
+            }
+            BuildKernelInfoText();
+
+            // If current mode is 'from blank', ensure width/height defaults are applied (in case user switched earlier)
+            if (!useExistingImage)
+            {
+                foreach (var arg in kernelArgViewModels)
+                {
+                    var lname2 = arg.Name.ToLower();
+                    if (IsWidthOrHeight(arg))
+                    {
+                        if (lname2.Contains("width") && arg.Value == 0) arg.Value = 720;
+                        if (lname2.Contains("height") && arg.Value == 0) arg.Value = 480;
+                    }
+                }
+            }
+        }
+        await Task.CompletedTask;
+    }
+
+    private bool IsColorGroupRepresentative(KernelArgViewModel arg)
+    {
+        if (selectedKernelInfo?.ColorInputArgNames == null || selectedKernelInfo.ColorInputArgNames.Length != 3)
+            return false;
+        return selectedKernelInfo.ColorInputArgNames[0] == arg.Name;
+    }
+
+    private void OnColorChanged()
+    {
+        if (selectedKernelInfo?.ColorInputArgNames == null || selectedKernelInfo.ColorInputArgNames.Length != 3)
+            return;
+        // Parse colorHex to R,G,B and set to corresponding arg values
+        var hex = colorHex.StartsWith('#') ? colorHex[1..] : colorHex;
+        if (hex.Length == 6)
+        {
+            int r = int.Parse(hex[..2], NumberStyles.HexNumber);
+            int g = int.Parse(hex.Substring(2, 2), NumberStyles.HexNumber);
+            int b = int.Parse(hex.Substring(4, 2), NumberStyles.HexNumber);
+            for (int i = 0; i < 3; i++)
+            {
+                var name = selectedKernelInfo.ColorInputArgNames[i];
+                var vm = kernelArgViewModels.FirstOrDefault(x => x.Name == name);
+                if (vm != null) vm.Value = i == 0 ? r : i == 1 ? g : b;
+            }
+        }
+    }
+
+    private async Task ExecuteKernel()
+    {
+        Console.WriteLine($"[Blazor] ExecuteKernel called: useExistingImage={useExistingImage}, selectedKernelName={selectedKernelName}");
+
+        if (string.IsNullOrEmpty(selectedKernelName) || selectedKernelInfo == null)
+        {
+            Console.WriteLine("[Blazor] Kernel not selected or info missing");
+            return;
+        }
+
+        try
+        {
+            var argNames = selectedKernelInfo.ArgumentNames?.ToArray() ?? Array.Empty<string>();
+            var argTypes = selectedKernelInfo.ArgumentType?.ToArray() ?? Array.Empty<string>();
+            string[] argVals = new string[argTypes.Length];
+
+            // If using existing image, get its size
+            ImageObjInfo? selectedInfo = null;
+            if (useExistingImage && selectedImageId != Guid.Empty)
+            {
+                selectedInfo = images.FirstOrDefault(i => i.Id == selectedImageId);
+            }
+
+            for (int i = 0; i < argNames.Length; i++)
+            {
+                var name = argNames[i];
+                var vm = kernelArgViewModels.FirstOrDefault(k => k.Index == i || k.Name == name);
+                if (vm == null)
+                {
+                    argVals[i] = "0";
+                    continue;
+                }
+
+                if (vm.IsPointer)
+                {
+                    argVals[i] = "0";
+                    continue;
+                }
+
+                var lname = name.ToLower();
+
+                if (useExistingImage && selectedInfo != null && (lname.Contains("width") || lname.Contains("height")))
+                {
+                    if (lname.Contains("width")) argVals[i] = selectedInfo.Size.Width.ToString();
+                    else if (lname.Contains("height")) argVals[i] = selectedInfo.Size.Height.ToString();
+                    else argVals[i] = vm.Value.ToString(CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    argVals[i] = vm.Value.ToString(CultureInfo.InvariantCulture);
+                }
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            if (useExistingImage)
+            {
+                if (selectedImageId == Guid.Empty)
+                {
+                    Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "No image selected", Duration = 3000 });
+                    return;
+                }
+
+                Console.WriteLine($"[Blazor] ExecuteGenericImageKernel: imageId={selectedImageId}, kernel={selectedKernelName}");
+                var result = await Api.ExecuteGenericImageKernel(selectedImageId, selectedKernelName, argNames, argVals);
+
+                if (result == null)
+                {
+                    Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Kernel execution failed", Duration = 3000 });
+                    return;
+                }
+
+                // Use server-provided processing time and new image id if returned
+                if (result.Id != Guid.Empty)
+                {
+                    selectedImageId = result.Id;
+                }
+                if (result.LastProcessingTimeMs > 0)
+                {
+                    lastKernelProcessingTimeMs = result.LastProcessingTimeMs;
+                }
+            }
+            else
+            {
+                int width = 0, height = 0;
+                for (int i = 0; i < kernelArgViewModels.Count; i++)
+                {
+                    var vm = kernelArgViewModels[i];
+                    if (IsWidthOrHeight(vm))
+                    {
+                        var lname = vm.Name.ToLower();
+                        if (lname.Contains("width")) width = (int) vm.Value;
+                        if (lname.Contains("height")) height = (int) vm.Value;
+                    }
+                }
+
+                if (width <= 0 || height <= 0)
+                {
+                    Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Width/Height missing or invalid", Duration = 3000 });
+                    return;
+                }
+
+                Console.WriteLine($"[Blazor] ExecuteCreateImageAsync: width={width}, height={height}, kernel={selectedKernelName}");
+                string baseColorHex = colorHexForNewImage;
+                var result = await Api.ExecuteCreateImageAsync(width, height, selectedKernelName, baseColorHex, argNames, argVals);
+
+                if (result != null)
+                {
+                    selectedImageId = result.Id;
+                    if (result.LastProcessingTimeMs > 0)
+                    {
+                        lastKernelProcessingTimeMs = result.LastProcessingTimeMs;
+                    }
+                }
+                else
+                {
+                    Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Image creation failed", Duration = 3000 });
+                    return;
+                }
+            }
+
+            sw.Stop();
+            // prefer server-provided timing (set above), fallback to local stopwatch if not available
+            if (lastKernelProcessingTimeMs <= 0)
+            {
+                lastKernelProcessingTimeMs = sw.Elapsed.TotalMilliseconds;
+            }
+            await LoadImages();
+
+            Notifications.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = $"Kernel executed in {lastKernelProcessingTimeMs:F1} ms",
+                Duration = 2000
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Blazor] ExecuteKernel error: {ex.Message}");
+            Notifications.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = $"Execution failed: {ex.Message}",
+                Duration = 4000
+            });
+        }
+    }
+
+    private void BuildKernelInfoText()
+    {
+        if (selectedKernelInfo == null) { kernelInfoText = string.Empty; return; }
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Function: {selectedKernelInfo.FunctionName}");
+        try { sb.AppendLine($"File: {selectedKernelInfo.Filepath}"); } catch { }
+        try { sb.AppendLine($"ArgumentsCount: {selectedKernelInfo.ArgumentsCount}"); } catch { }
+        try { sb.AppendLine($"InputPointer: {selectedKernelInfo.InputPointerName}"); } catch { }
+        try { sb.AppendLine($"OutputPointer: {selectedKernelInfo.OutputPointerName}"); } catch { }
+        sb.AppendLine("Arguments:");
+        for (int i = 0; i < selectedKernelInfo.ArgumentNames.Count(); i++)
+        {
+            var name = selectedKernelInfo.ArgumentNames.ElementAt(i);
+            var type = selectedKernelInfo.ArgumentType.ElementAt(i);
+            var flags = "";
+            if (selectedKernelInfo.ColorInputArgNames != null && selectedKernelInfo.ColorInputArgNames.Contains(name))
+                flags += "[color] ";
+            if (type.Contains("*"))
+                flags += "[ptr] ";
+            sb.AppendLine($"  #{i} {type} {name} {flags}");
+        }
+        if (selectedKernelInfo.ColorInputArgNames != null && selectedKernelInfo.ColorInputArgNames.Length == 3)
+        {
+            sb.AppendLine($"Color Group: {string.Join(", ", selectedKernelInfo.ColorInputArgNames)}");
+        }
+        kernelInfoText = sb.ToString();
+    }
+
+    private decimal GetStep(string type)
+    {
+        var t = type?.ToLower() ?? string.Empty;
+        if (t.Contains("int")) return 1m;
+        if (t.Contains("single") || t.Contains("float")) return 0.01m;
+        if (t.Contains("double")) return 0.0001m;
+        if (t.Contains("byte")) return 1m;
+        return 1m;
+    }
+
+    private decimal GetMin(string type)
+    {
+        var t = type?.ToLower() ?? string.Empty;
+        if (t.Contains("int")) return int.MinValue;
+        if (t.Contains("single") || t.Contains("float") || t.Contains("double")) return -1000000m;
+        if (t.Contains("byte")) return 0m;
+        return int.MinValue;
+    }
+
+    private decimal GetMax(string type)
+    {
+        var t = type?.ToLower() ?? string.Empty;
+        if (t.Contains("int")) return int.MaxValue;
+        if (t.Contains("single") || t.Contains("float") || t.Contains("double")) return 1000000m;
+        if (t.Contains("byte")) return 255m;
+        return int.MaxValue;
+    }
+
+    private object CastArg(decimal value, string type) => type switch
+    {
+        "int" => (object) (int) value,
+        "float" => (object) (float) value,
+        "double" => (object) (double) value,
+        "byte" => (object) (byte) value,
+        _ => (object) (int) value
+    };
+
+    private bool CanDownload => selectedImageId != Guid.Empty;
+    private bool CanRemove => selectedImageId != Guid.Empty;
+
+    private async Task ShowFileDialog() => await JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
+
+    private static readonly decimal[] WidthSteps = new decimal[] { 144, 240, 256, 320, 360, 384, 426, 480, 512, 640, 720, 768, 800, 854, 960, 1024, 1080, 1152, 1200, 1280, 1366, 1440, 1536, 1600, 1680, 1728, 1768, 1792, 1800, 1920, 2048, 2160, 2304, 2400, 2560, 2880, 3200, 3440, 3840, 4096 };
+    private static readonly decimal[] HeightSteps = new decimal[] { 144, 180, 200, 210, 240, 256, 270, 272, 288, 320, 360, 384, 400, 432, 480, 512, 540, 600, 640, 720, 768, 800, 864, 900, 960, 1024, 1080, 1200, 1280, 1440, 1600, 1800, 1920, 2160, 2400, 2560 };
+
+    private bool IsWidthOrHeight(KernelArgViewModel arg)
+    {
+        var lname = arg.Name.ToLower();
+        var t = arg.Type?.ToLower() ?? string.Empty;
+        return (lname.Contains("width") || lname.Contains("height")) && (t.Contains("int") || t.Contains("decimal"));
+    }
+
+    private decimal[] GetDimensionSteps(string name)
+    {
+        var lname = name.ToLower();
+        if (lname.Contains("width")) return WidthSteps;
+        if (lname.Contains("height")) return HeightSteps;
+        return Array.Empty<decimal>();
+    }
+
+    private sealed class KernelArgViewModel
+    {
+        public int Index { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public decimal Value { get; set; }
+        public decimal Step { get; set; }
+        public decimal Min { get; set; }
+        public decimal Max { get; set; }
+        public bool IsPointer { get; set; }
+        public bool IsColor { get; set; }
+        public string StepString => Step.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private void OnDimensionNumericChanged(KernelArgViewModel arg, object? value)
+    {
+        if (value is decimal decVal)
+        {
+            // Prüfe, ob Wert durch Stepper (Up/Down) verändert wurde
+            var steps = GetDimensionSteps(arg.Name);
+            if (steps.Length > 0 && arg.Value != decVal)
+            {
+                int idx = Array.IndexOf(steps, arg.Value);
+                if (idx >= 0)
+                {
+                    // Step-Up
+                    if (decVal > arg.Value && idx < steps.Length - 1)
+                        arg.Value = steps[idx + 1];
+                    // Step-Down
+                    else if (decVal < arg.Value && idx > 0)
+                        arg.Value = steps[idx - 1];
+                    else
+                        arg.Value = decVal;
+                }
+                else
+                {
+                    arg.Value = decVal;
+                }
+            }
+            else
+            {
+                arg.Value = decVal;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private bool lastUseExistingImage = true;
+
+    private async Task OnUseExistingImageChanged(bool value)
+    {
+        if (lastUseExistingImage != value && !value) // switched to 'from blank'
+        {
+            // Set default width/height when switching to blank image
+            foreach (var arg in kernelArgViewModels)
+            {
+                var lname = arg.Name.ToLower();
+                if (IsWidthOrHeight(arg))
+                {
+                    if (lname.Contains("width")) arg.Value = 720;
+                    if (lname.Contains("height")) arg.Value = 480;
+                }
+            }
+        }
+        lastUseExistingImage = value;
+        useExistingImage = value;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private void OnBaseColorChanged(string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            colorHexForNewImage = value!;
+        }
+
+        if (TryParseColor(colorHexForNewImage, out var r, out var g, out var b))
+        {
+            if (selectedKernelInfo?.ColorInputArgNames != null && selectedKernelInfo.ColorInputArgNames.Length == 3)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    var argName = selectedKernelInfo.ColorInputArgNames[i];
+                    var vm = kernelArgViewModels.FirstOrDefault(x => x.Name == argName);
+                    if (vm != null)
+                    {
+                        vm.Value = i == 0 ? r : i == 1 ? g : b;
+                    }
+                }
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private static bool TryParseColor(string? input, out int r, out int g, out int b)
+    {
+        r = g = b = 0;
+        if (string.IsNullOrWhiteSpace(input)) return false;
+        var s = input.Trim();
+        try
+        {
+            if (s.StartsWith("#"))
+            {
+                var h = s.Substring(1);
+                if (h.Length == 8) h = h.Substring(2); // AARRGGBB -> RRGGBB
+                if (h.Length >= 6)
+                {
+                    r = int.Parse(h.Substring(0, 2), NumberStyles.HexNumber);
+                    g = int.Parse(h.Substring(2, 2), NumberStyles.HexNumber);
+                    b = int.Parse(h.Substring(4, 2), NumberStyles.HexNumber);
+                    return true;
+                }
+                return false;
+            }
+            else if (s.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+            {
+                // formats: rgb(r,g,b) or rgba(r,g,b,a)
+                var start = s.IndexOf('(');
+                var end = s.IndexOf(')');
+                if (start >= 0 && end > start)
+                {
+                    var inner = s.Substring(start + 1, end - start - 1);
+                    var parts = inner.Split(',').Select(p => p.Trim()).ToArray();
+                    if (parts.Length >= 3)
+                    {
+                        // parts may include percentages or floats
+                        bool parsedR = int.TryParse(parts[0].Split('%')[0], out r);
+                        bool parsedG = int.TryParse(parts[1].Split('%')[0], out g);
+                        bool parsedB = int.TryParse(parts[2].Split('%')[0], out b);
+                        if (parsedR && parsedG && parsedB) return true;
+                        // try parse floats
+                        if (float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var fr) &&
+                            float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var fg) &&
+                            float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var fb))
+                        {
+                            r = (int)fr; g = (int)fg; b = (int)fb; return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            else
+            {
+                // try parse as hex without #
+                var h = s;
+                if (h.Length == 8) h = h.Substring(2);
+                if (h.Length >= 6 && h.All(c => Uri.IsHexDigit(c)))
+                {
+                    r = int.Parse(h.Substring(0, 2), NumberStyles.HexNumber);
+                    g = int.Parse(h.Substring(2, 2), NumberStyles.HexNumber);
+                    b = int.Parse(h.Substring(4, 2), NumberStyles.HexNumber);
+                    return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private string GetRgbLabel(string hex)
+    {
+        string[] colorArgNames = new string[] { "R", "G", "B" };
+        if (selectedKernelInfo?.ColorInputArgNames != null && selectedKernelInfo.ColorInputArgNames.Length >= 3)
+        {
+            colorArgNames = selectedKernelInfo.ColorInputArgNames.ToArray();
+        }
+
+        if (TryParseColor(hex, out var r, out var g, out var b))
+        {
+            return $"{colorArgNames[0]}:{r}, {colorArgNames[1]}:{g}, {colorArgNames[2]}:{b}";
+        }
+        return $"{colorArgNames[0]}:0, {colorArgNames[1]}:0, {colorArgNames[2]}:0";
+    }
+}

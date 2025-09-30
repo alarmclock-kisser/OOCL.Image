@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36511.14 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.Api", "OOCL.Image.Api\OOCL.Image.Api.csproj", "{B9346CC8-C6CE-47BD-AE87-9891829948F5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.OpenCl", "OOCL.Image.OpenCl\OOCL.Image.OpenCl.csproj", "{3287A80D-DC0C-452D-A7BB-441A2671A99D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.Core", "OOCL.Image.Core\OOCL.Image.Core.csproj", "{D761B59C-FA06-45C1-AC6E-86571B8022D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.Shared", "OOCL.Image.Shared\OOCL.Image.Shared.csproj", "{2EC62950-1F06-422F-851B-6505E1EA2E99}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.Client", "OOCL.Image.Client\OOCL.Image.Client.csproj", "{5BE3C931-0690-407A-933C-6F666ADF7045}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.WebApp", "OOCL.Image.WebApp\OOCL.Image.WebApp.csproj", "{1D763500-195F-4AC3-A076-658AE2FBBBA0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B9346CC8-C6CE-47BD-AE87-9891829948F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9346CC8-C6CE-47BD-AE87-9891829948F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9346CC8-C6CE-47BD-AE87-9891829948F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9346CC8-C6CE-47BD-AE87-9891829948F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3287A80D-DC0C-452D-A7BB-441A2671A99D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3287A80D-DC0C-452D-A7BB-441A2671A99D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3287A80D-DC0C-452D-A7BB-441A2671A99D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3287A80D-DC0C-452D-A7BB-441A2671A99D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D761B59C-FA06-45C1-AC6E-86571B8022D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D761B59C-FA06-45C1-AC6E-86571B8022D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D761B59C-FA06-45C1-AC6E-86571B8022D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D761B59C-FA06-45C1-AC6E-86571B8022D0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2EC62950-1F06-422F-851B-6505E1EA2E99}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2EC62950-1F06-422F-851B-6505E1EA2E99}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2EC62950-1F06-422F-851B-6505E1EA2E99}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2EC62950-1F06-422F-851B-6505E1EA2E99}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5BE3C931-0690-407A-933C-6F666ADF7045}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5BE3C931-0690-407A-933C-6F666ADF7045}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5BE3C931-0690-407A-933C-6F666ADF7045}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5BE3C931-0690-407A-933C-6F666ADF7045}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {516A88B7-8A2F-4562-AE59-2C72B6F9328F}
+	EndGlobalSection
+EndGlobal

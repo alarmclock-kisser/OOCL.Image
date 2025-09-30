@@ -1,0 +1,42 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JS
+@inject OOCL.Image.WebApp.WebAppConfig Config
+
+<div class="main-layout">
+    <header class="topbar">
+        <div class="brand">OOCL.Image</div>
+        <div class="actions">
+            <button class="theme-toggle" @onclick="ToggleTheme">@toggleText</button>
+        </div>
+    </header>
+
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+@code {
+    private bool isDark;
+    private string toggleText => isDark ? "Light" : "Dark";
+
+    protected override void OnInitialized()
+    {
+        isDark = Config.DefaultDarkMode;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("theme.set", isDark);
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        isDark = !isDark;
+        Config.DefaultDarkMode = isDark;
+        await JS.InvokeVoidAsync("theme.set", isDark);
+    }
+}
+

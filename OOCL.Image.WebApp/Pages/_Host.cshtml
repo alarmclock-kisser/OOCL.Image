@@ -1,0 +1,50 @@
+﻿@page "/_Host"
+@using OOCL.Image.WebApp.Components
+@namespace OOCL.Image.WebApp.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OOCL.Image WebApp</title>
+    <base href="@Url.Content("~/")" />
+    <link rel="stylesheet" href="@Url.Content("~/app.css")" />
+    <link rel="stylesheet" href="@Url.Content("~/css/site.css")" />
+    <link rel="stylesheet" href="@Url.Content("~/_content/Radzen.Blazor/css/default-base.css")" />
+    <link id="rz-theme" rel="stylesheet" href="@Url.Content("~/_content/Radzen.Blazor/css/default.css")" />
+    <link rel="icon" type="image/x-icon" href="@Url.Content("~/favicon.ico")" />
+</head>
+<body>
+    <app>
+        <component type="typeof(App)" render-mode="ServerPrerendered" />
+    </app>
+
+    <script src="@Url.Content("~/_framework/blazor.server.js")"></script>
+    <script src="@Url.Content("~/_content/Radzen.Blazor/Radzen.Blazor.js")"></script>
+    <script>
+        window.setRadzenTheme = function(theme){
+            const link = document.getElementById('rz-theme');
+            if(!link) return;
+            link.href = `_content/Radzen.Blazor/css/${theme === 'dark' ? 'dark' : 'default'}.css`;
+        };
+        window.theme = { set: function(isDark){
+            document.body.classList.remove('theme-dark','theme-light');
+            document.body.classList.add(isDark? 'theme-dark':'theme-light');
+            window.setRadzenTheme(isDark? 'dark':'default');
+        }};
+        window.downloadFileFromBase64 = (base64, mime, fileName) => {
+            const link = document.createElement('a');
+            link.href = `data:${mime};base64,${base64}`;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+    </script>
+</body>
+</html>

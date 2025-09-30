@@ -1,0 +1,6 @@
+@OOCL.Image.Api_HostAddress = http://localhost:5019
+
+GET {{OOCL.Image.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

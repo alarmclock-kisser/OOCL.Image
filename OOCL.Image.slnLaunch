@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "Full https",
+    "Projects": [
+      {
+        "Path": "OOCL.Image.Api\\OOCL.Image.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      },
+      {
+        "Path": "OOCL.Image.WebApp\\OOCL.Image.WebApp.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      }
+    ]
+  }
+]

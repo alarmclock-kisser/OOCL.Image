@@ -1,0 +1,70 @@
+/* site.css - Platzhalter für benutzerdefiniertes CSS */
+:root {
+  --bg: #ffffff;
+  --fg: #000000;
+  --topbar-bg: #f8f9fa;
+  --btn-bg: rgba(0,0,0,0.04);
+  --btn-fg: var(--fg);
+  --btn-border: rgba(0,0,0,0.12);
+  --status-info-bg: #f8f9fa;
+  --status-info-fg: #222;
+}
+
+body.theme-dark {
+  --bg: #121212;
+  --fg: #ffffff;
+  --topbar-bg: #1f1f1f;
+  --btn-bg: rgba(255,255,255,0.06);
+  --btn-fg: var(--fg);
+  --btn-border: rgba(255,255,255,0.18);
+  --status-info-bg: #23272f;
+  --status-info-fg: #f8f9fa;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.status-info-box {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--status-info-bg);
+  color: var(--status-info-fg);
+  transition: background 0.2s, color 0.2s;
+}
+
+.main-layout .topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--topbar-bg);
+  color: var(--fg);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.brand { font-weight: bold; color: var(--fg); }
+
+.theme-toggle {
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.theme-toggle:hover {
+  filter: brightness(1.08);
+}
+
+.theme-toggle:focus {
+  outline: 2px solid rgba(0,123,255,0.25);
+  outline-offset: 2px;
+}
+
+.content { padding: 1rem; }
