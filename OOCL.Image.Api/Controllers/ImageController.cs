@@ -336,11 +336,18 @@ namespace OOCL.Image.Api.Controllers
 		[ProducesResponseType(typeof(int), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<IActionResult> ImageCleanupOnlyKeepLatestAsync([FromQuery] int maxImages = 1)
+		public async Task<IActionResult> ImageCleanupOnlyKeepLatestAsync([FromQuery] int maxImages = -1)
 		{
 			try
 			{
-				int removed = await this.imageCollection.CleanupOldImages(maxImages);
+				int removed = 0;
+
+				if (maxImages <= 0)
+				{
+					removed = await this.imageCollection.ApplyImagesLimitAsync();
+				}
+
+				removed = await this.imageCollection.CleanupOldImages(maxImages);
 				return this.Ok(removed);
 			}
 			catch (Exception ex)
@@ -353,7 +360,6 @@ namespace OOCL.Image.Api.Controllers
 				});
 			}
 		}
-
 
 	}
 }

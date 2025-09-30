@@ -137,7 +137,7 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<int> CleanupOldImages(int maxImages = 1)
+		public async Task<int> CleanupOldImages(int maxImages = 0)
 		{
 			try
 			{

@@ -1,0 +1,746 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
+using OOCL.Image.Client;
+using OOCL.Image.Shared;
+using Radzen;
+
+namespace OOCL.Image.WebApp.Pages
+{
+    public class HomeViewModel
+    {
+        private readonly ApiClient Api;
+        private readonly WebAppConfig Config;
+        private readonly NotificationService Notifications;
+        private readonly IJSRuntime JS;
+        private readonly DialogService DialogService;
+
+        public HomeViewModel(ApiClient api, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialog)
+        {
+            this.Api = api ?? throw new ArgumentNullException(nameof(api));
+            this.Config = config ?? throw new ArgumentNullException(nameof(config));
+            this.Notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+            this.JS = js ?? throw new ArgumentNullException(nameof(js));
+            this.DialogService = dialog;
+
+            this.devices = new List<OpenClDeviceInfo>();
+            this.images = new List<ImageObjInfo>();
+            this.kernelInfos = new List<OpenClKernelInfo>();
+            this.kernelNames = new List<string>();
+            this.kernelArgViewModels = new List<KernelArgViewModel>();
+            this.formats = new List<string> { "png", "jpg", "bmp" };
+        }
+
+        // --- Public state used by the UI (kept with same names as before) ---
+        public List<OpenClDeviceInfo> devices { get; set; }
+        public int selectedDeviceIndex { get; set; }
+        public List<ImageObjInfo> images { get; set; }
+        public Guid selectedImageId { get; set; }
+        public ImageObjData? imageData { get; set; }
+        public string selectedFormat { get; set; } = "png";
+        public int quality { get; set; } = 90;
+        public OpenClServiceInfo openClServiceInfo { get; set; } = new OpenClServiceInfo();
+        public List<string> formats { get; set; }
+
+        public List<OpenClKernelInfo> kernelInfos { get; set; }
+        public List<string> kernelNames { get; set; }
+        public string selectedKernelName { get; set; } = string.Empty;
+        public OpenClKernelInfo? selectedKernelInfo { get; set; }
+        public List<KernelArgViewModel> kernelArgViewModels { get; set; }
+        // redraw after value change
+        public bool redrawAfterValueChange { get; set; } = false;
+        public string kernelInfoText { get; set; } = string.Empty;
+        public bool useExistingImage { get; set; } = true;
+        public string colorHex { get; set; } = "#000000";
+        public string colorHexForNewImage { get; set; } = "#000000";
+
+        // Max images numeric and magnitude display
+        public int MaxImagesToKeepNumeric { get; set; }
+        public List<string> Magnitudes { get; } = new List<string> { "Byte", "kB", "KB", "mB", "MB", "gB", "GB" };
+        public string SelectedMagnitude { get; set; } = "kB";
+        public double MagnitudeFactor { get; set; } = 1000.0;
+
+        public bool CanExecute => !string.IsNullOrEmpty(this.selectedKernelName) && (this.useExistingImage ? this.selectedImageId != Guid.Empty : true);
+
+        // Gibt an, ob das Setzen auf 0 (unbegrenzt) lokal erlaubt ist — nur true, wenn Server-Config <= 0
+        public bool AllowZeroMaxImagesSetting => (this.Config?.MaxImagesToKeep ?? 0) <= 0;
+
+        // --- Initialization / loading ---
+        public async Task InitializeAsync()
+        {
+            await this.LoadDevices();
+            await this.LoadImages();
+            await this.LoadOpenClStatus();
+            await this.LoadKernels();
+            // initialize max images numeric from config
+            this.MaxImagesToKeepNumeric = this.Config?.MaxImagesToKeep ?? 0;
+            // ensure magnitude factor
+            if (string.IsNullOrEmpty(this.SelectedMagnitude)) this.SelectedMagnitude = "kB";
+            this.UpdateMagnitudeFactor();
+         }
+
+		public void UpdateMagnitudeFactor()
+		{
+			var m = (this.SelectedMagnitude ?? string.Empty).Trim();
+			switch (m)
+			{
+				case "Byte":
+					this.MagnitudeFactor = 1.0; break;
+				case "kB":
+					this.MagnitudeFactor = 1000.0; break;
+				case "KB":
+					this.MagnitudeFactor = 1024.0; break;
+				case "mB":
+					this.MagnitudeFactor = 1000.0 * 1000.0; break;
+				case "MB":
+					this.MagnitudeFactor = 1024.0 * 1024.0; break;
+				case "gB":
+					this.MagnitudeFactor = 1000.0 * 1000.0 * 1000.0; break;
+				case "GB":
+					this.MagnitudeFactor = 1024.0 * 1024.0 * 1024.0; break;
+				default:
+					// default to 1000 (kB)
+					this.MagnitudeFactor = 1000.0; break;
+			}
+		}
+		public async Task LoadDevices() => this.devices = (await this.Api.GetOpenClDevicesAsync()).ToList();
+
+        public async Task LoadImages()
+        {
+            try
+            {
+                // Determine effective limit: prefer user-set numeric (>0), otherwise fall back to server config if >0.
+                int effectiveLimit = 0;
+                var cfgLimit = this.Config?.MaxImagesToKeep ?? 0;
+
+                if (this.MaxImagesToKeepNumeric > 0)
+                {
+                    effectiveLimit = this.MaxImagesToKeepNumeric;
+                }
+
+                if (cfgLimit > 0)
+                {
+                    if (effectiveLimit <= 0) effectiveLimit = cfgLimit; // no numeric -> use server limit
+                    else effectiveLimit = Math.Min(effectiveLimit, cfgLimit); // cap numeric by server config
+                }
+
+                if (effectiveLimit > 0)
+                {
+                    await this.Api.CleanupOldImages(effectiveLimit);
+                }
+            }
+            catch { }
+
+			this.images = (await this.Api.GetImageListAsync()).ToList();
+			this.images = this.images.OrderBy(i => i.CreatedAt).ToList();
+            if (this.images.Count > 0)
+            {
+				this.selectedImageId = this.images.Last().Id;
+				this.lastKernelProcessingTimeMs = this.images.Last().LastProcessingTimeMs;
+            }
+        }
+
+        public async Task LoadOpenClStatus()
+        {
+			this.openClServiceInfo = await this.Api.GetOpenClServiceInfoAsync();
+        }
+
+        public async Task LoadKernels()
+        {
+			this.kernelInfos = (await this.Api.GetOpenClKernelsAsync()).ToList();
+			this.kernelNames = this.kernelInfos.Select(k => k.FunctionName).ToList();
+            if (this.kernelNames.Count > 0)
+            {
+				this.selectedKernelName = this.kernelNames[0];
+                await this.OnKernelChanged(this.selectedKernelName);
+            }
+        }
+
+        public async Task OnDeviceChanged(object value)
+        {
+			this.selectedDeviceIndex = (int)value;
+            await this.InitializeDevice();
+            await this.LoadOpenClStatus();
+        }
+
+        public async Task InitializeDevice()
+        {
+            await this.Api.InitializeOpenClIndexAsync(this.selectedDeviceIndex);
+            await this.LoadOpenClStatus();
+        }
+
+        public async Task ReloadDevices()
+        {
+            await this.LoadDevices();
+            await this.LoadOpenClStatus();
+        }
+
+        public async Task ReleaseDevice()
+        {
+            await this.Api.DisposeOpenClAsync();
+            await this.LoadOpenClStatus();
+        }
+
+        public async Task<ImageObjData?> GetImageDataAsync(Guid id, string format) => await this.Api.GetImageDataAsync(id, format);
+
+        public async Task DownloadImage(Guid id, string format)
+        {
+            if (id == Guid.Empty)
+			{
+				return;
+			}
+
+			var file = await this.Api.DownloadImageAsync(id, format);
+            if (file != null)
+            {
+                // return base64 to caller via JS interop from UI layer; here we just provide the byte array
+            }
+        }
+
+        public async Task RemoveImage(Guid id)
+        {
+            if (id == Guid.Empty)
+			{
+				return;
+			}
+
+			await this.Api.RemoveImageAsync(id);
+            await this.LoadImages();
+        }
+
+        public async Task ClearImages()
+        {
+            await this.Api.ClearImagesAsync();
+            await this.LoadImages();
+        }
+
+        public async Task OnInputFileChange(InputFileChangeEventArgs e)
+        {
+            var file = e.File;
+            if (file == null)
+            {
+				this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "No file selected", Duration = 2000 });
+                return;
+            }
+            try
+            {
+                using var stream = file.OpenReadStream(20 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var bytes = ms.ToArray();
+                var fileParameter = new FileParameter(new MemoryStream(bytes), file.Name, file.ContentType);
+                await this.Api.UploadImageAsync(fileParameter);
+                await this.LoadImages();
+            	this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Image uploaded successfully", Duration = 2000 });
+            }
+            catch (Exception ex)
+            {
+				this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = $"Upload failed: {ex.Message}", Duration = 4000 });
+            }
+        }
+
+        public async Task OnImageChanged(object value)
+        {
+			this.selectedImageId = (Guid)value;
+            await this.UpdateImageData();
+        }
+
+        public async Task UpdateImageData()
+        {
+            if (this.selectedImageId == Guid.Empty)
+            {
+				this.imageData = null;
+                return;
+            }
+			this.imageData = await this.Api.GetImageDataAsync(this.selectedImageId, this.selectedFormat);
+            var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
+            if (info != null)
+            {
+				this.lastKernelProcessingTimeMs = info.LastProcessingTimeMs;
+            }
+        }
+
+        public async Task OnKernelChanged(object value)
+        {
+			this.selectedKernelName = value?.ToString() ?? string.Empty;
+			this.selectedKernelInfo = this.kernelInfos.FirstOrDefault(k => k.FunctionName == this.selectedKernelName);
+			this.kernelArgViewModels.Clear();
+			this.kernelInfoText = string.Empty;
+			this.colorHex = "#000000";
+            if (this.selectedKernelInfo?.ArgumentType != null && this.selectedKernelInfo.ArgumentType.Any())
+            {
+                var argTypes = this.selectedKernelInfo.ArgumentType.ToArray();
+                var argNames = this.selectedKernelInfo.ArgumentNames?.ToArray();
+                for (int i = 0; i < argTypes.Length; i++)
+                {
+                    var t = argTypes[i];
+                    var name = argNames != null && i < argNames.Length ? argNames[i] : $"arg{i}";
+                    bool isPointer = t.Contains("*");
+                    bool isColor = this.selectedKernelInfo.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Contains(name);
+                    decimal defaultValue = 0m;
+                    var lname = name.ToLower();
+                    if (t.ToLower().Contains("int"))
+                    {
+                        if (lname.Contains("width"))
+						{
+							defaultValue = 720m;
+						}
+						else if (lname.Contains("height"))
+						{
+							defaultValue = 480m;
+						}
+						else if (lname.Contains("coeff") || lname.Contains("itercoeff") || lname.Contains("coef"))
+						{
+							defaultValue = 1m;
+						}
+						else if (lname.Contains("zoom"))
+						{
+							defaultValue = 1m;
+						}
+                    }
+                    else if (t.ToLower().Contains("float") || t.ToLower().Contains("double"))
+                    {
+                        if (lname.Contains("zoom"))
+						{
+							defaultValue = 1m;
+						}
+                    }
+					this.kernelArgViewModels.Add(new KernelArgViewModel
+                    {
+                        Index = i,
+                        Name = name,
+                        Type = t,
+                        Value = defaultValue,
+                        Step = this.GetStep(t),
+                        Min = this.GetMin(t),
+                        Max = this.GetMax(t),
+                        IsPointer = isPointer,
+                        IsColor = isColor
+                    });
+                }
+				this.BuildKernelInfoText();
+
+                if (!this.useExistingImage)
+                {
+                    foreach (var arg in this.kernelArgViewModels)
+                    {
+                        var lname2 = arg.Name.ToLower();
+                        if (this.IsWidthOrHeight(arg))
+                        {
+                            if (lname2.Contains("width") && arg.Value == 0)
+							{
+								arg.Value = 720;
+							}
+
+							if (lname2.Contains("height") && arg.Value == 0)
+							{
+								arg.Value = 480;
+							}
+						}
+                    }
+                }
+            } 
+
+            await Task.CompletedTask;
+		}
+
+        public bool IsColorGroupRepresentative(KernelArgViewModel arg)
+        {
+            if (this.selectedKernelInfo?.ColorInputArgNames == null || this.selectedKernelInfo.ColorInputArgNames.Length != 3)
+			{
+				return false;
+			}
+
+			return this.selectedKernelInfo.ColorInputArgNames[0] == arg.Name;
+        }
+
+        public void OnColorChanged()
+        {
+            if (this.selectedKernelInfo?.ColorInputArgNames == null || this.selectedKernelInfo.ColorInputArgNames.Length != 3)
+			{
+				return;
+			}
+
+			var hex = this.colorHex.StartsWith('#') ? this.colorHex[1..] : this.colorHex;
+            if (hex.Length == 6)
+            {
+                int r = int.Parse(hex[..2], NumberStyles.HexNumber);
+                int g = int.Parse(hex.Substring(2, 2), NumberStyles.HexNumber);
+                int b = int.Parse(hex.Substring(4, 2), NumberStyles.HexNumber);
+                for (int i = 0; i < 3; i++)
+                {
+                    var name = this.selectedKernelInfo.ColorInputArgNames[i];
+                    var vm = this.kernelArgViewModels.FirstOrDefault(x => x.Name == name);
+                    if (vm != null)
+					{
+						vm.Value = i == 0 ? r : i == 1 ? g : b;
+					}
+				}
+            }
+        }
+
+        public async Task<ImageObjInfo?> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argVals)
+        {
+            try
+            {
+                return await this.Api.ExecuteGenericImageKernel(id, kernelName, argNames, argVals);
+            }
+            catch { return null; }
+        }
+
+        public async Task<ImageObjInfo?> ExecuteCreateImageAsync(int width, int height, string kernelName, string baseColorHex, string[] argNames, string[] argVals)
+        {
+            try
+            {
+                return await this.Api.ExecuteCreateImageAsync(width, height, kernelName, baseColorHex, argNames, argVals);
+            }
+            catch { return null; }
+        }
+
+        public void BuildKernelInfoText()
+        {
+            if (this.selectedKernelInfo == null) { this.kernelInfoText = string.Empty; return; }
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Function: {this.selectedKernelInfo.FunctionName}");
+            try { sb.AppendLine($"File: {this.selectedKernelInfo.Filepath}"); } catch { }
+            try { sb.AppendLine($"ArgumentsCount: {this.selectedKernelInfo.ArgumentsCount}"); } catch { }
+            try { sb.AppendLine($"InputPointer: {this.selectedKernelInfo.InputPointerName}"); } catch { }
+            try { sb.AppendLine($"OutputPointer: {this.selectedKernelInfo.OutputPointerName}"); } catch { }
+            sb.AppendLine("Arguments:");
+            for (int i = 0; i < this.selectedKernelInfo.ArgumentNames.Count(); i++)
+            {
+                var name = this.selectedKernelInfo.ArgumentNames.ElementAt(i);
+                var type = this.selectedKernelInfo.ArgumentType.ElementAt(i);
+                var flags = "";
+                if (this.selectedKernelInfo.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Contains(name))
+				{
+					flags += "[color] ";
+				}
+
+				if (type.Contains("*"))
+				{
+					flags += "[ptr] ";
+				}
+
+				sb.AppendLine($"  #{i} {type} {name} {flags}");
+            }
+            if (this.selectedKernelInfo.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length == 3)
+            {
+                sb.AppendLine($"Color Group: {string.Join(", ", this.selectedKernelInfo.ColorInputArgNames)}");
+            }
+			this.kernelInfoText = sb.ToString();
+        }
+
+        public decimal GetStep(string type)
+        {
+            var t = type?.ToLower() ?? string.Empty;
+            if (t.Contains("int"))
+			{
+				return 1m;
+			}
+
+			if (t.Contains("single") || t.Contains("float"))
+			{
+				return 0.1m; // changed to 0.1 for floats
+			}
+
+			if (t.Contains("double"))
+			{
+				return 0.005m; // changed to 0.005 for double
+			}
+
+			if (t.Contains("byte"))
+			{
+				return 1m;
+			}
+
+			return 1m;
+        }
+
+        public decimal GetMin(string type)
+        {
+            var t = type?.ToLower() ?? string.Empty;
+            if (t.Contains("int"))
+			{
+				return int.MinValue;
+			}
+
+			if (t.Contains("single") || t.Contains("float") || t.Contains("double"))
+			{
+				return -1000000m;
+			}
+
+			if (t.Contains("byte"))
+			{
+				return 0m;
+			}
+
+			return int.MinValue;
+        }
+
+        public decimal GetMax(string type)
+        {
+            var t = type?.ToLower() ?? string.Empty;
+            if (t.Contains("int"))
+			{
+				return int.MaxValue;
+			}
+
+			if (t.Contains("single") || t.Contains("float") || t.Contains("double"))
+			{
+				return 1000000m;
+			}
+
+			if (t.Contains("byte"))
+			{
+				return 255m;
+			}
+
+			return int.MaxValue;
+        }
+
+        public object CastArg(decimal value, string type) => type switch
+        {
+            "int" => (object)(int)value,
+            "float" => (object)(float)value,
+            "double" => (object)(double)value,
+            "byte" => (object)(byte)value,
+            _ => (object)(int)value
+        };
+
+        public bool IsWidthOrHeight(KernelArgViewModel arg)
+        {
+            var lname = arg.Name.ToLower();
+            var t = arg.Type?.ToLower() ?? string.Empty;
+            return (lname.Contains("width") || lname.Contains("height")) && (t.Contains("int") || t.Contains("decimal"));
+        }
+
+        public decimal[] GetDimensionSteps(string name)
+        {
+            var lname = name.ToLower();
+            if (lname.Contains("width"))
+			{
+				return WidthSteps;
+			}
+
+			if (lname.Contains("height"))
+			{
+				return HeightSteps;
+			}
+
+			return Array.Empty<decimal>();
+        }
+
+        private static readonly decimal[] WidthSteps = new decimal[] { 144, 240, 256, 320, 360, 384, 426, 480, 512, 640, 720, 768, 800, 854, 960, 1024, 1080, 1152, 1200, 1280, 1366, 1440, 1536, 1600, 1680, 1728, 1768, 1792, 1800, 1920, 2048, 2160, 2304, 2400, 2560, 2880, 3200, 3440, 3840, 4096 };
+        private static readonly decimal[] HeightSteps = new decimal[] { 144, 180, 200, 210, 240, 256, 270, 272, 288, 320, 360, 384, 400, 432, 480, 512, 540, 600, 640, 720, 768, 800, 864, 900, 960, 1024, 1080, 1200, 1280, 1440, 1600, 1800, 1920, 2160, 2400, 2560 };
+		public double lastKernelProcessingTimeMs;
+
+		// Small viewmodel for arguments
+		public sealed class KernelArgViewModel
+        {
+            public int Index { get; set; }
+            public string Name { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
+            public decimal Value { get; set; }
+            public decimal Step { get; set; }
+            public decimal Min { get; set; }
+            public decimal Max { get; set; }
+            public bool IsPointer { get; set; }
+            public bool IsColor { get; set; }
+            public string StepString => this.Step.ToString(CultureInfo.InvariantCulture);
+        }
+
+        // Color helpers
+        public static bool TryParseColor(string? input, out int r, out int g, out int b)
+        {
+            r = g = b = 0;
+            if (string.IsNullOrWhiteSpace(input))
+			{
+				return false;
+			}
+
+			var s = input.Trim();
+            try
+            {
+                if (s.StartsWith("#"))
+                {
+                    var h = s.Substring(1);
+                    if (h.Length == 8)
+					{
+						h = h.Substring(2);
+					}
+
+					if (h.Length >= 6)
+                    {
+                        r = int.Parse(h.Substring(0, 2), NumberStyles.HexNumber);
+                        g = int.Parse(h.Substring(2, 2), NumberStyles.HexNumber);
+                        b = int.Parse(h.Substring(4, 2), NumberStyles.HexNumber);
+                        return true;
+                    }
+                    return false;
+                }
+                else if (s.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+                {
+                    var start = s.IndexOf('(');
+                    var end = s.IndexOf(')');
+                    if (start >= 0 && end > start)
+                    {
+                        var inner = s.Substring(start + 1, end - start - 1);
+                        var parts = inner.Split(',').Select(p => p.Trim()).ToArray();
+                        if (parts.Length >= 3)
+                        {
+                            bool parsedR = int.TryParse(parts[0].Split('%')[0], out r);
+                            bool parsedG = int.TryParse(parts[1].Split('%')[0], out g);
+                            bool parsedB = int.TryParse(parts[2].Split('%')[0], out b);
+                            if (parsedR && parsedG && parsedB)
+							{
+								return true;
+							}
+
+							if (float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var fr) &&
+                                float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var fg) &&
+                                float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var fb))
+                            {
+                                r = (int)fr; g = (int)fg; b = (int)fb; return true;
+                            }
+                        }
+                    }
+                    return false;
+                }
+                else
+                {
+                    var h = s;
+                    if (h.Length == 8)
+					{
+						h = h.Substring(2);
+					}
+
+					if (h.Length >= 6 && h.All(c => Uri.IsHexDigit(c)))
+                    {
+                        r = int.Parse(h.Substring(0, 2), NumberStyles.HexNumber);
+                        g = int.Parse(h.Substring(2, 2), NumberStyles.HexNumber);
+                        b = int.Parse(h.Substring(4, 2), NumberStyles.HexNumber);
+                        return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public string GetRgbLabel(string hex)
+        {
+            string[] colorArgNames = new string[] { "R", "G", "B" };
+            if (this.selectedKernelInfo?.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length >= 3)
+            {
+                colorArgNames = this.selectedKernelInfo.ColorInputArgNames.ToArray();
+            }
+
+            if (TryParseColor(hex, out var r, out var g, out var b))
+            {
+                return $"{colorArgNames[0]}:{r}, {colorArgNames[1]}:{g}, {colorArgNames[2]}:{b}";
+            }
+            return $"{colorArgNames[0]}:0, {colorArgNames[1]}:0, {colorArgNames[2]}:0";
+        }
+
+        public void OnBaseColorChanged(string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+				this.colorHexForNewImage = value!;
+            }
+
+            if (TryParseColor(this.colorHexForNewImage, out var r, out var g, out var b))
+            {
+                if (this.selectedKernelInfo?.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length == 3)
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        var argName = this.selectedKernelInfo.ColorInputArgNames[i];
+                        var vm = this.kernelArgViewModels.FirstOrDefault(x => x.Name == argName);
+                        if (vm != null)
+                        {
+                            vm.Value = i == 0 ? r : i == 1 ? g : b;
+                        }
+                    }
+                }
+            }
+        }
+        // helper to get max allowed for numeric
+        public int GetMaxImagesConfig() => this.Config?.MaxImagesToKeep ?? 0;
+
+        // helper to compute formatted size for UI usage
+        public string FormatSize(ImageObjInfo img)
+        {
+            double bytes = img.FrameSizeMb * 1024.0 * 1024.0;
+            double scaled = bytes / Math.Max(1.0, this.MagnitudeFactor);
+            return scaled.ToString("F2", CultureInfo.InvariantCulture);
+        }
+
+        public string GetImageDisplayHtml(ImageObjInfo img)
+        {
+            if (img == null) return string.Empty;
+            var id = img.Id.ToString();
+            var name = string.IsNullOrWhiteSpace(img.FilePath) ? string.Empty : img.FilePath;
+            // compute scaled size using MagnitudeFactor
+            double bytes = img.FrameSizeMb * 1024.0 * 1024.0;
+            double scaled = bytes / Math.Max(1.0, this.MagnitudeFactor);
+            var sizeStr = scaled.ToString("F2", CultureInfo.InvariantCulture);
+            var unit = this.SelectedMagnitude ?? "kB";
+            // Build HTML with small font, 1-3 lines separated visually
+            var sb = new System.Text.StringBuilder();
+            sb.Append("<div style='font-size:0.8em;line-height:1.05em;'>");
+            sb.AppendFormat("<div>{0}</div>", System.Net.WebUtility.HtmlEncode(id));
+            sb.AppendFormat("<div style='color:var(--fg);'>'{0}'</div>", System.Net.WebUtility.HtmlEncode(name));
+            sb.AppendFormat("<div>[{0},{1}] : {2} {3}</div>", img.Size.Width, img.Size.Height, sizeStr, unit);
+            sb.Append("</div>");
+            return sb.ToString();
+        }
+
+        public async Task SetMaxImagesAsync(int value)
+        {
+            try
+            {
+                // If server config defines a positive max, do not allow setting 0 locally (means unlimited)
+                var cfg = this.Config?.MaxImagesToKeep ?? 0;
+                if (value == 0 && cfg > 0)
+                {
+                    this.Notifications.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Warning,
+                        Summary = $"Unbegrenzt (0) ist nicht erlaubt. Server-Config erzwingt höchstens {cfg}.",
+                        Duration = 4000
+                    });
+                    // Reset to server-config as fallback
+                    this.MaxImagesToKeepNumeric = cfg;
+                    // enforce server limit
+                    await this.Api.CleanupOldImages(cfg);
+                    return;
+                }
+
+                int effective = value;
+                if (cfg > 0)
+                {
+                    if (effective <= 0) effective = cfg; // interpret unset as server limit
+                    else effective = Math.Min(effective, cfg);
+                }
+
+                if (effective > 0)
+                {
+                    await this.Api.CleanupOldImages(effective);
+                }
+
+                this.MaxImagesToKeepNumeric = value;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SetMaxImagesAsync error: " + ex.Message);
+            }
+        }
+     }
+ }

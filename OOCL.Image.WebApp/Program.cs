@@ -20,7 +20,7 @@ namespace OOCL.Image.WebApp
 
 			var defaultDark = builder.Configuration.GetValue<bool?>("DefaultDarkMode") ?? false;
 			var preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "cpu";
-			var maxImages = builder.Configuration.GetValue<int>("MaxImagesToKeep", 16);
+			var maxImages = builder.Configuration.GetValue<int>("ImagesLimit", 0);
 
 			// Blazor + Radzen
 			builder.Services.AddRazorPages();

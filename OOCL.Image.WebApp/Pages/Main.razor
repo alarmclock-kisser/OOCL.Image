@@ -1,0 +1,13 @@
+@using OOCL.Image.Shared
+@using Radzen.Blazor
+<RadzenCard></RadzenCard>
+@code {
+    private OpenClServiceInfo clStatusInfo = new OpenClServiceInfo();
+    private IEnumerable<OpenClDeviceInfo> clDeviceInfos = [];
+    private IEnumerable<OpenClKernelInfo> clKernelInfos = [];
+    private IEnumerable<ImageObjInfo> imageInfos = [];
+    private int clSelectedDeviceIndex = -1;
+    private Guid imageSelectedId = Guid.Empty;
+    private ImageObjData? imageData = null;
+    private string clSelectedKernelName = string.Empty;
+    }

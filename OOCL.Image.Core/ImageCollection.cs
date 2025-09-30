@@ -51,13 +51,15 @@ namespace OOCL.Image.Core
         public bool SaveMemory { get; set; } = false;
         public int DefaultWidth { get; set; } = 720;
         public int DefaultHeight { get; set; } = 480;
+        public int MaxImages { get; set; } = 0;
 
-        // Ctor with options
-        public ImageCollection(bool saveMemory = false, int defaultWidth = 720, int defaultHeight = 480)
+		// Ctor with options
+		public ImageCollection(bool saveMemory = false, int defaultWidth = 720, int defaultHeight = 480, int maxImages = 0)
         {
             this.DefaultWidth = Math.Max(defaultWidth, 360); // Min is 360px width
             this.DefaultHeight = Math.Max(defaultHeight, 240); // Min is 240px height
-            this.SaveMemory = saveMemory;
+            this.MaxImages = Math.Max(maxImages, 0); // 0 means no limit
+			this.SaveMemory = saveMemory;
             if (this.SaveMemory)
             {
                 Console.WriteLine("ImageCollection: Memory saving enabled. All images will be disposed on add.");
@@ -365,7 +367,15 @@ namespace OOCL.Image.Core
 			}
 		}
 
+        public async Task<int> ApplyImagesLimitAsync()
+        {
+            if (this.MaxImages > 0 && this.images.Count > this.MaxImages)
+            {
+                return await this.CleanupOldImages(this.MaxImages);
+			}
 
+            return 0;
+		}
 
 
 	}

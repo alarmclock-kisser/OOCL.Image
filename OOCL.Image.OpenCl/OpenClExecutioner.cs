@@ -442,13 +442,21 @@ namespace OOCL.Image.OpenCl
 					else if (argNameLower.Contains("zoom"))
 					{
 						if (argType == typeof(int))
+						{
 							sortedArgs[i] = 1;
+						}
 						else if (argType == typeof(float))
+						{
 							sortedArgs[i] = 1f;
+						}
 						else if (argType == typeof(double))
+						{
 							sortedArgs[i] = 1.0;
+						}
 						else
+						{
 							sortedArgs[i] = argType.IsValueType ? Activator.CreateInstance(argType) ?? 1 : 1;
+						}
 					}
 					else
 					{
