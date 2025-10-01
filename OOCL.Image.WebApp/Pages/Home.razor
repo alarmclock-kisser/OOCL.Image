@@ -20,44 +20,70 @@
 <link rel="icon" type="image/x-icon" href="favicon.ico" />
 
 <RadzenCard Style="max-width:1200px;margin:auto;margin-top:2rem;">
-    <!-- OpenCL Device Row -->
-    <div class="d-flex flex-row gap-3 align-items-stretch mb-4">
-        <!-- Device Selection -->
-        <RadzenCard Style="min-width:320px;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
-            <div>
-                <h4>OpenCL Device</h4>
-                <RadzenDropDown TValue="int" Data="@devices" @bind-Value="selectedDeviceIndex"
-                                TextProperty="DeviceName" ValueProperty="DeviceId"
-                                Style="width:100%;margin-bottom:0.5rem;"
-                                Change="@OnDeviceChanged">
-                    <Template Context="device">
-                        @device.DeviceName (@device.DeviceType)
-                    </Template>
-                </RadzenDropDown>
-            </div>
-        </RadzenCard>
-        <!-- Status Info -->
-        <RadzenPanel @bind-Expanded="isStatusExpanded" Style="min-width:220px;flex:1;display:flex;flex-direction:column;justify-content:center;">
-            <HeaderTemplate>
-                <b>OpenCL Status</b>
-            </HeaderTemplate>
-            <ChildContent>
-                <div class="status-info-box">
-                    <b>Status:</b> @(openClServiceInfo.DeviceName + " [" + openClServiceInfo.DeviceId + "]") <br />
-                    <b>Platform:</b> @openClServiceInfo.PlatformName <br />
-                    <b>Initialized:</b> @(openClServiceInfo.Initialized ? "Yes" : "No") <br />
-                    <b>Vendor:</b> @(openClServiceInfo.CurrentDevice?.Vendor) <br />
-                    <b>Driver Version:</b> @(openClServiceInfo.CurrentDevice?.DriverVersion) <br />
-                    <b>OpenCL Version:</b> @(openClServiceInfo.CurrentDevice?.Version) <br />
+
+    <!-- OpenCL Device Section (collapsible) -->
+    <div class="opencl-device-panel" style="border:1px solid var(--rz-border-color,#444);border-radius:6px;padding:0;margin-bottom:1.25rem;background:var(--rz-base-background,#1e1e1e);">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:14px;padding:6px 10px;">
+            <b style="font-size:0.95rem;">OpenCL Device</b>
+            <span style="font-size:0.75rem;color:var(--rz-text-secondary-color,#888);">
+                @GetDeviceSummary()
+            </span>
+            <span style="margin-left:auto;"></span>
+            <RadzenButton ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Icon="@(isDeviceSectionExpanded ? "remove" : "add")"
+                          Style="min-width:30px;width:30px;padding:0;"
+                          Click="@ToggleDeviceSection" />
+        </div>
+
+        <!-- Body (only if expanded) -->
+        @if (isDeviceSectionExpanded)
+        {
+            <div style="padding:10px 12px 14px;">
+                <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;">
+                    <!-- Device Selection -->
+                    <div style="flex:1 1 260px;min-width:250px;border:1px solid var(--rz-border-color,#333);border-radius:4px;padding:10px;">
+                        <h4 style="margin:0 0 6px;font-size:0.95rem;">Geräteauswahl</h4>
+                        <RadzenDropDown TValue="int"
+                                        Data="@devices"
+                                        @bind-Value="selectedDeviceIndex"
+                                        TextProperty="DeviceName"
+                                        ValueProperty="DeviceId"
+                                        Style="width:100%;"
+                                        Change="@OnDeviceChanged"
+                                        Placeholder="Gerät wählen..." >
+                            <Template Context="device">
+                                @device.DeviceName (@device.DeviceType)
+                            </Template>
+                        </RadzenDropDown>
+                    </div>
+
+                    <!-- Status Info -->
+                    <div style="flex:1 1 260px;min-width:250px;border:1px solid var(--rz-border-color,#333);border-radius:4px;padding:10px;">
+                        <h4 style="margin:0 0 6px;font-size:0.95rem;">Status</h4>
+                        <div style="font-size:0.78rem;line-height:1.35;">
+                            <b>Device:</b> @(openClServiceInfo.DeviceName + " [" + openClServiceInfo.DeviceId + "]")<br />
+                            <b>Platform:</b> @openClServiceInfo.PlatformName <br />
+                            <b>Initialized:</b> @(openClServiceInfo.Initialized ? "Yes" : "No") <br />
+                            <b>Vendor:</b> @(openClServiceInfo.CurrentDevice?.Vendor) <br />
+                            <b>Driver:</b> @(openClServiceInfo.CurrentDevice?.DriverVersion) <br />
+                            <b>OpenCL:</b> @(openClServiceInfo.CurrentDevice?.Version) <br />
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div style="flex:1 1 260px;min-width:250px;border:1px solid var(--rz-border-color,#333);border-radius:4px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+                        <h4 style="margin:0 0 4px;font-size:0.95rem;">Aktionen</h4>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                            <RadzenButton Icon="play_arrow" Text="Initialize" Click="@InitializeDevice" />
+                            <RadzenButton Icon="close" Text="Dispose" ButtonStyle="ButtonStyle.Danger" Click="@ReleaseDevice" />
+                            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Click="@ReloadDevices" />
+                        </div>
+                    </div>
                 </div>
-            </ChildContent>
-        </RadzenPanel>
-        <!-- Actions Vertical -->
-        <RadzenCard Style="min-width:140px;flex:0 0 140px;display:flex;flex-direction:column;gap:0.5rem;align-items:stretch;justify-content:center;">
-            <RadzenButton Icon="play_arrow" Text="Initialize" Click="@InitializeDevice" Style="margin-bottom:0.5rem;" />
-            <RadzenButton Icon="close" Text="Dispose" ButtonStyle="ButtonStyle.Danger" Click="@ReleaseDevice" Style="margin-bottom:0.5rem;" />
-            <RadzenButton Icon="refresh" Text="Refresh" ButtonStyle="ButtonStyle.Light" Click="@ReloadDevices" />
-        </RadzenCard>
+            </div>
+        }
     </div>
 
     <!-- Generic Image Kernel Execution Card -->
@@ -105,24 +131,34 @@
                 }
             </div>
         }
-        <!-- Redraw Checkbox directly below kernel args -->
+
         <div class="d-flex flex-row align-items-center gap-2 mb-2">
             <RadzenCheckBox @bind-Value="VM.redrawAfterValueChange" TValue="bool" />
             <label style="font-size:0.9em;margin:0;">Redraw on value change</label>
         </div>
-        <!-- Color Randomization Checkbox directly below color picker -->
         <div class="d-flex flex-row align-items-center gap-2 mb-2">
             <RadzenCheckBox @bind-Value="VM.RandomizeRgb" TValue="bool" Change="@(v => { if (v) { VM.RandomizeColor(); StateHasChanged(); } })" />
             <label style="font-size:0.9em;margin:0;">Randomize RGB values</label>
         </div>
-        <RadzenPanel @bind-Expanded="isKernelInfoExpanded" Style="margin-bottom:0.5rem;">
-            <HeaderTemplate>
-                <b>Kernel Arguments Info</b>
-            </HeaderTemplate>
-            <ChildContent>
-                <RadzenTextArea @bind-Value="kernelInfoText" Rows="12" ReadOnly="true" Style="width:100%;height:320px;font-family:monospace;font-size:0.75rem;white-space:pre;" />
-            </ChildContent>
-        </RadzenPanel>
+
+        <!-- Kernel Info collapsible (bereits umgesetzt) -->
+        <div class="kernel-info-panel" style="border:1px solid var(--rz-border-color,#444);border-radius:4px;margin-bottom:0.5rem;background:var(--rz-base-background,#1e1e1e);">
+            <div class="kernel-info-header" style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;">
+                <b style="font-size:0.9rem;">Kernel Arguments Info</b>
+                <RadzenButton ButtonStyle="ButtonStyle.Light"
+                              Size="ButtonSize.Small"
+                              Icon="@(isKernelInfoExpanded ? "remove" : "add")"
+                              Style="min-width:30px;width:30px;padding:0;"
+                              Click="ToggleKernelInfo" />
+            </div>
+            <div class="kernel-info-body" style="@(isKernelInfoExpanded ? "padding:6px 8px 10px;transition:all .18s ease;" : "display:none;")">
+                <RadzenTextArea @bind-Value="kernelInfoText"
+                                Rows="12"
+                                ReadOnly="true"
+                                Style="width:100%;height:320px;font-family:monospace;font-size:0.75rem;white-space:pre;" />
+            </div>
+        </div>
+
         <RadzenButton Icon="play_arrow" Text="Execute" Click="@ExecuteKernel" Disabled="@(!CanExecute)" Style="width:100%;margin-top:1rem;margin-bottom:0.5rem;" />
         <div style="margin-top:0.5rem;font-size:0.95em;">
             <b>Last Processing-Time:</b> @lastKernelProcessingTimeMs ms
@@ -131,7 +167,6 @@
 
     <!-- Image Row -->
     <div class="d-flex flex-row gap-3 align-items-stretch">
-        <!-- PictureBox -->
         <RadzenCard Style="flex:2;min-width:320px;display:flex;align-items:center;justify-content:center;position:relative;min-height:320px;">
             <div style="resize:both;overflow:auto;min-width:200px;min-height:200px;max-width:100%;max-height:500px;border:1px solid #ccc;background:#222;display:flex;align-items:center;justify-content:center;">
                 @if (imageData != null && !string.IsNullOrEmpty(imageData.Base64Data))
@@ -144,18 +179,17 @@
                 }
             </div>
         </RadzenCard>
-        <!-- Image List & Actions -->
         <RadzenCard Style="flex:1;min-width:260px;display:flex;flex-direction:column;max-height:400px;">
             <div style="flex:1 1 auto;overflow-y:auto;max-height:370px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                     <div style="display:flex;align-items:center;gap:6px;">
                         <label style="font-size:0.9em;margin-right:4px;">Max keep:</label>
                         <RadzenNumeric TValue="int"
-                            @bind-Value="VM.MaxImagesToKeepNumeric"
-                            Min="@(VM.GetMaxImagesConfig() > 0 ? 1 : 0)"
-                            Max="@(VM.GetMaxImagesConfig() > 0 ? VM.GetMaxImagesConfig() : int.MaxValue)"
-                            Change="@OnMaxImagesChanged"
-                            Style="width:90px;" />
+                                       @bind-Value="VM.MaxImagesToKeepNumeric"
+                                       Min="@(VM.GetMaxImagesConfig() > 0 ? 1 : 0)"
+                                       Max="@(VM.GetMaxImagesConfig() > 0 ? VM.GetMaxImagesConfig() : int.MaxValue)"
+                                       Change="@OnMaxImagesChanged"
+                                       Style="width:90px;" />
                         <RadzenDropDown Data="@VM.Magnitudes" @bind-Value="VM.SelectedMagnitude" Change="@(args => { VM.UpdateMagnitudeFactor(); StateHasChanged(); })" Style="width:90px;" />
                     </div>
                 </div>
@@ -188,12 +222,24 @@
 @code {
     private HomeViewModel VM = null!;
     private InputFile? fileInput;
+
     private bool isKernelInfoExpanded = false;
+    private bool isDeviceSectionExpanded = false;
+
+    private void ToggleKernelInfo() => isKernelInfoExpanded = !isKernelInfoExpanded;
+    private void ToggleDeviceSection() => isDeviceSectionExpanded = !isDeviceSectionExpanded;
+
+    private string GetDeviceSummary()
+        => openClServiceInfo?.Initialized == true
+            ? $"{openClServiceInfo.DeviceName} [{openClServiceInfo.DeviceId}]"
+            : "kein gerät initialisiert";
 
     protected override async Task OnInitializedAsync()
     {
         VM = new HomeViewModel(Api, Config, Notifications, JS, DialogService);
         await VM.InitializeAsync();
+
+        // (Optional) Automatische Vorauswahl wie gehabt
         if (VM.devices.Count > 0 && !string.IsNullOrWhiteSpace(Config.PreferredDevice))
         {
             var preferred = VM.devices.FirstOrDefault(d => d.DeviceName != null && d.DeviceName.ToLower().Contains(Config.PreferredDevice.ToLower()));
@@ -203,12 +249,20 @@
         {
             VM.selectedDeviceIndex = VM.devices[0].DeviceId;
         }
+
+        // Falls du initial NICHT automatisch initialisieren willst, kommentiere die nächste Zeile aus.
         await VM.InitializeDevice();
+
         await VM.LoadOpenClStatus();
+
+        // Panel-Startzustand gemäß Anforderung:
+        isDeviceSectionExpanded = !(openClServiceInfo?.Initialized ?? false);
+
         await VM.UpdateImageData();
         StateHasChanged();
     }
 
+    // --- bestehende Mappings / Properties ---
     private List<OpenClDeviceInfo> devices { get => VM.devices; set => VM.devices = value; }
     private int selectedDeviceIndex { get => VM.selectedDeviceIndex; set => VM.selectedDeviceIndex = value; }
     private List<ImageObjInfo> images { get => VM.images; set => VM.images = value; }
@@ -231,12 +285,13 @@
     private bool CanExecute => VM.CanExecute;
     private bool CanDownload => VM.selectedImageId != Guid.Empty;
     private bool CanRemove => VM.selectedImageId != Guid.Empty;
-    private bool isStatusExpanded = false; 
 
-    private async Task OnDeviceChanged(object value) { await VM.OnDeviceChanged(value); StateHasChanged(); }
-    private async Task InitializeDevice() { await VM.InitializeDevice(); StateHasChanged(); }
-    private async Task ReloadDevices() { await VM.ReloadDevices(); StateHasChanged(); }
-    private async Task ReleaseDevice() { await VM.ReleaseDevice(); StateHasChanged(); }
+    // --- Methoden (unverändert außer Position) ---
+    private async Task OnDeviceChanged(object value) { await VM.OnDeviceChanged(value); await VM.LoadOpenClStatus(); StateHasChanged(); }
+    private async Task InitializeDevice() { await VM.InitializeDevice(); await VM.LoadOpenClStatus(); StateHasChanged(); }
+    private async Task ReloadDevices() { await VM.ReloadDevices(); await VM.LoadOpenClStatus(); StateHasChanged(); }
+    private async Task ReleaseDevice() { await VM.ReleaseDevice(); await VM.LoadOpenClStatus(); StateHasChanged(); }
+
     private async Task DownloadImage()
     {
         if (selectedImageId == Guid.Empty)
@@ -244,33 +299,27 @@
             Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Kein Bild ausgewählt", Duration = 2500 });
             return;
         }
-
         var file = await Api.DownloadImageAsync(selectedImageId, selectedFormat);
         if (file == null)
         {
             Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Download fehlgeschlagen", Duration = 2500 });
             return;
         }
-
-        // Annahme: FileResponse hat eine Methode GetContentStream() oder ähnliches, um den Stream zu erhalten.
-        // Falls die Methode anders heißt, bitte anpassen!
         using var ms = new MemoryStream();
-        using var stream = file.Stream; // <--- Fix: Ersetze "file.Content" durch die korrekte Methode/Eigenschaft
+        using var stream = file.Stream;
         await stream.CopyToAsync(ms);
         var bytes = ms.ToArray();
         var base64 = Convert.ToBase64String(bytes);
         var mime = "application/octet-stream";
         var filename = $"image_{selectedImageId}.{selectedFormat}";
-
-        await JS.InvokeVoidAsync(
-            "eval",
-            $"(function(){{var a=document.createElement('a');a.href='data:{mime};base64,{base64}';a.download='{filename}';document.body.appendChild(a);a.click();document.body.removeChild(a);}})();"
-        );
-
+        await JS.InvokeVoidAsync("eval",
+            $"(function(){{var a=document.createElement('a');a.href='data:{mime};base64,{base64}';a.download='{filename}';document.body.appendChild(a);a.click();document.body.removeChild(a);}})();");
         Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Download gestartet", Duration = 2000 });
     }
+
     private async Task RemoveImage() { await VM.RemoveImage(selectedImageId); await VM.LoadImages(); await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Image removed", Duration = 2000 }); }
     private async Task ClearImages() { await VM.ClearImages(); await VM.LoadImages(); await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "All images removed", Duration = 2000 }); }
+
     private async Task ExecuteKernel()
     {
         var argNames = VM.selectedKernelInfo?.ArgumentNames?.ToArray() ?? Array.Empty<string>();
@@ -285,8 +334,7 @@
         {
             var name = argNames[i];
             var vmArg = VM.kernelArgViewModels.FirstOrDefault(k => k.Index == i || k.Name == name);
-            if (vmArg == null) { argVals[i] = "0"; continue; }
-            if (vmArg.IsPointer) { argVals[i] = "0"; continue; }
+            if (vmArg == null || vmArg.IsPointer) { argVals[i] = "0"; continue; }
             var lname = name.ToLower();
             if (VM.useExistingImage && selectedInfo != null && (lname.Contains("width") || lname.Contains("height")))
             {
@@ -315,7 +363,7 @@
                 return;
             }
             if (result.Id != Guid.Empty) VM.selectedImageId = result.Id;
-            await VM.UpdateImageData(); // <-- Bilddaten nach Kernel-Exec aktualisieren
+            await VM.UpdateImageData();
         }
         else
         {
@@ -335,51 +383,46 @@
                 return;
             }
             var result = await VM.ExecuteCreateImageAsync(width, height, VM.selectedKernelName, VM.colorHexForNewImage, argNames, argVals);
-            if (result != null)
-            {
-                VM.selectedImageId = result.Id;
-            }
-            else
+            if (result == null)
             {
                 Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Image creation failed", Duration = 3000 });
                 return;
             }
+            VM.selectedImageId = result.Id;
         }
 
         sw.Stop();
         var selectedImg = VM.images.FirstOrDefault(i => i.Id == VM.selectedImageId);
         if (selectedImg != null && selectedImg.LastProcessingTimeMs <= 0)
-        {
             selectedImg.LastProcessingTimeMs = sw.Elapsed.TotalMilliseconds;
-        }
+
         await VM.LoadImages();
         await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric);
         await VM.UpdateImageData();
 
         Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = $"Kernel executed in {VM.lastKernelProcessingTimeMs:F1} ms", Duration = 2000 });
     }
+
     private async Task OnInputFileChange(InputFileChangeEventArgs e)
     {
         await VM.OnInputFileChange(e);
         await VM.LoadImages();
         await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric);
-        await VM.UpdateImageData(); // Bilddaten aktualisieren
+        await VM.UpdateImageData();
     }
+
     private async Task OnMaxImagesChanged() { await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); await VM.LoadImages(); StateHasChanged(); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = $"Max images set to {VM.MaxImagesToKeepNumeric}", Duration = 2000 }); }
     private async Task OnKernelChanged(object value) { await VM.OnKernelChanged(value); StateHasChanged(); }
     private bool IsWidthOrHeight(HomeViewModel.KernelArgViewModel arg) => VM.IsWidthOrHeight(arg);
     private bool IsColorGroupRepresentative(HomeViewModel.KernelArgViewModel arg) => VM.IsColorGroupRepresentative(arg);
     private string GetRgbLabel(string hex) => VM.GetRgbLabel(hex);
     private void OnBaseColorChanged(string? value) { VM.OnBaseColorChanged(value); StateHasChanged(); }
-    private void OnDimensionNumericChanged(HomeViewModel.KernelArgViewModel arg, decimal v) { arg.Value = v; StateHasChanged(); }
     private async Task OnArgChanged(HomeViewModel.KernelArgViewModel arg, decimal v)
     {
         arg.Value = v;
         StateHasChanged();
         if (VM.redrawAfterValueChange && CanExecute)
-        {
             await ExecuteKernel();
-        }
     }
     private async Task OnImageChanged(object value) { await VM.OnImageChanged(value); await VM.UpdateImageData(); StateHasChanged(); }
     private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
