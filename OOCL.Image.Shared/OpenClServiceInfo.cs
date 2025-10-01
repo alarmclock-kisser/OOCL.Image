@@ -11,6 +11,8 @@ namespace OOCL.Image.Shared
 		public string PlatformName { get; set; } = string.Empty;
 		public bool Initialized { get; set; } = false;
 
+		public OpenClDeviceInfo CurrentDevice { get; set; } = new();
+
 
 
 		public OpenClServiceInfo() : base()
@@ -41,6 +43,8 @@ namespace OOCL.Image.Shared
 			this.DeviceId = service.Index;
 			this.DeviceName = service.GetDeviceInfo() ?? "N/A";
 			this.PlatformName = service.GetPlatformInfo() ?? "N/A";
+
+			this.CurrentDevice = new OpenClDeviceInfo(service, this.DeviceId);
 		}
 	}
 }

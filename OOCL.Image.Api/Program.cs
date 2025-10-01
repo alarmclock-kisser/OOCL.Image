@@ -14,10 +14,12 @@ namespace OOCL.Image.Api
 			// Get config values
 			bool swaggerEnabled = builder.Configuration.GetValue<bool>("SwaggerEnabled", true);
 			int maxUploadSize = builder.Configuration.GetValue<int>("MaxUploadSizeMb", 128) * 1_000_000;
+			int imagesLimit = builder.Configuration.GetValue<int>("ImagesLimit", 0);
 			string preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "CPU";
+			bool loadResources = builder.Configuration.GetValue<bool>("LoadResources", false);
 
 			// Add services to the container.
-			builder.Services.AddSingleton<ImageCollection>();
+			builder.Services.AddSingleton<ImageCollection>(sp => new ImageCollection(false,720, 480,  imagesLimit, loadResources));
 			var openClService = new OpenClService();
 			if (!string.IsNullOrWhiteSpace(preferredDevice))
 			{
@@ -35,7 +37,7 @@ namespace OOCL.Image.Api
 					Title = "OOCL.Image API",
 					Description = "API + WebApp using OpenCL Kernels for image generation etc.",
 					TermsOfService = new Uri("https://localhost:7220/terms"),
-					Contact = new OpenApiContact { Name = "- alarmclock-kisser -", Email = "marcel.king91299@gmail.com" }
+					Contact = new OpenApiContact { Name = "github: alarmclock-kisser", Email = "marcel.king91299@gmail.com" }
 				});
 			});
 

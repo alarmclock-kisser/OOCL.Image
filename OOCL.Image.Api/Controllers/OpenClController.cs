@@ -12,7 +12,7 @@ namespace OOCL.Image.Api.Controllers
 	{
 		private readonly OpenClService openClService;
 		private readonly ImageCollection imageCollection;
-		
+
 
 
 		public OpenClController(OpenClService openClService, ImageCollection imageCollection)
@@ -193,7 +193,7 @@ namespace OOCL.Image.Api.Controllers
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteGenericImageKernelAsync([FromQuery] Guid imageId, [FromQuery] string kernelName, [FromQuery] string[] argNames, [FromQuery] string[] argValues)
+		public async Task<ActionResult<ImageObjInfo>> ExecuteGenericImageKernelAsync([FromQuery] Guid imageId, [FromQuery] string kernelName, [FromQuery] Dictionary<string, string> arguments)
 		{
 			try
 			{
@@ -218,13 +218,11 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
-				Dictionary<string, string> argsDict = [];
-				for (int i = 0; i < argNames.Length; i++)
-				{
-					argsDict[argNames[i]] = argValues[i];
-				}
+				// Refine arguments
+				arguments["width"] = imageObj.Width.ToString();
+				arguments["height"] = imageObj.Height.ToString();
 
-				ImageObj? result = await this.openClService.ExecuteEditImage(imageObj, kernelName, argsDict);
+				ImageObj? result = await this.openClService.ExecuteEditImage(imageObj, kernelName, arguments);
 				if (result == null)
 				{
 					return this.StatusCode(500, new ProblemDetails
@@ -232,6 +230,17 @@ namespace OOCL.Image.Api.Controllers
 						Status = 500,
 						Title = "Kernel Execution Failed",
 						Detail = "The kernel execution did not return a valid ImageObj."
+					});
+				}
+
+				bool added = this.imageCollection.Add(result);
+				if (!added)
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Status = 500,
+						Title = "Image Collection Error",
+						Detail = "Failed to add the created ImageObj to the ImageCollection."
 					});
 				}
 
@@ -463,6 +472,120 @@ namespace OOCL.Image.Api.Controllers
 				});
 			}
 		}
+
+
+
+
+
+		[HttpPost("execute-edgeDetection00-default")]
+		[ProducesResponseType(typeof(ImageObjInfo), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<ImageObjInfo>> ExecuteEdgeDetectionDefaultAsync([FromQuery] Guid? imageId = null)
+		{
+			try
+			{
+				if (!this.openClService.Initialized)
+				{
+					return this.BadRequest(new ProblemDetails
+					{
+						Status = 400,
+						Title = "OpenCL Not Initialized",
+						Detail = "Please initialize the OpenCL service before executing kernels."
+					});
+				}
+
+				if (imageId == null || imageId == Guid.Empty)
+				{
+					if (this.imageCollection.Images.Count <= 0)
+					{
+						// Try loading resources
+						var loaded = await this.imageCollection.LoadResourcesAsync();
+						if (loaded?.Count() == 0)
+						{
+							return this.BadRequest(new ProblemDetails
+							{
+								Status = 400,
+								Title = "No Images Available",
+								Detail = "No images are available in the collection. Please upload or load images before executing the edge detection."
+							});
+						}
+					}
+
+					// Use the last image in the collection if no ID is provided
+					imageId = this.imageCollection.Images.Last().Id;
+				}
+
+				var imageObj = this.imageCollection[imageId.Value];
+				if (imageObj == null)
+				{
+					return this.NotFound(new ProblemDetails()
+					{
+						Title = "ImageObj not found for ID: " + imageId.ToString(),
+						Detail = "Error: NotFound()",
+						Status = 404
+					});
+				}
+
+				Dictionary<string, string> arguments = new()
+				{
+					{ "inputPixels", "0" },
+					{ "outputPixels", "0" },
+					{"width", imageObj.Width.ToString() },
+					{"height", imageObj.Height.ToString() },
+					{ "threshold", "0.25" },
+					{ "thickness", "1" },
+					{ "edgeR", "255" },
+					{ "edgeG", "0" },
+					{ "edgeB", "0" }
+				};
+
+				var resultObj = await this.openClService.ExecuteEditImage(imageObj, "edgeDetection00", arguments);
+				if (resultObj == null)
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Status = 500,
+						Title = "Kernel Execution Failed",
+						Detail = "The kernel execution did not return a valid ImageObj."
+					});
+				}
+
+				if (!this.imageCollection.Add(resultObj))
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Status = 500,
+						Title = "Image Collection Error",
+						Detail = "Failed to add the created ImageObj to the ImageCollection."
+					});
+				}
+
+				ImageObjInfo resultInfo = new(this.imageCollection[resultObj.Id]);
+				if (resultInfo.Id == Guid.Empty)
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Status = 500,
+						Title = "Internal Server Error",
+						Detail = "Failed to create ImageObjInfo from the resulting ImageObj. (Adding to collection maybe failed.)"
+					});
+				}
+
+				return this.Ok(resultInfo);
+			}
+			catch (Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Internal Server Error",
+					Detail = ex.Message
+				});
+			}
+		}
+
 
 
 

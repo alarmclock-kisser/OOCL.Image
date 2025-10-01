@@ -150,14 +150,14 @@ namespace OOCL.Image.OpenCl
 
 			this.GetDevicesPlatforms();
 
-			if (index < 0 || index >= devicesPlatforms.Count)
+			if (index < 0 || index >= this.devicesPlatforms.Count)
 			{
 				return;
 			}
 
 			this.Index = index;
-			this.device = devicesPlatforms.Keys.ElementAt(index);
-			this.platform = devicesPlatforms.Values.ElementAt(index);
+			this.device = this.devicesPlatforms.Keys.ElementAt(index);
+			this.platform = this.devicesPlatforms.Values.ElementAt(index);
 
 			this.context = CL.CreateContext(0, [this.device.Value], 0, IntPtr.Zero, out CLResultCode error);
 			if (error != CLResultCode.Success || this.context == null)
@@ -301,45 +301,27 @@ namespace OOCL.Image.OpenCl
 			Stopwatch sw = Stopwatch.StartNew();
 
 			// Push image if not already done
-			if (obj.Pointer == IntPtr.Zero)
+			IntPtr inputPointer = (nint) obj.Pointer;
+			if (inputPointer == IntPtr.Zero)
 			{
-				var data = await obj.GetBytes();
+				var data = await obj.GetBytes(true);
 				var mem = this.Register.PushData<byte>(data.ToArray());
 				if (mem == null)
 				{
 					Console.WriteLine($"CL-SER | ExecuteEditImage #003: Pushing image data to OpenCL register failed.");
 					return null;
 				}
-				obj.Pointer = mem.indexHandle;
+				inputPointer = mem.indexHandle; // Nicht obj.Pointer setzen!
 			}
 
-			// Exec call
+			// Kernel-Exec wie gehabt
 			IntPtr result = await Task.Run(() =>
 			{
-				return this.Executioner.ExecuteGenericImageEditKernel((nint) obj.Pointer, kernelName, width, height, arguments);
+				return this.Executioner.ExecuteGenericImageEditKernel((nint)inputPointer, kernelName, width, height, arguments);
 			});
 
-			// Check result pointer
-			if (result == IntPtr.Zero)
-			{
-				Console.WriteLine($"CL-SERV | ExecuteEditImage #004: Kernel '{kernelName}' execution failed or returned IntPtr.Zero.");
-				return null;
-			}
-
-			// Pull data + verify warn if length mismatch
+			// Neues ImageObj erzeugen
 			byte[] bytes = this.Register.PullData<byte>(result);
-			if (bytes == null || bytes.Length == 0)
-			{
-				Console.WriteLine($"CL-SERV | ExecuteEditImage #005: Pulling data from kernel '{kernelName}' returned no or empty data.");
-				return null;
-			}
-			long expectedLength = width * height * 4;
-			if (bytes.Length != expectedLength)
-			{
-				Console.WriteLine($"CL-SERV | ExecuteEditImage #006: Warning: Pulled data length ({bytes.Length}) does not match expected length ({expectedLength}).");
-			}
-
-			// Create new image with data
 			string imageName = $"OOCL_{kernelName}_{Guid.NewGuid():N}";
 			ImageObj imgObj = new(bytes, width, height, imageName);
 			sw.Stop();

@@ -28,12 +28,12 @@ namespace OOCL.Image.WebApp.Pages
             this.JS = js ?? throw new ArgumentNullException(nameof(js));
             this.DialogService = dialog;
 
-            this.devices = new List<OpenClDeviceInfo>();
-            this.images = new List<ImageObjInfo>();
-            this.kernelInfos = new List<OpenClKernelInfo>();
-            this.kernelNames = new List<string>();
-            this.kernelArgViewModels = new List<KernelArgViewModel>();
-            this.formats = new List<string> { "png", "jpg", "bmp" };
+            this.devices = [];
+            this.images = [];
+            this.kernelInfos = [];
+            this.kernelNames = [];
+            this.kernelArgViewModels = [];
+            this.formats = ["png", "jpg", "bmp"];
         }
 
         // --- Public state used by the UI (kept with same names as before) ---
@@ -42,9 +42,10 @@ namespace OOCL.Image.WebApp.Pages
         public List<ImageObjInfo> images { get; set; }
         public Guid selectedImageId { get; set; }
         public ImageObjData? imageData { get; set; }
-        public string selectedFormat { get; set; } = "png";
+        public string selectedFormat { get; set; } = "bmp";
         public int quality { get; set; } = 90;
-        public OpenClServiceInfo openClServiceInfo { get; set; } = new OpenClServiceInfo();
+        public double scalingFactor { get; set; } = 1.0;
+		public OpenClServiceInfo openClServiceInfo { get; set; } = new OpenClServiceInfo();
         public List<string> formats { get; set; }
 
         public List<OpenClKernelInfo> kernelInfos { get; set; }
@@ -52,6 +53,7 @@ namespace OOCL.Image.WebApp.Pages
         public string selectedKernelName { get; set; } = string.Empty;
         public OpenClKernelInfo? selectedKernelInfo { get; set; }
         public List<KernelArgViewModel> kernelArgViewModels { get; set; }
+        
         // redraw after value change
         public bool redrawAfterValueChange { get; set; } = false;
         public string kernelInfoText { get; set; } = string.Empty;
@@ -59,9 +61,12 @@ namespace OOCL.Image.WebApp.Pages
         public string colorHex { get; set; } = "#000000";
         public string colorHexForNewImage { get; set; } = "#000000";
 
-        // Max images numeric and magnitude display
-        public int MaxImagesToKeepNumeric { get; set; }
-        public List<string> Magnitudes { get; } = new List<string> { "Byte", "kB", "KB", "mB", "MB", "gB", "GB" };
+        // Growing image data cache
+		public Dictionary<Guid, string> ImageCache { get; } = [];
+
+		// Max images numeric and magnitude display
+		public int MaxImagesToKeepNumeric { get; set; }
+        public List<string> Magnitudes { get; } = ["Byte", "kB", "KB", "mB", "MB", "gB", "GB"];
         public string SelectedMagnitude { get; set; } = "kB";
         public double MagnitudeFactor { get; set; } = 1000.0;
 
@@ -70,8 +75,10 @@ namespace OOCL.Image.WebApp.Pages
         // Gibt an, ob das Setzen auf 0 (unbegrenzt) lokal erlaubt ist — nur true, wenn Server-Config <= 0
         public bool AllowZeroMaxImagesSetting => (this.Config?.MaxImagesToKeep ?? 0) <= 0;
 
-        // --- Initialization / loading ---
-        public async Task InitializeAsync()
+        public bool RandomizeRgb { get; set; } = false;
+
+		// --- Initialization / loading ---
+		public async Task InitializeAsync()
         {
             await this.LoadDevices();
             await this.LoadImages();
@@ -250,22 +257,26 @@ namespace OOCL.Image.WebApp.Pages
             await this.UpdateImageData();
         }
 
-        public async Task UpdateImageData()
-        {
-            if (this.selectedImageId == Guid.Empty)
-            {
+		public async Task UpdateImageData()
+		{
+			if (this.selectedImageId == Guid.Empty)
+			{
 				this.imageData = null;
-                return;
-            }
+				return;
+			}
+			if (this.ImageCache.TryGetValue(this.selectedImageId, out var cached))
+			{
+				this.imageData = new ImageObjData { Id = this.selectedImageId, Base64Data = cached, MimeType = "image/" + this.selectedFormat.Trim('.').ToLower() };
+				return;
+			}
 			this.imageData = await this.Api.GetImageDataAsync(this.selectedImageId, this.selectedFormat);
-            var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
-            if (info != null)
-            {
-				this.lastKernelProcessingTimeMs = info.LastProcessingTimeMs;
-            }
-        }
+			if (this.imageData != null && !string.IsNullOrEmpty(this.imageData.Base64Data))
+			{
+				this.ImageCache[this.selectedImageId] = this.imageData.Base64Data;
+			}
+		}
 
-        public async Task OnKernelChanged(object value)
+		public async Task OnKernelChanged(object value)
         {
 			this.selectedKernelName = value?.ToString() ?? string.Empty;
 			this.selectedKernelInfo = this.kernelInfos.FirstOrDefault(k => k.FunctionName == this.selectedKernelName);
@@ -284,31 +295,71 @@ namespace OOCL.Image.WebApp.Pages
                     bool isColor = this.selectedKernelInfo.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Contains(name);
                     decimal defaultValue = 0m;
                     var lname = name.ToLower();
-                    if (t.ToLower().Contains("int"))
+                    if (t.ToLower().Contains("int") || t.ToLower().Contains("uint") || t.ToLower().Contains("long") || t.ToLower().Contains("ulong") || t.ToLower().Contains("short") || t.ToLower().Contains("ushort") || t.ToLower().Contains("byte") || t.ToLower().Contains("sbyte"))
                     {
                         if (lname.Contains("width"))
-						{
-							defaultValue = 720m;
+                        {
+                            defaultValue = 720m;
+                        }
+                        else if (lname.Contains("height"))
+                        {
+                            defaultValue = 480m;
+                        }
+                        else if (lname.Contains("coeff") || lname.Contains("itercoeff") || lname.Contains("coef"))
+                        {
+                            defaultValue = 8m;
+                        }
+                        else if (lname.Contains("zoom"))
+                        {
+                            defaultValue = 1m;
+                        }
+                        else if (lname.Contains("max") && lname.Contains("iter"))
+                        {
+                            defaultValue = 100m;
+                        }
+                        else if (lname.Contains("iter") || lname.Contains("maxiter"))
+                        {
+                            defaultValue = 50m;
+                        }
+                        else if (lname.Contains("seed"))
+                        {
+                            defaultValue = 0m;
+                        }
+                        else if (lname.Contains("threshold"))
+                        {
+                            defaultValue = 4m;
+                        }
+                        else if (lname.Contains("angle"))
+                        {
+                            defaultValue = 0m;
+                        }
+                        else if (lname.Contains("depth"))
+                        {
+                            defaultValue = 5m;
+                        }
+                        else if (lname.Contains("scale"))
+                        {
+                            defaultValue = 1m;
+                        }
+                        else if (lname.Contains("offsetx") || lname.Contains("offsety") || lname.Contains("offset"))
+                        {
+                            defaultValue = 0m;
+                        }
+                        else if (lname.Contains("centerx") || lname.Contains("centery") || lname.Contains("center"))
+                        {
+                            defaultValue = 0m;
+                        }
+                        if (isColor)
+                        {
+                            defaultValue = this.RandomizeRgb ? new Random().Next(0, 255) : 0m;
 						}
-						else if (lname.Contains("height"))
-						{
-							defaultValue = 480m;
-						}
-						else if (lname.Contains("coeff") || lname.Contains("itercoeff") || lname.Contains("coef"))
-						{
-							defaultValue = 1m;
-						}
-						else if (lname.Contains("zoom"))
-						{
-							defaultValue = 1m;
-						}
-                    }
+					}
                     else if (t.ToLower().Contains("float") || t.ToLower().Contains("double"))
                     {
                         if (lname.Contains("zoom"))
-						{
-							defaultValue = 1m;
-						}
+                        {
+                            defaultValue = 1m;
+                        }
                     }
 					this.kernelArgViewModels.Add(new KernelArgViewModel
                     {
@@ -446,12 +497,12 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (t.Contains("single") || t.Contains("float"))
 			{
-				return 0.1m; // changed to 0.1 for floats
+				return 0.05m; // changed to 0.1 for floats
 			}
 
 			if (t.Contains("double"))
 			{
-				return 0.005m; // changed to 0.005 for double
+				return 0.0005m; // changed to 0.005 for double
 			}
 
 			if (t.Contains("byte"))
@@ -533,11 +584,11 @@ namespace OOCL.Image.WebApp.Pages
 				return HeightSteps;
 			}
 
-			return Array.Empty<decimal>();
+			return [];
         }
 
-        private static readonly decimal[] WidthSteps = new decimal[] { 144, 240, 256, 320, 360, 384, 426, 480, 512, 640, 720, 768, 800, 854, 960, 1024, 1080, 1152, 1200, 1280, 1366, 1440, 1536, 1600, 1680, 1728, 1768, 1792, 1800, 1920, 2048, 2160, 2304, 2400, 2560, 2880, 3200, 3440, 3840, 4096 };
-        private static readonly decimal[] HeightSteps = new decimal[] { 144, 180, 200, 210, 240, 256, 270, 272, 288, 320, 360, 384, 400, 432, 480, 512, 540, 600, 640, 720, 768, 800, 864, 900, 960, 1024, 1080, 1200, 1280, 1440, 1600, 1800, 1920, 2160, 2400, 2560 };
+        private static readonly decimal[] WidthSteps = [64, 144, 240, 320, 360, 480, 512, 720, 960, 1024, 1080, 1280, 1440, 1680, 1920, 2048, 2160, 2560,3840, 4096, 8192, 16384];
+        private static readonly decimal[] HeightSteps = [64, 144, 240, 320, 360, 480, 512, 720,960, 1024, 1080, 1200, 1440, 1600, 1920, 2048, 4096, 8192, 16384];
 		public double lastKernelProcessingTimeMs;
 
 		// Small viewmodel for arguments
@@ -652,12 +703,13 @@ namespace OOCL.Image.WebApp.Pages
         {
             if (!string.IsNullOrWhiteSpace(value))
             {
-				this.colorHexForNewImage = value!;
+                this.colorHexForNewImage = value!;
             }
 
-            if (TryParseColor(this.colorHexForNewImage, out var r, out var g, out var b))
+            // Prüfe, ob ein RGB-Tupel erkannt wurde
+            if (this.selectedKernelInfo?.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length == 3)
             {
-                if (this.selectedKernelInfo?.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length == 3)
+                if (TryParseColor(this.colorHexForNewImage, out var r, out var g, out var b))
                 {
                     for (int i = 0; i < 3; i++)
                     {
@@ -736,11 +788,35 @@ namespace OOCL.Image.WebApp.Pages
                 }
 
                 this.MaxImagesToKeepNumeric = value;
-            }
+
+				if (this.images.Count > 0)
+				{
+					this.selectedImageId = this.images.Last().Id;
+					await this.UpdateImageData();
+				}
+				else
+				{
+					this.selectedImageId = Guid.Empty;
+					this.imageData = null;
+				}
+			}
             catch (Exception ex)
             {
                 Console.WriteLine("SetMaxImagesAsync error: " + ex.Message);
             }
         }
-     }
+
+		public void RandomizeColor()
+		{
+			if (this.selectedKernelInfo?.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length == 3)
+			{
+				var rnd = new Random();
+				int r = rnd.Next(0, 256);
+				int g = rnd.Next(0, 256);
+				int b = rnd.Next(0, 256);
+				this.colorHexForNewImage = $"#{r:X2}{g:X2}{b:X2}";
+				this.OnBaseColorChanged(this.colorHexForNewImage);
+			}
+		}
+	}
  }

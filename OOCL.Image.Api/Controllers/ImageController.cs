@@ -206,10 +206,6 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 		[HttpGet("data")]
-		[ProducesResponseType(typeof(ImageObjData), 200)]
-		[ProducesResponseType(typeof(ProblemDetails), 400)]
-		[ProducesResponseType(typeof(ProblemDetails), 404)]
-		[ProducesResponseType(typeof(ProblemDetails), 500)]
 		public async Task<ActionResult<ImageObjData>> ImageDataAsync([FromQuery] Guid id, [FromQuery] string format = "png")
 		{
 			try
@@ -225,12 +221,23 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
+				if (obj.Img == null)
+				{
+					// Logge den Fehler
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Image data is null",
+						Detail = $"Image object found, but image data (Img) is null for ID {id}.",
+						Status = 500
+					});
+				}
+
 				if (!ImageCollection.SupportedFormats.Contains(format.ToLower()))
 				{
 					format = "png";
 				}
 
-				var data = await Task.Run(() => new ImageObjData(obj,  format));
+				var data = await Task.Run(() => new ImageObjData(obj, format));
 				if (string.IsNullOrEmpty(data.Base64Data))
 				{
 					return this.StatusCode(500, new ProblemDetails

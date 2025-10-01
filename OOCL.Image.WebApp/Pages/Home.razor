@@ -37,13 +37,21 @@
             </div>
         </RadzenCard>
         <!-- Status Info -->
-        <RadzenCard Style="min-width:220px;flex:1;display:flex;flex-direction:column;justify-content:center;">
-            <div class="status-info-box">
-                <b>Status:</b> @openClServiceInfo.DeviceName <br />
-                <b>Platform:</b> @openClServiceInfo.PlatformName <br />
-                <b>Initialized:</b> @(openClServiceInfo.Initialized ? "Yes" : "No")
-            </div>
-        </RadzenCard>
+        <RadzenPanel @bind-Expanded="isStatusExpanded" Style="min-width:220px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+            <HeaderTemplate>
+                <b>OpenCL Status</b>
+            </HeaderTemplate>
+            <ChildContent>
+                <div class="status-info-box">
+                    <b>Status:</b> @(openClServiceInfo.DeviceName + " [" + openClServiceInfo.DeviceId + "]") <br />
+                    <b>Platform:</b> @openClServiceInfo.PlatformName <br />
+                    <b>Initialized:</b> @(openClServiceInfo.Initialized ? "Yes" : "No") <br />
+                    <b>Vendor:</b> @(openClServiceInfo.CurrentDevice?.Vendor) <br />
+                    <b>Driver Version:</b> @(openClServiceInfo.CurrentDevice?.DriverVersion) <br />
+                    <b>OpenCL Version:</b> @(openClServiceInfo.CurrentDevice?.Version) <br />
+                </div>
+            </ChildContent>
+        </RadzenPanel>
         <!-- Actions Vertical -->
         <RadzenCard Style="min-width:140px;flex:0 0 140px;display:flex;flex-direction:column;gap:0.5rem;align-items:stretch;justify-content:center;">
             <RadzenButton Icon="play_arrow" Text="Initialize" Click="@InitializeDevice" Style="margin-bottom:0.5rem;" />
@@ -63,20 +71,21 @@
             <span>@(useExistingImage ? "on existing image" : "on new blank")</span>
         </div>
 
-        <!-- Color picker: always visible (from image OR new blank) -->
-        <div class="d-flex flex-column gap-1 mb-2">
-            <div class="d-flex align-items-center gap-2">
-                <label style="font-size:0.95em;">Color:</label>
-                <label style="font-size:0.95em;">@GetRgbLabel(colorHexForNewImage)</label>
+        @if (VM.selectedKernelInfo?.ColorInputArgNames != null && VM.selectedKernelInfo.ColorInputArgNames.Length == 3)
+        {
+            <div class="d-flex flex-column gap-1 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <label style="font-size:0.95em;">Color:</label>
+                    <label style="font-size:0.95em;">@GetRgbLabel(colorHexForNewImage)</label>
+                </div>
+                <div class="d-flex flex-row align-items-center gap-2">
+                    <RadzenColorPicker Value="@colorHexForNewImage" ValueChanged="@OnBaseColorChanged" Style="min-width:120px;" ShowRGBA="true" />
+                </div>
             </div>
-            <div class="d-flex flex-row align-items-center gap-2">
-                <RadzenColorPicker Value="@colorHexForNewImage" ValueChanged="@OnBaseColorChanged" Style="min-width:120px;" ShowRGBA="true" />
-            </div>
-        </div>
+        }
 
         @if (kernelArgViewModels.Any(a => !a.IsPointer && IsColorGroupRepresentative(a) || !a.IsPointer && !a.IsColor))
         {
-            // Filter: Zeige keine Color-Argumente als Numeric, wenn sie vom Color-Picker gesetzt werden
             var numericArgs = kernelArgViewModels.Where(a => !a.IsPointer && !a.IsColor && !IsColorGroupRepresentative(a)).OrderBy(a => a.Index).ToList();
             int count = numericArgs.Count;
             int columns = count <= 2 ? count : count <= 4 ? 2 : count <= 9 ? 3 : 4;
@@ -85,20 +94,13 @@
                 {
                     <div style="display:flex;flex-direction:column;align-items:flex-start;">
                         <label style="font-size:0.95em;">@arg.Name<br /><span style="font-size:0.85em;color:gray;">(@arg.Type)</span></label>
-                        @if (IsWidthOrHeight(arg))
-                        {
-                            <RadzenNumeric TValue="decimal"
-                                           style="min-width:90px;"
-                                           Value="@arg.Value"
-                                           ValueChanged="@((decimal v) => OnDimensionNumericChanged(arg, v))"
-                                           Min="@arg.Min" Max="@arg.Max"
-                                           Step="1"
-                                           Disabled="@(useExistingImage)" />
-                        }
-                        else
-                        {
-                            <RadzenNumeric TValue="decimal" style="min-width:90px;" @bind-Value="arg.Value" Step="@arg.StepString" Min="@arg.Min" Max="@arg.Max" Change="@((decimal v) => OnArgChanged(arg, v))" />
-                        }
+                        <RadzenNumeric TValue="decimal"
+                                       style="min-width:90px;"
+                                       @bind-Value="arg.Value"
+                                       Step="@arg.StepString"
+                                       Min="@arg.Min" Max="@arg.Max"
+                                       Change="@((decimal v) => OnArgChanged(arg, v))"
+                                       Disabled="@(useExistingImage && IsWidthOrHeight(arg))" />
                     </div>
                 }
             </div>
@@ -107,6 +109,11 @@
         <div class="d-flex flex-row align-items-center gap-2 mb-2">
             <RadzenCheckBox @bind-Value="VM.redrawAfterValueChange" TValue="bool" />
             <label style="font-size:0.9em;margin:0;">Redraw on value change</label>
+        </div>
+        <!-- Color Randomization Checkbox directly below color picker -->
+        <div class="d-flex flex-row align-items-center gap-2 mb-2">
+            <RadzenCheckBox @bind-Value="VM.RandomizeRgb" TValue="bool" Change="@(v => { if (v) { VM.RandomizeColor(); StateHasChanged(); } })" />
+            <label style="font-size:0.9em;margin:0;">Randomize RGB values</label>
         </div>
         <RadzenPanel @bind-Expanded="isKernelInfoExpanded" Style="margin-bottom:0.5rem;">
             <HeaderTemplate>
@@ -143,17 +150,22 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                     <div style="display:flex;align-items:center;gap:6px;">
                         <label style="font-size:0.9em;margin-right:4px;">Max keep:</label>
-                        <RadzenNumeric TValue="int" @bind-Value="VM.MaxImagesToKeepNumeric" Min="0" Max="@(VM.GetMaxImagesConfig() > 0 ? VM.GetMaxImagesConfig() : int.MaxValue)" Change="@OnMaxImagesChanged" Style="width:90px;" />
+                        <RadzenNumeric TValue="int"
+                            @bind-Value="VM.MaxImagesToKeepNumeric"
+                            Min="@(VM.GetMaxImagesConfig() > 0 ? 1 : 0)"
+                            Max="@(VM.GetMaxImagesConfig() > 0 ? VM.GetMaxImagesConfig() : int.MaxValue)"
+                            Change="@OnMaxImagesChanged"
+                            Style="width:90px;" />
                         <RadzenDropDown Data="@VM.Magnitudes" @bind-Value="VM.SelectedMagnitude" Change="@(args => { VM.UpdateMagnitudeFactor(); StateHasChanged(); })" Style="width:90px;" />
                     </div>
                 </div>
                 <RadzenListBox Data="@images" @bind-Value="selectedImageId" ValueProperty="Id" Style="height:360px;width:100%;" Change="@OnImageChanged">
                     <Template Context="img">
-                        <div style="display:flex;align-items:center;gap:10px;font-size:0.92em;">
-                            <span style="color:#888;">@img.Id</span>
-                            <span style="color:var(--fg);">@img.FilePath</span>
-                            <span style="color:#888;">[@img.Size.Width,@img.Size.Height]</span>
-                            <span style="color:#888;">@VM.FormatSize(img) @VM.SelectedMagnitude</span>
+                        <div class="image-list-entry @(selectedImageId == img.Id ? "selected" : string.Empty)" style="display:flex;align-items:center;gap:10px;font-size:0.92em;">
+                            <span class="img-id">@img.Id</span>
+                            <span class="img-path">@img.FilePath</span>
+                            <span class="img-size">[@img.Size.Width,@img.Size.Height]</span>
+                            <span class="img-bytes">@VM.FormatSize(img) @VM.SelectedMagnitude</span>
                         </div>
                     </Template>
                 </RadzenListBox>
@@ -219,6 +231,7 @@
     private bool CanExecute => VM.CanExecute;
     private bool CanDownload => VM.selectedImageId != Guid.Empty;
     private bool CanRemove => VM.selectedImageId != Guid.Empty;
+    private bool isStatusExpanded = false; 
 
     private async Task OnDeviceChanged(object value) { await VM.OnDeviceChanged(value); StateHasChanged(); }
     private async Task InitializeDevice() { await VM.InitializeDevice(); StateHasChanged(); }
@@ -302,6 +315,7 @@
                 return;
             }
             if (result.Id != Guid.Empty) VM.selectedImageId = result.Id;
+            await VM.UpdateImageData(); // <-- Bilddaten nach Kernel-Exec aktualisieren
         }
         else
         {
@@ -344,7 +358,13 @@
 
         Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = $"Kernel executed in {VM.lastKernelProcessingTimeMs:F1} ms", Duration = 2000 });
     }
-    private async Task OnInputFileChange(InputFileChangeEventArgs e) { await VM.OnInputFileChange(e); await VM.LoadImages(); await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); }
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        await VM.OnInputFileChange(e);
+        await VM.LoadImages();
+        await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric);
+        await VM.UpdateImageData(); // Bilddaten aktualisieren
+    }
     private async Task OnMaxImagesChanged() { await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); await VM.LoadImages(); StateHasChanged(); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = $"Max images set to {VM.MaxImagesToKeepNumeric}", Duration = 2000 }); }
     private async Task OnKernelChanged(object value) { await VM.OnKernelChanged(value); StateHasChanged(); }
     private bool IsWidthOrHeight(HomeViewModel.KernelArgViewModel arg) => VM.IsWidthOrHeight(arg);

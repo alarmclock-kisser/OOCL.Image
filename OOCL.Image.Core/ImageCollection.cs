@@ -54,7 +54,7 @@ namespace OOCL.Image.Core
         public int MaxImages { get; set; } = 0;
 
 		// Ctor with options
-		public ImageCollection(bool saveMemory = false, int defaultWidth = 720, int defaultHeight = 480, int maxImages = 0)
+		public ImageCollection(bool saveMemory = false, int defaultWidth = 720, int defaultHeight = 480, int maxImages = 0, bool loadResources = false)
         {
             this.DefaultWidth = Math.Max(defaultWidth, 360); // Min is 360px width
             this.DefaultHeight = Math.Max(defaultHeight, 240); // Min is 240px height
@@ -64,7 +64,12 @@ namespace OOCL.Image.Core
             {
                 Console.WriteLine("ImageCollection: Memory saving enabled. All images will be disposed on add.");
             }
-        }
+
+            if (loadResources)
+            {
+                var _ = this.LoadResourcesAsync().Result;
+			}
+		}
 
         public bool Add(ImageObj imgObj)
         {
@@ -118,7 +123,57 @@ namespace OOCL.Image.Core
             });
         }
 
-        public void Dispose()
+        public async Task<IEnumerable<Guid>?> LoadResourcesAsync(string? customResourcesPath = null)
+        {
+            if (!string.IsNullOrWhiteSpace(customResourcesPath))
+            {
+                if (Directory.Exists(customResourcesPath))
+                {
+                    customResourcesPath = Path.GetFullPath(customResourcesPath);
+                    Console.WriteLine($"LoadResourcesAsync: Using custom Resources directory at '{customResourcesPath}'");
+                }
+                else
+                {
+                    Console.WriteLine($"LoadResourcesAsync: Custom Resources directory not found at '{customResourcesPath}'");
+                    return null;
+                }
+			}
+            else
+            {
+				// Try get Repo\Resources directory relative to current executing assembly
+				customResourcesPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "OOCL.Image.Core", "Resources");
+				if (!Directory.Exists(customResourcesPath))
+				{
+					// If not in DEV environment, try relative to EXE
+					customResourcesPath = Path.Combine(AppContext.BaseDirectory, "Resources");
+					if (!Directory.Exists(customResourcesPath))
+					{
+						Console.WriteLine($"LoadResourcesAsync: Resources directory not found at '{customResourcesPath}'");
+						return null;
+					}
+				}
+			}
+
+            string[] resourceImageFiles = Directory.GetFiles(customResourcesPath)
+                .Where(file => SupportedFormats.Contains(Path.GetExtension(file).TrimStart('.').ToLower()))
+                .ToArray();
+			if (resourceImageFiles.Length <= 0)
+			{
+                Console.WriteLine($"LoadResourcesAsync: No supported image files found in Resources directory at '{customResourcesPath}'");
+                return null;
+			}
+
+			// Load async & parallel
+            var loadTasks = resourceImageFiles.Select(file => this.LoadImage(file)).ToArray();
+            var loadedImages = await Task.WhenAll(loadTasks);
+
+            var loadedGuids = loadedImages.Where(img => img != null).Select(img => img!.Id).ToList();
+            Console.WriteLine($"LoadResourcesAsync: Loaded {loadedGuids.Count} images from Resources directory at '{customResourcesPath}'");
+
+			return loadedGuids;
+		}
+
+		public void Dispose()
         {
             this.Clear().Wait();
             GC.SuppressFinalize(this);

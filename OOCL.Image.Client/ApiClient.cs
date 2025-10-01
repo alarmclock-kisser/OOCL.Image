@@ -240,7 +240,12 @@ namespace OOCL.Image.Client
 		{
 			try
 			{
-				return await this.internalClient.ExecuteOnImageAsync(id, kernelName, argNames, argValues);
+				Dictionary<string, string> argsDict = [];
+				for (int i = 0; i < argNames.Length && i < argValues.Length; i++)
+				{
+					argsDict[argNames[i]] = argValues[i];
+				}
+				return await this.internalClient.ExecuteOnImageAsync(id, kernelName, argsDict);
 			}
 			catch (Exception ex)
 			{

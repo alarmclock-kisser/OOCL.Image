@@ -578,7 +578,7 @@
             "schema": {
               "type": "integer",
               "format": "int32",
-              "default": 1
+              "default": -1
             }
           }
         ],
@@ -986,21 +986,12 @@
             }
           },
           {
-            "name": "argNames",
+            "name": "arguments",
             "in": "query",
+            "style": "deepObject",
             "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
-            "name": "argValues",
-            "in": "query",
-            "schema": {
-              "type": "array",
-              "items": {
+              "type": "object",
+              "additionalProperties": {
                 "type": "string"
               }
             }
@@ -1368,6 +1359,105 @@
           }
         }
       }
+    },
+    "/api/OpenCl/execute-edgeDetection00-default": {
+      "post": {
+        "tags": [
+          "OpenCl"
+        ],
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageObjInfo"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageObjInfo"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageObjInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1487,6 +1577,74 @@
           "platformName": {
             "type": "string",
             "nullable": true
+          },
+          "localMemoryBytes": {
+            "type": "string",
+            "nullable": true
+          },
+          "globalMemoryBytes": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressBits": {
+            "type": "string",
+            "nullable": true
+          },
+          "compilerAvailable": {
+            "type": "string",
+            "nullable": true
+          },
+          "driverVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxClockFrequency": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxComputeUnits": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxWorkGroupSize": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxWorkItemDimensions": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxWorkItemSizes": {
+            "type": "string",
+            "nullable": true
+          },
+          "extensions": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageSupport": {
+            "type": "string",
+            "nullable": true
+          },
+          "image2DMaxSize": {
+            "type": "string",
+            "nullable": true
+          },
+          "image3DMaxSize": {
+            "type": "string",
+            "nullable": true
+          },
+          "vendor": {
+            "type": "string",
+            "nullable": true
+          },
+          "vendorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -1563,6 +1721,9 @@
           },
           "initialized": {
             "type": "boolean"
+          },
+          "currentDevice": {
+            "$ref": "#/components/schemas/OpenClDeviceInfo"
           }
         },
         "additionalProperties": false

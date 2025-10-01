@@ -68,3 +68,53 @@ body {
 }
 
 .content { padding: 1rem; }
+
+/* Für RadzenListBox-Einträge im Dark Mode */
+.rz-listbox .rz-listbox-item {
+	background: #222; /* dunkler Hintergrund für nicht ausgewählt */
+	color: #fff; /* weiße Schrift */
+}
+
+	/* Für ausgewählten Eintrag */
+	.rz-listbox .rz-listbox-item.rz-state-highlight {
+		background: #444; /* etwas heller für ausgewählt */
+		color: #fff;
+	}
+
+/* Light Mode: ListBox-Einträge */
+body:not(.theme-dark) .rz-listbox .rz-listbox-item {
+    background: #fff !important;
+    color: #000 !important;
+}
+
+/* Light Mode: ausgewählter Eintrag */
+body:not(.theme-dark) .rz-listbox .rz-listbox-item.rz-state-highlight {
+    background: #e0e0e0 !important;
+    color: #000 !important;
+}
+
+/* Dark Mode: ListBox-Einträge */
+body.theme-dark .rz-listbox .rz-listbox-item {
+	background: #222;
+	color: #fff;
+}
+
+	body.theme-dark .rz-listbox .rz-listbox-item.rz-state-highlight {
+		background: #444;
+		color: #fff;
+	}
+
+/* ListBox Einträge (neutral) */
+.image-list-entry span { color: #222; }
+body.theme-dark .image-list-entry span { color: #ddd; }
+
+/* Ausgewählt */
+.image-list-entry.selected span { color: #000; font-weight:600; }
+body.theme-dark .image-list-entry.selected span { color: #fff; }
+
+/* Spezifische leichte Abstufungen */
+.image-list-entry .img-id { opacity: 0.75; }
+.image-list-entry .img-size, .image-list-entry .img-bytes { opacity:0.7; }
+body.theme-dark .image-list-entry .img-id,
+body.theme-dark .image-list-entry .img-size,
+body.theme-dark .image-list-entry .img-bytes { opacity:0.8; }
