@@ -32,10 +32,25 @@ namespace OOCL.Image.OpenCl
 
 		public CLResultCode lastError = CLResultCode.Success;
 
-		// ----- Constructor ----- \\
-		public OpenClService()
+		// ----- Constructors ----- \\
+		public OpenClService(int deviceIndex = -1)
 		{
 			this.GetDevicesPlatforms();
+
+			if (deviceIndex > 0 && deviceIndex < this.DeviceCount)
+			{
+				this.Initialize(deviceIndex);
+			}
+		}
+
+		public OpenClService(string? deviceName = null)
+		{
+			this.GetDevicesPlatforms();
+
+			if (!string.IsNullOrEmpty(deviceName))
+			{
+				this.Initialize(deviceName);
+			}	
 		}
 
 		// ----- Methods ----- \\

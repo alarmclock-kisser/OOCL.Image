@@ -20,12 +20,7 @@ namespace OOCL.Image.Api
 
 			// Add services to the container.
 			builder.Services.AddSingleton<ImageCollection>(sp => new ImageCollection(false,720, 480,  imagesLimit, loadResources));
-			var openClService = new OpenClService();
-			if (!string.IsNullOrWhiteSpace(preferredDevice))
-			{
-				openClService.Initialize(preferredDevice);
-			}
-			builder.Services.AddSingleton(openClService);
+			builder.Services.AddSingleton<OpenClService>(sp => new OpenClService(preferredDevice));
 
 			// Swagger/OpenAPI (always register generator)
 			builder.Services.AddEndpointsApiExplorer();
@@ -36,7 +31,7 @@ namespace OOCL.Image.Api
 					Version = "v1",
 					Title = "OOCL.Image API",
 					Description = "API + WebApp using OpenCL Kernels for image generation etc.",
-					TermsOfService = new Uri("https://localhost:7220/terms"),
+					TermsOfService = new Uri("https://api.oocl.work:7220/terms"),
 					Contact = new OpenApiContact { Name = "github: alarmclock-kisser", Email = "marcel.king91299@gmail.com" }
 				});
 			});
@@ -69,7 +64,7 @@ namespace OOCL.Image.Api
 			{
 				options.AddPolicy("OOCLImageCors", policy =>
 				{
-					policy.WithOrigins("https://localhost:7220")
+					policy.WithOrigins("https://api.oocl.work:7220")
 						  .AllowAnyHeader()
 						  .AllowAnyMethod();
 				});
@@ -77,8 +72,14 @@ namespace OOCL.Image.Api
 
 			var app = builder.Build();
 
+			app.UsePathBase("/api");
+
 			// Ensure Swagger JSON is available regardless of environment so UI can fetch it
-			app.UseSwagger();
+			app.UseSwagger(c =>
+			{
+				// Stellt sicher, dass die JSON-Definition den /api/-Präfix erhält
+				c.RouteTemplate = "api/swagger/{documentName}/swagger.json";
+			});
 
 			// Development-only Middlewares
 			if (app.Environment.IsDevelopment())
@@ -92,9 +93,8 @@ namespace OOCL.Image.Api
 			{
 				app.UseSwaggerUI(c =>
 				{
-					c.SwaggerEndpoint("/swagger/v1/swagger.json", "OOCL.Image API v1");
-					// Serve the UI at /swagger
-					c.RoutePrefix = "swagger";
+					c.SwaggerEndpoint("/api/swagger/v1/swagger.json", "OOCL.Image API v1");
+					c.RoutePrefix = "swagger"; // Wenn Sie unter /api/swagger/ zugreifen wollen
 				});
 			}
 
