@@ -45,7 +45,7 @@ namespace OOCL.Image.WebApp.Pages
         public string selectedFormat { get; set; } = "bmp";
         public int quality { get; set; } = 90;
         public double scalingFactor { get; set; } = 1.0;
-		public OpenClServiceInfo openClServiceInfo { get; set; } = new OpenClServiceInfo();
+        public OpenClServiceInfo openClServiceInfo { get; set; } = new OpenClServiceInfo();
         public List<string> formats { get; set; }
 
         public List<OpenClKernelInfo> kernelInfos { get; set; }
@@ -53,7 +53,7 @@ namespace OOCL.Image.WebApp.Pages
         public string selectedKernelName { get; set; } = string.Empty;
         public OpenClKernelInfo? selectedKernelInfo { get; set; }
         public List<KernelArgViewModel> kernelArgViewModels { get; set; }
-        
+
         // redraw after value change
         public bool redrawAfterValueChange { get; set; } = false;
         public string kernelInfoText { get; set; } = string.Empty;
@@ -62,20 +62,34 @@ namespace OOCL.Image.WebApp.Pages
         public string colorHexForNewImage { get; set; } = "#000000";
 
         // Growing image data cache
-		public Dictionary<Guid, string> ImageCache { get; } = [];
+        public Dictionary<Guid, string> ImageCache { get; } = [];
 
-		// Max images numeric and magnitude display
-		public int MaxImagesToKeepNumeric { get; set; }
+        // Max images numeric and magnitude display
+        public int MaxImagesToKeepNumeric { get; set; }
         public List<string> Magnitudes { get; } = ["Byte", "kB", "KB", "mB", "MB", "gB", "GB"];
-        public string SelectedMagnitude { get; set; } = "kB";
-        public double MagnitudeFactor { get; set; } = 1000.0;
+        public string SelectedMagnitude { get; set; } = "MB";
+        public double MagnitudeFactor { get; set; } = 1024.0 * 1024.0;
 
-        public bool CanExecute => !string.IsNullOrEmpty(this.selectedKernelName) && (this.useExistingImage ? this.selectedImageId != Guid.Empty : true);
+		public bool CanExecute => !string.IsNullOrEmpty(this.selectedKernelName) && (this.useExistingImage ? this.selectedImageId != Guid.Empty : true);
 
         // Gibt an, ob das Setzen auf 0 (unbegrenzt) lokal erlaubt ist — nur true, wenn Server-Config <= 0
         public bool AllowZeroMaxImagesSetting => (this.Config?.MaxImagesToKeep ?? 0) <= 0;
 
         public bool RandomizeRgb { get; set; } = false;
+
+		private Dictionary<string, decimal> defaultArgValues = new()
+		{
+	            { "width", 720.0m },
+	            { "height", 480.0m },
+				{ "zoom", 1.0m },
+				{ "iter", 8.0m },
+				{ "coef", 8.0m },
+				{ "thresh", 0.3m },
+				{ "thick", 1.0m },
+                { "amount", 1.5m },
+                { "scale", 1.0m },
+                { "pass", 1.0m },
+			};
 
 		// --- Initialization / loading ---
 		public async Task InitializeAsync()
@@ -289,78 +303,24 @@ namespace OOCL.Image.WebApp.Pages
                 var argNames = this.selectedKernelInfo.ArgumentNames?.ToArray();
                 for (int i = 0; i < argTypes.Length; i++)
                 {
-                    var t = argTypes[i];
+                    var t = argTypes[i];                      // z.B. "Int32", "Single", "Double", "Byte"
                     var name = argNames != null && i < argNames.Length ? argNames[i] : $"arg{i}";
                     bool isPointer = t.Contains("*");
                     bool isColor = this.selectedKernelInfo.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Contains(name);
-                    decimal defaultValue = 0m;
-                    var lname = name.ToLower();
-                    if (t.ToLower().Contains("int") || t.ToLower().Contains("uint") || t.ToLower().Contains("long") || t.ToLower().Contains("ulong") || t.ToLower().Contains("short") || t.ToLower().Contains("ushort") || t.ToLower().Contains("byte") || t.ToLower().Contains("sbyte"))
+                    decimal defaultValue;
+
+                    if (isColor)
                     {
-                        if (lname.Contains("width"))
-                        {
-                            defaultValue = 720m;
-                        }
-                        else if (lname.Contains("height"))
-                        {
-                            defaultValue = 480m;
-                        }
-                        else if (lname.Contains("coeff") || lname.Contains("itercoeff") || lname.Contains("coef"))
-                        {
-                            defaultValue = 8m;
-                        }
-                        else if (lname.Contains("zoom"))
-                        {
-                            defaultValue = 1m;
-                        }
-                        else if (lname.Contains("max") && lname.Contains("iter"))
-                        {
-                            defaultValue = 100m;
-                        }
-                        else if (lname.Contains("iter") || lname.Contains("maxiter"))
-                        {
-                            defaultValue = 50m;
-                        }
-                        else if (lname.Contains("seed"))
-                        {
-                            defaultValue = 0m;
-                        }
-                        else if (lname.Contains("threshold"))
-                        {
-                            defaultValue = 4m;
-                        }
-                        else if (lname.Contains("angle"))
-                        {
-                            defaultValue = 0m;
-                        }
-                        else if (lname.Contains("depth"))
-                        {
-                            defaultValue = 5m;
-                        }
-                        else if (lname.Contains("scale"))
-                        {
-                            defaultValue = 1m;
-                        }
-                        else if (lname.Contains("offsetx") || lname.Contains("offsety") || lname.Contains("offset"))
-                        {
-                            defaultValue = 0m;
-                        }
-                        else if (lname.Contains("centerx") || lname.Contains("centery") || lname.Contains("center"))
-                        {
-                            defaultValue = 0m;
-                        }
-                        if (isColor)
-                        {
-                            defaultValue = this.RandomizeRgb ? new Random().Next(0, 255) : 0m;
-						}
-					}
-                    else if (t.ToLower().Contains("float") || t.ToLower().Contains("double"))
-                    {
-                        if (lname.Contains("zoom"))
-                        {
-                            defaultValue = 1m;
-                        }
+                        defaultValue = this.RandomizeRgb ? new Random().Next(0, 255) : 0m;
                     }
+                    else
+                    {
+                        defaultValue = GetDefaultArgDecimal(name);
+                    }
+
+                    // Auf Typ anpassen (Runden / Clamp für Integer, Byte etc.)
+                    defaultValue = AdjustValueForType(defaultValue, t);
+
 					this.kernelArgViewModels.Add(new KernelArgViewModel
                     {
                         Index = i,
@@ -371,7 +331,9 @@ namespace OOCL.Image.WebApp.Pages
                         Min = this.GetMin(t),
                         Max = this.GetMax(t),
                         IsPointer = isPointer,
-                        IsColor = isColor
+                        IsColor = isColor,
+                        IsIntegerType = IsIntegerTypeName(t),
+                        NormalizedClrType = NormalizeTypeName(t)
                     });
                 }
 				this.BuildKernelInfoText();
@@ -399,6 +361,144 @@ namespace OOCL.Image.WebApp.Pages
 
             await Task.CompletedTask;
 		}
+
+        // Liefert passenden Decimal Default (roh) aus Dictionary oder 0
+        private decimal GetDefaultArgDecimal(string argName)
+        {
+            var lname = argName.ToLowerInvariant();
+            foreach (var kv in this.defaultArgValues)
+            {
+                if (lname.Contains(kv.Key.ToLowerInvariant()))
+                {
+                    return kv.Value;
+                }
+            }
+            return 0m;
+        }
+
+        // Wandelt decimal in "typkonformen" decimal (Runden/Clamp) um
+        private decimal AdjustValueForType(decimal value, string typeName)
+        {
+            if (string.IsNullOrWhiteSpace(typeName))
+                return value;
+
+            var t = typeName.Trim().ToLowerInvariant();
+
+            bool isFloat = t.Contains("single") || t.Contains("float");
+            bool isDouble = t.Contains("double");
+            bool isByte = t.Contains("byte") && !t.Contains("sbyte");
+            bool isSByte = t.Contains("sbyte");
+            bool isUnsigned = t.StartsWith("u") || t.Contains("uint") || t.Contains("ulong") || t.Contains("ushort");
+            bool isInteger = IsIntegerTypeName(typeName) && !isFloat && !isDouble;
+
+            if (isByte)
+            {
+                if (value < 0) value = 0;
+                if (value > 255) value = 255;
+                value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
+                return value;
+            }
+
+            if (isSByte)
+            {
+                if (value < sbyte.MinValue) value = sbyte.MinValue;
+                if (value > sbyte.MaxValue) value = sbyte.MaxValue;
+                value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
+                return value;
+            }
+
+            if (isInteger)
+            {
+                // Präzise auf ganzzahligen Bereich runden
+                value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
+
+                if (t.Contains("int64") || t.Contains("long"))
+                {
+                    if (value < long.MinValue) value = long.MinValue;
+                    if (value > long.MaxValue) value = long.MaxValue;
+                }
+                else if (t.Contains("uint64") || (t.Contains("ulong")))
+                {
+                    if (value < 0) value = 0;
+                    if (value > ulong.MaxValue) value = ulong.MaxValue;
+                }
+                else if (t.Contains("int16") || t.Contains("short"))
+                {
+                    if (value < short.MinValue) value = short.MinValue;
+                    if (value > short.MaxValue) value = short.MaxValue;
+                }
+                else if (t.Contains("uint16") || t.Contains("ushort"))
+                {
+                    if (value < 0) value = 0;
+                    if (value > ushort.MaxValue) value = ushort.MaxValue;
+                }
+                else if (t.Contains("uint32"))
+                {
+                    if (value < 0) value = 0;
+                    if (value > uint.MaxValue) value = uint.MaxValue;
+                }
+                else // int32 / int
+                {
+                    if (value < int.MinValue) value = int.MinValue;
+                    if (value > int.MaxValue) value = int.MaxValue;
+                }
+                return value;
+            }
+
+            if (isFloat)
+            {
+				const decimal floatMinValue = -3.40282347E+28m;
+				const decimal floatMaxValue = 3.40282347E+28m;
+				if (value < floatMinValue) value = floatMinValue;
+				if (value > floatMaxValue) value = floatMaxValue;
+				
+                // 6 decimalsi
+				value = Math.Round(value, 6, MidpointRounding.AwayFromZero);
+				return value;
+			}
+
+            if (isDouble)
+            {
+				const decimal doubleMinValue = -7.9228162514264337593543950335E+28m;
+				const decimal doubleMaxValue = 7.9228162514264337593543950335E+28m;
+				if (value < doubleMinValue) value = doubleMinValue;
+				if (value > doubleMaxValue) value = doubleMaxValue;
+				value = Math.Round(value, 10, MidpointRounding.AwayFromZero);
+				return value;
+			}
+
+            return value;
+        }
+
+        private static bool IsIntegerTypeName(string typeName)
+        {
+            if (string.IsNullOrWhiteSpace(typeName)) return false;
+            var t = typeName.ToLowerInvariant();
+            if (t.Contains("single") || t.Contains("float") || t.Contains("double")) return false;
+            return t.Contains("int") || t.Contains("long") || t.Contains("short") || t.Contains("byte");
+        }
+
+        private static string NormalizeTypeName(string typeName)
+        {
+            // Für UI oder Logging vereinheitlichen
+            return typeName?.Trim() ?? string.Empty;
+        }
+
+        // UI-Hook: Kann vom Numeric Input aufgerufen werden nach Änderung
+        public void OnArgValueChanged(KernelArgViewModel vm)
+        {
+            if (vm == null) return;
+            vm.Value = AdjustValueForType(vm.Value, vm.Type);
+        }
+
+        // Vor Ausführung alles normalisieren
+        public void NormalizeAllArgValues()
+        {
+            foreach (var vm in this.kernelArgViewModels)
+            {
+                vm.Value = AdjustValueForType(vm.Value, vm.Type);
+            }
+        }
 
         public bool IsColorGroupRepresentative(KernelArgViewModel arg)
         {
@@ -439,6 +539,7 @@ namespace OOCL.Image.WebApp.Pages
         {
             try
             {
+                NormalizeAllArgValues();
                 return await this.Api.ExecuteGenericImageKernel(id, kernelName, argNames, argVals);
             }
             catch { return null; }
@@ -448,6 +549,7 @@ namespace OOCL.Image.WebApp.Pages
         {
             try
             {
+                NormalizeAllArgValues();
                 return await this.Api.ExecuteCreateImageAsync(width, height, kernelName, baseColorHex, argNames, argVals);
             }
             catch { return null; }
@@ -555,14 +657,40 @@ namespace OOCL.Image.WebApp.Pages
 			return int.MaxValue;
         }
 
-        public object CastArg(decimal value, string type) => type switch
+        // Erweitert: unterstützt nun "Int32", "Single", "Double", "Byte", "UInt32", etc.
+        public object CastArg(decimal value, string type)
         {
-            "int" => (object)(int)value,
-            "float" => (object)(float)value,
-            "double" => (object)(double)value,
-            "byte" => (object)(byte)value,
-            _ => (object)(int)value
-        };
+            if (string.IsNullOrWhiteSpace(type))
+                return (int)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+
+            var t = type.Trim();
+
+            // Erst normalisieren
+            value = AdjustValueForType(value, t);
+
+            var tl = t.ToLowerInvariant();
+            if (tl.Contains("single") || tl == "float")
+                return (float)value;
+            if (tl.Contains("double"))
+                return (double)value;
+            if (tl.Contains("byte") && !tl.Contains("sbyte"))
+                return (byte)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+            if (tl.Contains("sbyte"))
+                return (sbyte)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+            if (tl.Contains("uint64") || tl.Contains("ulong"))
+                return (ulong)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
+            if (tl.Contains("int64") || tl.Contains("long"))
+                return (long)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+            if (tl.Contains("uint32"))
+                return (uint)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
+            if (tl.Contains("uint16") || tl.Contains("ushort"))
+                return (ushort)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
+            if (tl.Contains("int16") || tl.Contains("short"))
+                return (short)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+
+            // Default Int32
+            return (int)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+        }
 
         public bool IsWidthOrHeight(KernelArgViewModel arg)
         {
@@ -603,6 +731,9 @@ namespace OOCL.Image.WebApp.Pages
             public decimal Max { get; set; }
             public bool IsPointer { get; set; }
             public bool IsColor { get; set; }
+            // Zusatzinfos für UI-Steuerung
+            public bool IsIntegerType { get; set; }
+            public string NormalizedClrType { get; set; } = string.Empty;
             public string StepString => this.Step.ToString(CultureInfo.InvariantCulture);
         }
 

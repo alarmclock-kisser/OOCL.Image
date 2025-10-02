@@ -203,11 +203,11 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<IEnumerable<OpenClKernelInfo>> GetOpenClKernelsAsync()
+		public async Task<IEnumerable<OpenClKernelInfo>> GetOpenClKernelsAsync(bool onlyCompiled = true)
 		{
 			try
 			{
-				return await this.internalClient.KernelInfosAsync();
+				return await this.internalClient.KernelInfosAsync(onlyCompiled);
 			}
 			catch (Exception ex)
 			{

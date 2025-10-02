@@ -20,6 +20,8 @@ namespace OOCL.Image.Shared
 
 		public string[] ColorInputArgNames { get; set; } = [];
 
+		public bool CompiledSuccessfully { get; set; } = false;
+
 
 
 		public OpenClKernelInfo()
@@ -28,7 +30,7 @@ namespace OOCL.Image.Shared
 		}
 
 		[JsonConstructor]
-		public OpenClKernelInfo(OpenClCompiler? obj, int index)
+		public OpenClKernelInfo(OpenClCompiler? obj, int index, bool tryCompile = true)
 		{
 			if (obj == null)
 			{
@@ -65,6 +67,10 @@ namespace OOCL.Image.Shared
 				this.MediaType = this.DetermineMediaType();
 				this.ColorInputArgNames = this.GetColorInputArgNames();
 
+				if (tryCompile)
+				{
+					this.CompiledSuccessfully = compiler.TryCompileKernel(this.Filepath) ?? false;
+				}
 			}
 		}
 

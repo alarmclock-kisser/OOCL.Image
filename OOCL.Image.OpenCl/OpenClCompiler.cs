@@ -290,6 +290,30 @@ namespace OOCL.Image.OpenCl
 			return kernel;
 		}
 
+		public bool? TryCompileKernel(string kernelNameOrFile)
+		{
+			string file = kernelNameOrFile;
+			if (!File.Exists(file))
+			{
+				// Try get from KernelFiles
+				file = this.KernelFiles.FirstOrDefault(f => f.ToLowerInvariant().Contains(kernelNameOrFile.ToLowerInvariant())) ?? string.Empty;
+			}
+
+			if (string.IsNullOrEmpty(file) || !File.Exists(file))
+			{
+				return null;
+			}
+
+
+			CLKernel? result = this.CompileFile(file);
+			if (result == null)
+			{
+				return false;
+			}
+
+			return true;
+		}
+
 		public Dictionary<string, Type> GetKernelArguments(string kernelName)
 		{
 			string? kernelFile = this.KernelFiles.FirstOrDefault(f => f.ToLower().Contains(kernelName.ToLower()));

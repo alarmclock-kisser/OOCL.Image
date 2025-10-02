@@ -141,7 +141,7 @@
             <label style="font-size:0.9em;margin:0;">Randomize RGB values</label>
         </div>
 
-        <!-- Kernel Info collapsible (bereits umgesetzt) -->
+        <!-- Kernel Info collapsible -->
         <div class="kernel-info-panel" style="border:1px solid var(--rz-border-color,#444);border-radius:4px;margin-bottom:0.5rem;background:var(--rz-base-background,#1e1e1e);">
             <div class="kernel-info-header" style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;">
                 <b style="font-size:0.9rem;">Kernel Arguments Info</b>
@@ -179,8 +179,9 @@
                 }
             </div>
         </RadzenCard>
-        <RadzenCard Style="flex:1;min-width:260px;display:flex;flex-direction:column;max-height:400px;">
-            <div style="flex:1 1 auto;overflow-y:auto;max-height:370px;">
+        <RadzenCard Style="flex:1;min-width:260px;display:flex;flex-direction:column;">
+            <!-- Kopf mit Einstellungen (NICHT scrollen) -->
+            <div style="flex:0 0 auto;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                     <div style="display:flex;align-items:center;gap:6px;">
                         <label style="font-size:0.9em;margin-right:4px;">Max keep:</label>
@@ -193,22 +194,31 @@
                         <RadzenDropDown Data="@VM.Magnitudes" @bind-Value="VM.SelectedMagnitude" Change="@(args => { VM.UpdateMagnitudeFactor(); StateHasChanged(); })" Style="width:90px;" />
                     </div>
                 </div>
-                <RadzenListBox Data="@images" @bind-Value="selectedImageId" ValueProperty="Id" Style="height:360px;width:100%;" Change="@OnImageChanged">
+            </div>
+
+            <!-- Nur die Liste soll scrollen -->
+            <div style="flex:0 0 auto;max-height:280px;overflow-y:auto;border:1px solid var(--rz-border-color,#333);border-radius:4px;margin-bottom:8px;">
+                <RadzenListBox Data="@images"
+                               @bind-Value="selectedImageId"
+                               ValueProperty="Id"
+                               Style="width:100%;height:auto;min-height:60px;"
+                               Change="@OnImageChanged">
                     <Template Context="img">
                         <div class="image-list-entry @(selectedImageId == img.Id ? "selected" : string.Empty)" style="display:flex;align-items:center;gap:10px;font-size:0.92em;">
                             <span class="img-id">@img.Id</span>
-                            <span class="img-path">@img.FilePath</span>
+                            <span class="img-name">@img.FileName</span>
                             <span class="img-size">[@img.Size.Width,@img.Size.Height]</span>
                             <span class="img-bytes">@VM.FormatSize(img) @VM.SelectedMagnitude</span>
                         </div>
                     </Template>
                 </RadzenListBox>
             </div>
+
+            <!-- Buttons bleiben unterhalb der (ggf. gescrollten) Liste -->
             <div class="d-flex gap-2 mt-2" style="flex-wrap:wrap;">
                 <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
                 <RadzenButton Icon="download" Text="Download" Click="@DownloadImage" Disabled="@(!CanDownload)" />
                 <RadzenDropDown Data="@formats" @bind-Value="selectedFormat" Style="width:80px;" />
-                <RadzenNumeric TValue="int" @bind-Value="quality" Min="1" Max="100" Style="width:60px;" />
             </div>
             <div class="d-flex gap-2 mt-2" style="flex-wrap:wrap;">
                 <RadzenButton Icon="delete" Text="Remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveImage" Disabled="@(!CanRemove)" />

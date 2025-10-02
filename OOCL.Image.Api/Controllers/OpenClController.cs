@@ -436,7 +436,7 @@ namespace OOCL.Image.Api.Controllers
 		[HttpGet("kernel-infos")]
 		[ProducesResponseType(typeof(IEnumerable<OpenClKernelInfo>), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<IEnumerable<OpenClKernelInfo>>> GetKernelInfosAsync()
+		public async Task<ActionResult<IEnumerable<OpenClKernelInfo>>> GetKernelInfosAsync([FromQuery] bool onlyCompiled = true)
 		{
 			try
 			{
@@ -458,6 +458,11 @@ namespace OOCL.Image.Api.Controllers
 						Title = "Internal Server Error",
 						Detail = "Failed to retrieve kernel information."
 					});
+				}
+
+				if (onlyCompiled)
+				{
+					kernelInfos = kernelInfos.Where(i => i.CompiledSuccessfully);
 				}
 
 				return this.Ok(kernelInfos);
