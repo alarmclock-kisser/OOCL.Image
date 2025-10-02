@@ -17,6 +17,7 @@ namespace OOCL.Image.Client
 		private readonly InternalClient internalClient;
 		private readonly HttpClient httpClient;
 		private readonly string baseUrl;
+		private JsonSerializerOptions jsonSerializerOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
 		public string BaseUrl => this.baseUrl;
 
@@ -73,7 +74,7 @@ namespace OOCL.Image.Client
 					return new ImageObjInfo();
 				}
 				var json = await response.Content.ReadAsStringAsync();
-				return JsonSerializer.Deserialize<ImageObjInfo>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new ImageObjInfo();
+				return JsonSerializer.Deserialize<ImageObjInfo>(json, this.jsonSerializerOptions) ?? new ImageObjInfo();
 			}
 			catch (Exception ex)
 			{
