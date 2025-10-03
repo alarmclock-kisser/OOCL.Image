@@ -22,14 +22,12 @@
 <RadzenCard Style="max-width:1200px;margin:auto;margin-top:2rem;">
 
     <!-- OpenCL Device Section (collapsible) -->
-    <div class="opencl-device-panel" style="border:1px solid var(--rz-border-color,#444);border-radius:6px;padding:0;margin-bottom:1.25rem;background:var(--rz-base-background,#1e1e1e);">
+    <div class="opencl-device-panel themed-panel">
         <!-- Header -->
-        <div style="display:flex;align-items:center;gap:14px;padding:6px 10px;">
-            <b style="font-size:0.95rem;">OpenCL Device</b>
-            <span style="font-size:0.75rem;color:var(--rz-text-secondary-color,#888);">
-                @GetDeviceSummary()
-            </span>
-            <span style="margin-left:auto;"></span>
+        <div class="panel-header">
+            <b class="panel-title">OpenCL Device</b>
+            <span class="panel-sub">@GetDeviceSummary()</span>
+            <span class="spacer"></span>
             <RadzenButton ButtonStyle="ButtonStyle.Light"
                           Size="ButtonSize.Small"
                           Icon="@(isDeviceSectionExpanded ? "remove" : "add")"
@@ -40,7 +38,7 @@
         <!-- Body (only if expanded) -->
         @if (isDeviceSectionExpanded)
         {
-            <div style="padding:10px 12px 14px;">
+            <div class="panel-body">
                 <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;">
                     <!-- Device Selection -->
                     <div style="flex:1 1 260px;min-width:250px;border:1px solid var(--rz-border-color,#333);border-radius:4px;padding:10px;">
@@ -142,9 +140,10 @@
         </div>
 
         <!-- Kernel Info collapsible -->
-        <div class="kernel-info-panel" style="border:1px solid var(--rz-border-color,#444);border-radius:4px;margin-bottom:0.5rem;background:var(--rz-base-background,#1e1e1e);">
-            <div class="kernel-info-header" style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;">
-                <b style="font-size:0.9rem;">Kernel Arguments Info</b>
+        <div class="kernel-info-panel themed-panel small-gap">
+            <div class="panel-header">
+                <b class="panel-title">Kernel Arguments Info</b>
+                <span class="spacer"></span>
                 <RadzenButton ButtonStyle="ButtonStyle.Light"
                               Size="ButtonSize.Small"
                               Icon="@(isKernelInfoExpanded ? "remove" : "add")"
@@ -206,7 +205,7 @@
                     <Template Context="img">
                         <div class="image-list-entry @(selectedImageId == img.Id ? "selected" : string.Empty)" style="display:flex;align-items:center;gap:10px;font-size:0.92em;">
                             <span class="img-id">@img.Id</span>
-                            <span class="img-name">@img.FileName</span>
+                            <span class="img-name">@img.Name</span>
                             <span class="img-size">[@img.Size.Width,@img.Size.Height]</span>
                             <span class="img-bytes">@VM.FormatSize(img) @VM.SelectedMagnitude</span>
                         </div>
@@ -227,6 +226,40 @@
             <InputFile @ref="fileInput" id="fileInputHidden" style="display:none" OnChange="@OnInputFileChange" />
         </RadzenCard>
     </div>
+
+    <!-- App & Service info -->
+    <div class="opencl-device-panel themed-panel">
+        <!-- Header -->
+        <div class="panel-header">
+            <b class="panel-title">Service and App Configuration</b>
+            <span class="panel-sub">@GetConfigSummary()</span>
+            <span class="spacer"></span>
+            <RadzenButton ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small"
+                          Icon="@(isDeviceSectionExpanded ? "remove" : "add")"
+                          Style="min-width:30px;width:30px;padding:0;"
+                          Click="@ToggleConfigInfoSection" />
+        </div>
+
+        <!-- Body (only if expanded) -->
+        @if (isConfigInfoSectionExpanded)
+        {
+            <!-- TextBox with all values from DI WebAppConfig left and right with dividing view slider to see more of each side -->
+            <div class="panel-body">
+                <RadzenTextArea @Value="VM.webAppConfigText"
+                                Rows="12"
+                                ReadOnly="true"
+                            Style="width:100%;height:320px;font-family:monospace;font-size:0.75rem;white-space:pre;" />
+            </div>
+            <!-- TextBox with all values from DI WebApiConfig left and right with dividing view slider to see more of each side -->
+            <div class="panel-body">
+                <RadzenTextArea @Value="VM.webApiConfigText"
+                                Rows="12"
+                                ReadOnly="true"
+                                Style="width:100%;height:320px;font-family:monospace;font-size:0.75rem;white-space:pre;" />
+            </div>
+        }
+    </div>
 </RadzenCard>
 
 @code {
@@ -235,14 +268,19 @@
 
     private bool isKernelInfoExpanded = false;
     private bool isDeviceSectionExpanded = false;
+    private bool isConfigInfoSectionExpanded = false;
 
     private void ToggleKernelInfo() => isKernelInfoExpanded = !isKernelInfoExpanded;
     private void ToggleDeviceSection() => isDeviceSectionExpanded = !isDeviceSectionExpanded;
+    private void ToggleConfigInfoSection() => isConfigInfoSectionExpanded = !isConfigInfoSectionExpanded;
 
     private string GetDeviceSummary()
         => openClServiceInfo?.Initialized == true
             ? $"{openClServiceInfo.DeviceName} [{openClServiceInfo.DeviceId}]"
             : "kein gerät initialisiert";
+
+    private string GetConfigSummary()
+        => $"API: {Config.ApiBaseUrl}, PreferredDevice: {Config.PreferredDevice}, Image Limit: {Config.ImagesLimit}";
 
     protected override async Task OnInitializedAsync()
     {

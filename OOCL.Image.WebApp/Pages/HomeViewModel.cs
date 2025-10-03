@@ -1,8 +1,10 @@
-using System;
+Ôªøusing System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
@@ -36,8 +38,36 @@ namespace OOCL.Image.WebApp.Pages
             this.formats = ["png", "jpg", "bmp"];
         }
 
-        // --- Public state used by the UI (kept with same names as before) ---
-        public List<OpenClDeviceInfo> devices { get; set; }
+		// --- If no server sided data provided, use internal dto list of images ---
+        public IEnumerable<ImageObjDto> ClientImageCollection { get; set; } = [];
+
+        // --- WebAppConfig text ---
+        private JsonSerializerOptions jsonSerializerOptions = new() { WriteIndented = true };
+        public string webAppConfigText { 
+            get => JsonSerializer.Serialize(this.Config, this.jsonSerializerOptions);
+            set
+            {
+                try
+                {
+                    var cfg = JsonSerializer.Deserialize<WebAppConfig>(value, this.jsonSerializerOptions);
+                    if (cfg != null)
+                    {
+                        this.Config.ApplicationName = cfg.ApplicationName;
+                        this.Config.DefaultDarkMode = cfg.DefaultDarkMode;
+                        this.Config.PreferredDevice = cfg.PreferredDevice;
+                        this.Config.ImagesLimit = cfg.ImagesLimit;
+                        this.Config.ApiBaseUrl = cfg.ApiBaseUrl;
+                        this.Config.KestelEndpointHttp = cfg.KestelEndpointHttp;
+                        this.Config.KestelEndpointHttps = cfg.KestelEndpointHttps;
+                    }
+                }
+                catch { }
+			}
+		}
+        public WebApiConfig ApiConfig { get; set; } = new();
+
+		// --- Public state used by the UI (kept with same names as before) ---
+		public List<OpenClDeviceInfo> devices { get; set; }
         public int selectedDeviceIndex { get; set; }
         public List<ImageObjInfo> images { get; set; }
         public Guid selectedImageId { get; set; }
@@ -72,8 +102,8 @@ namespace OOCL.Image.WebApp.Pages
 
 		public bool CanExecute => !string.IsNullOrEmpty(this.selectedKernelName) && (this.useExistingImage ? this.selectedImageId != Guid.Empty : true);
 
-        // Gibt an, ob das Setzen auf 0 (unbegrenzt) lokal erlaubt ist ó nur true, wenn Server-Config <= 0
-        public bool AllowZeroMaxImagesSetting => (this.Config?.MaxImagesToKeep ?? 0) <= 0;
+        // Gibt an, ob das Setzen auf 0 (unbegrenzt) lokal erlaubt ist ‚Äî nur true, wenn Server-Config <= 0
+        public bool AllowZeroMaxImagesSetting => (this.Config?.ImagesLimit ?? 0) <= 0;
 
         public bool RandomizeRgb { get; set; } = false;
 
@@ -99,10 +129,14 @@ namespace OOCL.Image.WebApp.Pages
             await this.LoadOpenClStatus();
             await this.LoadKernels();
             // initialize max images numeric from config
-            this.MaxImagesToKeepNumeric = this.Config?.MaxImagesToKeep ?? 0;
+            this.MaxImagesToKeepNumeric = this.Config?.ImagesLimit ?? 0;
             // ensure magnitude factor
-            if (string.IsNullOrEmpty(this.SelectedMagnitude)) this.SelectedMagnitude = "kB";
-            this.UpdateMagnitudeFactor();
+            if (string.IsNullOrEmpty(this.SelectedMagnitude))
+			{
+				this.SelectedMagnitude = "kB";
+			}
+
+			this.UpdateMagnitudeFactor();
          }
 
 		public void UpdateMagnitudeFactor()
@@ -131,42 +165,66 @@ namespace OOCL.Image.WebApp.Pages
 		}
 		public async Task LoadDevices() => this.devices = (await this.Api.GetOpenClDevicesAsync()).ToList();
 
-        public async Task LoadImages()
-        {
-            try
-            {
-                // Determine effective limit: prefer user-set numeric (>0), otherwise fall back to server config if >0.
-                int effectiveLimit = 0;
-                var cfgLimit = this.Config?.MaxImagesToKeep ?? 0;
+		public async Task LoadImages()
+		{
+			// Die Basis-Klasse f√ºr die Liste, die angezeigt wird (vermutlich ImageObjInfo)
+			// Dies muss auf der Client-Seite die Quelldaten von der API (true) ODER vom Client-Store (false) sein.
+			List<ImageObjInfo> imageInfoList = new List<ImageObjInfo>();
 
-                if (this.MaxImagesToKeepNumeric > 0)
-                {
-                    effectiveLimit = this.MaxImagesToKeepNumeric;
-                }
+			if (await this.Api.IsServersidedDataAsync())
+			{
+				try
+				{
+					int effectiveLimit = 0;
+					var cfgLimit = this.Config?.ImagesLimit ?? 0;
 
-                if (cfgLimit > 0)
-                {
-                    if (effectiveLimit <= 0) effectiveLimit = cfgLimit; // no numeric -> use server limit
-                    else effectiveLimit = Math.Min(effectiveLimit, cfgLimit); // cap numeric by server config
-                }
+					if (this.MaxImagesToKeepNumeric > 0)
+					{
+						effectiveLimit = this.MaxImagesToKeepNumeric;
+					}
 
-                if (effectiveLimit > 0)
-                {
-                    await this.Api.CleanupOldImages(effectiveLimit);
-                }
-            }
-            catch { }
+					if (cfgLimit > 0)
+					{
+						if (effectiveLimit <= 0)
+						{
+							effectiveLimit = cfgLimit;
+						}
+						else
+						{
+							effectiveLimit = Math.Min(effectiveLimit, cfgLimit);
+						}
+					}
 
-			this.images = (await this.Api.GetImageListAsync()).ToList();
-			this.images = this.images.OrderBy(i => i.CreatedAt).ToList();
-            if (this.images.Count > 0)
-            {
+					if (effectiveLimit > 0)
+					{
+						await this.Api.CleanupOldImages(effectiveLimit);
+					}
+				}
+				catch {  }
+
+				imageInfoList = (await this.Api.GetImageListAsync()).ToList();
+
+			}
+			else
+			{
+				imageInfoList = this.ClientImageCollection.Select(dto => dto.Info).ToList();
+			}
+
+			this.images = imageInfoList.OrderBy(i => i.CreatedAt).ToList();
+
+			if (this.images.Count > 0)
+			{
 				this.selectedImageId = this.images.Last().Id;
 				this.lastKernelProcessingTimeMs = this.images.Last().LastProcessingTimeMs;
-            }
-        }
+			}
+			else
+			{
+				this.selectedImageId = Guid.Empty;
+				this.lastKernelProcessingTimeMs = 0;
+			}
+		}
 
-        public async Task LoadOpenClStatus()
+		public async Task LoadOpenClStatus()
         {
 			this.openClServiceInfo = await this.Api.GetOpenClServiceInfoAsync();
         }
@@ -207,20 +265,55 @@ namespace OOCL.Image.WebApp.Pages
             await this.LoadOpenClStatus();
         }
 
-        public async Task<ImageObjData?> GetImageDataAsync(Guid id, string format) => await this.Api.GetImageDataAsync(id, format);
+        public async Task<ImageObjData?> GetImageDataAsync(Guid id, string format)
+        {
+            if (id == Guid.Empty)
+            {
+                return null;
+			}
 
-        public async Task DownloadImage(Guid id, string format)
+            if (await this.Api.IsServersidedDataAsync())
+            {
+               return await this.Api.GetImageDataAsync(id, format);
+            }
+            else
+            {
+                var dto = this.ClientImageCollection.FirstOrDefault(d => d.Info.Id == id);
+                if (dto == null)
+                    {
+                    return null;
+				}
+
+                return dto.Data;
+            }
+        }
+
+
+		public async Task DownloadImage(Guid id, string format)
         {
             if (id == Guid.Empty)
 			{
 				return;
 			}
-
-			var file = await this.Api.DownloadImageAsync(id, format);
-            if (file != null)
+            if (await this.Api.IsServersidedDataAsync())
             {
-                // return base64 to caller via JS interop from UI layer; here we just provide the byte array
+                // Server sided data
+                var file = await this.Api.DownloadImageAsync(id, format);
             }
+            else
+            {
+                // Client sided data
+                var dto = this.ClientImageCollection.FirstOrDefault(d => d.Info.Id == id);
+                if (dto == null || dto.Data == null || string.IsNullOrEmpty(dto.Data.Base64Data))
+                {
+                    return;
+                }
+
+                var base64Data = dto.Data.Base64Data;
+                var mimeType = dto.Data.MimeType;
+                var fileName = $"image_{id.ToString().Substring(0, 8)}.{format}";
+                await this.JS.InvokeVoidAsync("downloadFileFromBase64", fileName, mimeType, base64Data);
+			}
         }
 
         public async Task RemoveImage(Guid id)
@@ -230,14 +323,37 @@ namespace OOCL.Image.WebApp.Pages
 				return;
 			}
 
-			await this.Api.RemoveImageAsync(id);
-            await this.LoadImages();
+            if (await this.Api.IsServersidedDataAsync())
+            {
+                await this.Api.RemoveImageAsync(id);
+            }
+            else
+            {
+                var dto = this.ClientImageCollection.FirstOrDefault(d => d.Info.Id == id);
+                if (dto != null)
+                {
+                    var list = this.ClientImageCollection.ToList();
+                    list.Remove(dto);
+                    this.ClientImageCollection = list;
+                }
+			}
+
+			await this.LoadImages();
         }
 
         public async Task ClearImages()
         {
-            await this.Api.ClearImagesAsync();
-            await this.LoadImages();
+            if (await this.Api.IsServersidedDataAsync())
+            {
+                await this.Api.ClearImagesAsync();
+            }
+            else
+            {
+                this.ClientImageCollection = [];
+			}
+
+            this.ImageCache.Clear();
+			await this.LoadImages();
         }
 
         public async Task OnInputFileChange(InputFileChangeEventArgs e)
@@ -255,8 +371,33 @@ namespace OOCL.Image.WebApp.Pages
                 await stream.CopyToAsync(ms);
                 var bytes = ms.ToArray();
                 var fileParameter = new FileParameter(new MemoryStream(bytes), file.Name, file.ContentType);
-                await this.Api.UploadImageAsync(fileParameter);
-                await this.LoadImages();
+                
+                if (await this.Api.IsServersidedDataAsync())
+                {
+                    var info = await this.Api.UploadImageAsync(fileParameter);
+                    if (info == null || info.Id == Guid.Empty)
+					{
+                        this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Upload failed", Duration = 4000 });
+                        return;
+					}
+
+                    // select uploaded image
+                    this.selectedImageId = info.Id;
+                }
+                else
+                {
+                    ImageObjDto dto = await Task.Run(() => new ImageObjDto(bytes.Select(b => (int) b).AsParallel().AsEnumerable(), file.Name, file.ContentType));
+
+					// Client sided upload
+					var list = this.ClientImageCollection.ToList();
+                    list.Add(dto);
+                    this.ClientImageCollection = list;
+                    
+                    // select uploaded image
+                    this.selectedImageId = dto.Info.Id;
+				}
+
+				await this.LoadImages();
             	this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Image uploaded successfully", Duration = 2000 });
             }
             catch (Exception ex)
@@ -283,7 +424,7 @@ namespace OOCL.Image.WebApp.Pages
 				this.imageData = new ImageObjData { Id = this.selectedImageId, Base64Data = cached, MimeType = "image/" + this.selectedFormat.Trim('.').ToLower() };
 				return;
 			}
-			this.imageData = await this.Api.GetImageDataAsync(this.selectedImageId, this.selectedFormat);
+			this.imageData = await this.Api.IsServersidedDataAsync() ? await this.Api.GetImageDataAsync(this.selectedImageId, this.selectedFormat) : await this.GetImageDataAsync(this.selectedImageId, this.selectedFormat);
 			if (this.imageData != null && !string.IsNullOrEmpty(this.imageData.Base64Data))
 			{
 				this.ImageCache[this.selectedImageId] = this.imageData.Base64Data;
@@ -318,7 +459,7 @@ namespace OOCL.Image.WebApp.Pages
                         defaultValue = GetDefaultArgDecimal(name);
                     }
 
-                    // Auf Typ anpassen (Runden / Clamp f¸r Integer, Byte etc.)
+                    // Auf Typ anpassen (Runden / Clamp f√ºr Integer, Byte etc.)
                     defaultValue = AdjustValueForType(defaultValue, t);
 
 					this.kernelArgViewModels.Add(new KernelArgViewModel
@@ -380,9 +521,11 @@ namespace OOCL.Image.WebApp.Pages
         private decimal AdjustValueForType(decimal value, string typeName)
         {
             if (string.IsNullOrWhiteSpace(typeName))
-                return value;
+			{
+				return value;
+			}
 
-            var t = typeName.Trim().ToLowerInvariant();
+			var t = typeName.Trim().ToLowerInvariant();
 
             bool isFloat = t.Contains("single") || t.Contains("float");
             bool isDouble = t.Contains("double");
@@ -393,55 +536,113 @@ namespace OOCL.Image.WebApp.Pages
 
             if (isByte)
             {
-                if (value < 0) value = 0;
-                if (value > 255) value = 255;
-                value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
+                if (value < 0)
+				{
+					value = 0;
+				}
+
+				if (value > 255)
+				{
+					value = 255;
+				}
+
+				value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
                 return value;
             }
 
             if (isSByte)
             {
-                if (value < sbyte.MinValue) value = sbyte.MinValue;
-                if (value > sbyte.MaxValue) value = sbyte.MaxValue;
-                value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
+                if (value < sbyte.MinValue)
+				{
+					value = sbyte.MinValue;
+				}
+
+				if (value > sbyte.MaxValue)
+				{
+					value = sbyte.MaxValue;
+				}
+
+				value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
                 return value;
             }
 
             if (isInteger)
             {
-                // Pr‰zise auf ganzzahligen Bereich runden
+                // Pr√§zise auf ganzzahligen Bereich runden
                 value = Math.Round(value, 0, MidpointRounding.AwayFromZero);
 
                 if (t.Contains("int64") || t.Contains("long"))
                 {
-                    if (value < long.MinValue) value = long.MinValue;
-                    if (value > long.MaxValue) value = long.MaxValue;
-                }
+                    if (value < long.MinValue)
+					{
+						value = long.MinValue;
+					}
+
+					if (value > long.MaxValue)
+					{
+						value = long.MaxValue;
+					}
+				}
                 else if (t.Contains("uint64") || (t.Contains("ulong")))
                 {
-                    if (value < 0) value = 0;
-                    if (value > ulong.MaxValue) value = ulong.MaxValue;
-                }
+                    if (value < 0)
+					{
+						value = 0;
+					}
+
+					if (value > ulong.MaxValue)
+					{
+						value = ulong.MaxValue;
+					}
+				}
                 else if (t.Contains("int16") || t.Contains("short"))
                 {
-                    if (value < short.MinValue) value = short.MinValue;
-                    if (value > short.MaxValue) value = short.MaxValue;
-                }
+                    if (value < short.MinValue)
+					{
+						value = short.MinValue;
+					}
+
+					if (value > short.MaxValue)
+					{
+						value = short.MaxValue;
+					}
+				}
                 else if (t.Contains("uint16") || t.Contains("ushort"))
                 {
-                    if (value < 0) value = 0;
-                    if (value > ushort.MaxValue) value = ushort.MaxValue;
-                }
+                    if (value < 0)
+					{
+						value = 0;
+					}
+
+					if (value > ushort.MaxValue)
+					{
+						value = ushort.MaxValue;
+					}
+				}
                 else if (t.Contains("uint32"))
                 {
-                    if (value < 0) value = 0;
-                    if (value > uint.MaxValue) value = uint.MaxValue;
-                }
+                    if (value < 0)
+					{
+						value = 0;
+					}
+
+					if (value > uint.MaxValue)
+					{
+						value = uint.MaxValue;
+					}
+				}
                 else // int32 / int
                 {
-                    if (value < int.MinValue) value = int.MinValue;
-                    if (value > int.MaxValue) value = int.MaxValue;
-                }
+                    if (value < int.MinValue)
+					{
+						value = int.MinValue;
+					}
+
+					if (value > int.MaxValue)
+					{
+						value = int.MaxValue;
+					}
+				}
                 return value;
             }
 
@@ -449,10 +650,17 @@ namespace OOCL.Image.WebApp.Pages
             {
 				const decimal floatMinValue = -3.40282347E+28m;
 				const decimal floatMaxValue = 3.40282347E+28m;
-				if (value < floatMinValue) value = floatMinValue;
-				if (value > floatMaxValue) value = floatMaxValue;
-				
-                // 6 decimalsi
+				if (value < floatMinValue)
+				{
+					value = floatMinValue;
+				}
+
+				if (value > floatMaxValue)
+				{
+					value = floatMaxValue;
+				}
+
+				// 6 decimalsi
 				value = Math.Round(value, 6, MidpointRounding.AwayFromZero);
 				return value;
 			}
@@ -461,8 +669,16 @@ namespace OOCL.Image.WebApp.Pages
             {
 				const decimal doubleMinValue = -7.9228162514264337593543950335E+28m;
 				const decimal doubleMaxValue = 7.9228162514264337593543950335E+28m;
-				if (value < doubleMinValue) value = doubleMinValue;
-				if (value > doubleMaxValue) value = doubleMaxValue;
+				if (value < doubleMinValue)
+				{
+					value = doubleMinValue;
+				}
+
+				if (value > doubleMaxValue)
+				{
+					value = doubleMaxValue;
+				}
+
 				value = Math.Round(value, 10, MidpointRounding.AwayFromZero);
 				return value;
 			}
@@ -472,26 +688,38 @@ namespace OOCL.Image.WebApp.Pages
 
         private static bool IsIntegerTypeName(string typeName)
         {
-            if (string.IsNullOrWhiteSpace(typeName)) return false;
-            var t = typeName.ToLowerInvariant();
-            if (t.Contains("single") || t.Contains("float") || t.Contains("double")) return false;
-            return t.Contains("int") || t.Contains("long") || t.Contains("short") || t.Contains("byte");
+            if (string.IsNullOrWhiteSpace(typeName))
+			{
+				return false;
+			}
+
+			var t = typeName.ToLowerInvariant();
+            if (t.Contains("single") || t.Contains("float") || t.Contains("double"))
+			{
+				return false;
+			}
+
+			return t.Contains("int") || t.Contains("long") || t.Contains("short") || t.Contains("byte");
         }
 
         private static string NormalizeTypeName(string typeName)
         {
-            // F¸r UI oder Logging vereinheitlichen
+            // F√ºr UI oder Logging vereinheitlichen
             return typeName?.Trim() ?? string.Empty;
         }
 
-        // UI-Hook: Kann vom Numeric Input aufgerufen werden nach ƒnderung
+        // UI-Hook: Kann vom Numeric Input aufgerufen werden nach √Ñnderung
         public void OnArgValueChanged(KernelArgViewModel vm)
         {
-            if (vm == null) return;
-            vm.Value = AdjustValueForType(vm.Value, vm.Type);
+            if (vm == null)
+			{
+				return;
+			}
+
+			vm.Value = AdjustValueForType(vm.Value, vm.Type);
         }
 
-        // Vor Ausf¸hrung alles normalisieren
+        // Vor Ausf√ºhrung alles normalisieren
         public void NormalizeAllArgValues()
         {
             foreach (var vm in this.kernelArgViewModels)
@@ -604,7 +832,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (t.Contains("double"))
 			{
-				return 0.0005m; // changed to 0.005 for double
+				return 0.01m; // changed to 0.005 for double
 			}
 
 			if (t.Contains("byte"))
@@ -657,39 +885,67 @@ namespace OOCL.Image.WebApp.Pages
 			return int.MaxValue;
         }
 
-        // Erweitert: unterst¸tzt nun "Int32", "Single", "Double", "Byte", "UInt32", etc.
+        // Erweitert: unterst√ºtzt nun "Int32", "Single", "Double", "Byte", "UInt32", etc.
         public object CastArg(decimal value, string type)
         {
             if (string.IsNullOrWhiteSpace(type))
-                return (int)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			{
+				return (int)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			}
 
-            var t = type.Trim();
+			var t = type.Trim();
 
             // Erst normalisieren
             value = AdjustValueForType(value, t);
 
             var tl = t.ToLowerInvariant();
             if (tl.Contains("single") || tl == "float")
-                return (float)value;
-            if (tl.Contains("double"))
-                return (double)value;
-            if (tl.Contains("byte") && !tl.Contains("sbyte"))
-                return (byte)Math.Round(value, 0, MidpointRounding.AwayFromZero);
-            if (tl.Contains("sbyte"))
-                return (sbyte)Math.Round(value, 0, MidpointRounding.AwayFromZero);
-            if (tl.Contains("uint64") || tl.Contains("ulong"))
-                return (ulong)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
-            if (tl.Contains("int64") || tl.Contains("long"))
-                return (long)Math.Round(value, 0, MidpointRounding.AwayFromZero);
-            if (tl.Contains("uint32"))
-                return (uint)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
-            if (tl.Contains("uint16") || tl.Contains("ushort"))
-                return (ushort)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
-            if (tl.Contains("int16") || tl.Contains("short"))
-                return (short)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			{
+				return (float)value;
+			}
 
-            // Default Int32
-            return (int)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			if (tl.Contains("double"))
+			{
+				return (double)value;
+			}
+
+			if (tl.Contains("byte") && !tl.Contains("sbyte"))
+			{
+				return (byte)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			}
+
+			if (tl.Contains("sbyte"))
+			{
+				return (sbyte)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			}
+
+			if (tl.Contains("uint64") || tl.Contains("ulong"))
+			{
+				return (ulong)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
+			}
+
+			if (tl.Contains("int64") || tl.Contains("long"))
+			{
+				return (long)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			}
+
+			if (tl.Contains("uint32"))
+			{
+				return (uint)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
+			}
+
+			if (tl.Contains("uint16") || tl.Contains("ushort"))
+			{
+				return (ushort)Math.Max(0, Math.Round(value, 0, MidpointRounding.AwayFromZero));
+			}
+
+			if (tl.Contains("int16") || tl.Contains("short"))
+			{
+				return (short)Math.Round(value, 0, MidpointRounding.AwayFromZero);
+			}
+
+			// Default Int32
+			return (int)Math.Round(value, 0, MidpointRounding.AwayFromZero);
         }
 
         public bool IsWidthOrHeight(KernelArgViewModel arg)
@@ -731,7 +987,7 @@ namespace OOCL.Image.WebApp.Pages
             public decimal Max { get; set; }
             public bool IsPointer { get; set; }
             public bool IsColor { get; set; }
-            // Zusatzinfos f¸r UI-Steuerung
+            // Zusatzinfos f√ºr UI-Steuerung
             public bool IsIntegerType { get; set; }
             public string NormalizedClrType { get; set; } = string.Empty;
             public string StepString => this.Step.ToString(CultureInfo.InvariantCulture);
@@ -837,7 +1093,7 @@ namespace OOCL.Image.WebApp.Pages
                 this.colorHexForNewImage = value!;
             }
 
-            // Pr¸fe, ob ein RGB-Tupel erkannt wurde
+            // Pr√ºfe, ob ein RGB-Tupel erkannt wurde
             if (this.selectedKernelInfo?.ColorInputArgNames != null && this.selectedKernelInfo.ColorInputArgNames.Length == 3)
             {
                 if (TryParseColor(this.colorHexForNewImage, out var r, out var g, out var b))
@@ -855,7 +1111,7 @@ namespace OOCL.Image.WebApp.Pages
             }
         }
         // helper to get max allowed for numeric
-        public int GetMaxImagesConfig() => this.Config?.MaxImagesToKeep ?? 0;
+        public int GetMaxImagesConfig() => this.Config?.ImagesLimit ?? 0;
 
         // helper to compute formatted size for UI usage
         public string FormatSize(ImageObjInfo img)
@@ -867,8 +1123,12 @@ namespace OOCL.Image.WebApp.Pages
 
         public string GetImageDisplayHtml(ImageObjInfo img)
         {
-            if (img == null) return string.Empty;
-            var id = img.Id.ToString();
+            if (img == null)
+			{
+				return string.Empty;
+			}
+
+			var id = img.Id.ToString();
             var name = string.IsNullOrWhiteSpace(img.FilePath) ? string.Empty : img.FilePath;
             // compute scaled size using MagnitudeFactor
             double bytes = img.FrameSizeMb * 1024.0 * 1024.0;
@@ -889,48 +1149,92 @@ namespace OOCL.Image.WebApp.Pages
         {
             try
             {
-                // If server config defines a positive max, do not allow setting 0 locally (means unlimited)
-                var cfg = this.Config?.MaxImagesToKeep ?? 0;
+                // Normalisieren: negative Werte wie 0 behandeln (unbegrenzt)
+                if (value < 0)
+				{
+					value = 0;
+				}
+
+				bool isServer = await this.Api.IsServersidedDataAsync();
+
+                if (!isServer)
+                {
+                    // Client‚Äëseitige Verwaltung
+                    this.MaxImagesToKeepNumeric = value;
+
+                    // Nur begrenzen wenn value > 0
+                    if (value > 0)
+                    {
+                        this.ClientImageCollection = this.ClientImageCollection
+                            .OrderBy(i => i.Info.CreatedAt)
+                            .Take(value)
+                            .ToList();
+                    }
+                    // Bilderliste neu aufbauen
+                    await this.LoadImages();
+
+                    // Auswahl korrigieren
+                    if (this.images.Count > 0)
+                    {
+                        this.selectedImageId = this.images.Last().Id;
+                        await this.UpdateImageData();
+                    }
+                    else
+                    {
+                        this.selectedImageId = Guid.Empty;
+                        this.imageData = null;
+                    }
+                    return; // Wichtig: Server-Teil √ºberspringen
+                }
+
+                // Server-seitige Begrenzung
+                var cfg = this.Config?.ImagesLimit ?? 0;
+
                 if (value == 0 && cfg > 0)
                 {
                     this.Notifications.Notify(new NotificationMessage
                     {
                         Severity = NotificationSeverity.Warning,
-                        Summary = $"Unbegrenzt (0) ist nicht erlaubt. Server-Config erzwingt hˆchstens {cfg}.",
+                        Summary = $"Unbegrenzt (0) ist nicht erlaubt. Server-Config erzwingt h√∂chstens {cfg}.",
                         Duration = 4000
                     });
-                    // Reset to server-config as fallback
-                    this.MaxImagesToKeepNumeric = cfg;
-                    // enforce server limit
-                    await this.Api.CleanupOldImages(cfg);
-                    return;
+                    value = cfg;
                 }
 
                 int effective = value;
                 if (cfg > 0)
                 {
-                    if (effective <= 0) effective = cfg; // interpret unset as server limit
-                    else effective = Math.Min(effective, cfg);
-                }
+                    if (effective <= 0)
+					{
+						effective = cfg;
+					}
+					else
+					{
+						effective = Math.Min(effective, cfg);
+					}
+				}
 
                 if (effective > 0)
                 {
                     await this.Api.CleanupOldImages(effective);
                 }
 
-                this.MaxImagesToKeepNumeric = value;
+                this.MaxImagesToKeepNumeric = effective;
 
-				if (this.images.Count > 0)
-				{
-					this.selectedImageId = this.images.Last().Id;
-					await this.UpdateImageData();
-				}
-				else
-				{
-					this.selectedImageId = Guid.Empty;
-					this.imageData = null;
-				}
-			}
+                // Nach Cleanup Liste neu laden
+                await this.LoadImages();
+
+                if (this.images.Count > 0)
+                {
+                    this.selectedImageId = this.images.Last().Id;
+                    await this.UpdateImageData();
+                }
+                else
+                {
+                    this.selectedImageId = Guid.Empty;
+                    this.imageData = null;
+                }
+            }
             catch (Exception ex)
             {
                 Console.WriteLine("SetMaxImagesAsync error: " + ex.Message);

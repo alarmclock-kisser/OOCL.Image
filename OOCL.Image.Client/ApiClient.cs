@@ -32,6 +32,19 @@ namespace OOCL.Image.Client
 
 
 
+		public async Task<bool> IsServersidedDataAsync()
+		{
+			try
+			{
+				return await this.internalClient.ServerSidedDataAsync();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return false;
+			}
+		}
+
 		public async Task<IEnumerable<ImageObjInfo>> GetImageListAsync()
 		{
 			try
@@ -45,16 +58,32 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<ImageObjInfo> UploadImageAsync(FileParameter file)
+		public async Task<ImageObjDto> UploadImageAsync(FileParameter file)
 		{
-			try
+			if (file == null || file.Data == null || string.IsNullOrWhiteSpace(file.FileName))
 			{
-				return await this.internalClient.LoadAsync(file);
+				return new ImageObjDto();
 			}
-			catch (Exception ex)
+
+			if (await this.IsServersidedDataAsync())
 			{
-				Console.WriteLine(ex);
-				return new ImageObjInfo();
+				try
+				{
+					return new ImageObjDto(await this.internalClient.LoadAsync(file), new ImageObjData());
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine(ex);
+					return new ImageObjDto();
+				}
+			}
+			else
+			{
+				var data = await new StreamContent(file.Data).ReadAsByteArrayAsync();
+				var ints = data.Select(b => (int)b).AsParallel().ToArray();
+				var dto = await this.internalClient.CreateImageFromDataAsync(ints, file.FileName, file.ContentType, false);
+				
+				return dto ?? new ImageObjDto();
 			}
 		}
 

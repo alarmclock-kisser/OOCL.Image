@@ -1,6 +1,9 @@
 ﻿using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Drawing;
 using Color = SixLabors.ImageSharp.Color;
 using Size = SixLabors.ImageSharp.Size;
@@ -52,15 +55,17 @@ namespace OOCL.Image.Core
         public int DefaultWidth { get; set; } = 720;
         public int DefaultHeight { get; set; } = 480;
         public int MaxImages { get; set; } = 0;
+        public bool ServerSidedData { get; set; } = false;
 
 		// Ctor with options
-		public ImageCollection(bool saveMemory = false, int defaultWidth = 720, int defaultHeight = 480, int maxImages = 0, bool loadResources = false)
+		public ImageCollection(bool saveMemory = false, int defaultWidth = 720, int defaultHeight = 480, int maxImages = 0, bool loadResources = false, bool serverSidedData = false)
         {
             this.DefaultWidth = Math.Max(defaultWidth, 360); // Min is 360px width
             this.DefaultHeight = Math.Max(defaultHeight, 240); // Min is 240px height
             this.MaxImages = Math.Max(maxImages, 0); // 0 means no limit
 			this.SaveMemory = saveMemory;
-            if (this.SaveMemory)
+            this.ServerSidedData = serverSidedData;
+			if (this.SaveMemory)
             {
                 Console.WriteLine("ImageCollection: Memory saving enabled. All images will be disposed on add.");
             }
@@ -307,15 +312,15 @@ namespace OOCL.Image.Core
 
 
 
-        public static SixLabors.ImageSharp.Size GetSharpSize(int height, int width)
+        public static Size GetSharpSize(int height, int width)
         {
             width = Math.Clamp(width, 1, 32768);
             height = Math.Clamp(height, 1, 32768);
 
-            return new SixLabors.ImageSharp.Size(width, height);
+            return new Size(width, height);
         }
 
-        public static SixLabors.ImageSharp.Color? GetSharpColor(System.Drawing.Color color)
+        public static Color? GetSharpColor(System.Drawing.Color color)
         {
             if (color == System.Drawing.Color.Empty)
             {
@@ -325,7 +330,7 @@ namespace OOCL.Image.Core
             return SixLabors.ImageSharp.Color.FromRgba(color.R, color.G, color.B, color.A);
         }
 
-        public static SixLabors.ImageSharp.Color GetSharpColor(string hexColor = "#00000000")
+        public static Color GetSharpColor(string hexColor = "#00000000")
         {
             if (string.IsNullOrWhiteSpace(hexColor))
             {
@@ -345,7 +350,7 @@ namespace OOCL.Image.Core
             }
         }
 
-        public static System.Drawing.Color GetDrawingColor(SixLabors.ImageSharp.Color color)
+        public static System.Drawing.Color GetDrawingColor(Color color)
         {
             var rgba = color.ToPixel<Rgba32>();
             return System.Drawing.Color.FromArgb(rgba.A, rgba.R, rgba.G, rgba.B);
@@ -432,6 +437,367 @@ namespace OOCL.Image.Core
             return 0;
 		}
 
+
+
+		/*public static async Task<string?> SerializeImageAsBase64(ImageObj obj, string format = "png", float scale = 1.0f, bool createAsNewObj = false, bool inParallel = true)
+        {
+            // Check imageobj data
+            if (obj.Img == null)
+            {
+                return null;
+            }
+
+            format = format.ToLowerInvariant().Trim('.');
+			if (!ImageCollection.SupportedFormats.Contains(format))
+            {
+				Console.WriteLine($"SerializeImageAsBase64: Unsupported format specified('{format}'), defaulting to PNG.");
+				format = "png";
+			}
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+			try
+            {
+				// 1) Clone
+				var image = await Task.Run(obj.Img.CloneAs<Rgba32>);
+				if (image == null)
+				{
+					return null;
+				}
+
+                byte[] bytes = [];
+
+				// 2) Scale if scale differs from 1.0f by more than 0.01f
+				if (Math.Abs(scale - 1.0f) > 0.01f)
+				{
+					int newWidth = (int) (image.Width * scale);
+					int newHeight = (int) (image.Height * scale);
+					newWidth = Math.Clamp(newWidth, 1, 32768);
+					newHeight = Math.Clamp(newHeight, 1, 32768);
+
+					if (inParallel)
+                    {
+						// 3a) GetBytes in parallel, transform in parallel
+						bytes = (await obj.GetBytes()).ToArray();
+						if (bytes.LongLength <= 0)
+						{
+							image.Dispose();
+							return null;
+						}
+
+						byte[] resizedBytes = new byte[(newWidth * newHeight * obj.Bitdepth)];
+                        await Task.Run(() =>
+                        {
+                            Parallel.For(0, newHeight, y =>
+                            {
+                                for (int x = 0; x < newWidth; x++)
+                                {
+                                    int srcX = (int) (x / scale);
+                                    int srcY = (int) (y / scale);
+                                    srcX = Math.Clamp(srcX, 0, image.Width - 1);
+                                    srcY = Math.Clamp(srcY, 0, image.Height - 1);
+                                    int srcIndex = (srcY * image.Width + srcX) * obj.Bitdepth;
+                                    int destIndex = (y * newWidth + x) * obj.Bitdepth;
+                                    if (srcIndex + obj.Bitdepth <= bytes.Length && destIndex + obj.Bitdepth <= resizedBytes.Length)
+                                    {
+                                        Array.Copy(bytes, srcIndex, resizedBytes, destIndex, obj.Bitdepth);
+                                    }
+                                }
+                            });
+                        });
+
+                        image.Dispose();
+
+						obj.Metrics["rescale_parallel"] = sw.Elapsed.TotalMilliseconds;
+					}
+					else
+                    {
+						// 3b) Resize in single thread async using ImageSharp
+						await Task.Run(() =>
+						{
+							image.Mutate(ctx => ctx.Resize(newWidth, newHeight));
+						});
+
+						obj.Metrics["rescale"] = sw.Elapsed.TotalMilliseconds;
+					}
+
+					sw.Restart();
+				}
+
+                string? base64 = string.Empty;
+
+				// 4) Serialize as string
+				if (inParallel)
+				{
+					// 4a) Aufteilung in Chunks (dieser Teil ist korrekt)
+					byte[][] byteChunks = await Task.Run(() =>
+					{
+						int processorCount = Environment.ProcessorCount;
+						int chunkSize = (int) Math.Ceiling((double) bytes.Length / processorCount);
+						return Enumerable.Range(0, processorCount)
+							.Select(i => bytes.Skip(i * chunkSize).Take(chunkSize).ToArray())
+							.Where(chunk => chunk.Length > 0)
+							.ToArray();
+					});
+
+					// 4b) Base64-Kodierung in Parallel und Zusammenfügen des Strings
+					base64 = await Task.Run(() =>
+					{
+						// Ergebnis-Array zum Speichern der Base64-Teil-Strings
+						string[] base64Parts = new string[byteChunks.Length];
+
+						// Parallele Kodierung der Byte-Arrays in Base64-Strings
+						Parallel.For(0, byteChunks.Length, i =>
+						{
+							// Korrektur: Base64-String direkt im Ergebnis-Array speichern
+							base64Parts[i] = Convert.ToBase64String(byteChunks[i]);
+						});
+
+						// Die Base64-Teil-Strings zu einem finalen String zusammenfügen
+						return string.Concat(base64Parts);
+					});
+
+                    obj.Metrics["serialize_parallel"] = sw.Elapsed.TotalMilliseconds;
+				}
+				else
+                {
+                    using var ms = new MemoryStream();
+                    IImageEncoder encoder = format.ToLower() switch
+                    {
+                        "png" => new SixLabors.ImageSharp.Formats.Png.PngEncoder(),
+                        "jpeg" or "jpg" => new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder(),
+                        "gif" => new SixLabors.ImageSharp.Formats.Gif.GifEncoder(),
+                        "tiff" or "tif" => new SixLabors.ImageSharp.Formats.Tiff.TiffEncoder(),
+						_ => new SixLabors.ImageSharp.Formats.Bmp.BmpEncoder()
+                    };
+
+                    await image.SaveAsync(ms, encoder);
+                    bytes = ms.ToArray();
+
+                    base64 = await Task.Run(() =>
+                    {
+                        return Convert.ToBase64String(bytes);
+                    });
+
+					obj.Metrics["serialize"] = sw.Elapsed.TotalMilliseconds;
+				}
+
+                if (!createAsNewObj)
+                {
+                    obj.SetImage(image);
+				}
+                else
+                {
+                    var newObj = new ImageObj(image, obj.Name + "_serialized");
+				}
+
+				// DON'T dispose image!
+				return base64;
+			}
+			catch (Exception ex)
+            {
+                Console.WriteLine($"Error serializing image '{obj.Name}' (ID: {obj.Id}) to base64: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                sw.Stop();
+			}
+		}*/
+
+
+		public static async Task<string?> SerializeBase64Async(ImageObj obj, string format = "png", float scale = 1.0f)
+		{
+			Stopwatch sw = Stopwatch.StartNew();
+			Image<Rgba32>? image = null;
+
+			if (obj.Img == null)
+			{
+				sw.Stop();
+				Console.WriteLine($"SerializeBase64Async: ImageObj '{obj.Name}' has no image data. Duration: {sw.ElapsedMilliseconds}ms");
+				return null;
+			}
+
+			format = format.ToLowerInvariant().Trim('.');
+			if (!ImageCollection.SupportedFormats.Contains(format))
+			{
+				Console.WriteLine($"SerializeBase64Async: Unsupported format specified('{format}'), defaulting to PNG.");
+				format = "png";
+			}
+
+			scale = Math.Clamp(scale, 0.005f, 100.0f);
+
+			try
+			{
+				// 1) Clone - (Rechenintensiv, Task.Run ist gut)
+				image = await Task.Run(() => obj.Img.CloneAs<Rgba32>());
+				if (image == null)
+				{
+					return null;
+				}
+
+				// 2) Optionally scale
+				if (Math.Abs(scale - 1.0f) > 0.01f)
+				{
+					int newWidth = (int) (image.Width * scale);
+					int newHeight = (int) (image.Height * scale);
+					newWidth = Math.Clamp(newWidth, 1, 32768);
+					newHeight = Math.Clamp(newHeight, 1, 32768);
+
+					await Task.Run(() =>
+					{
+						image.Mutate(ctx => ctx.Resize(newWidth, newHeight));
+					});
+				}
+
+				// 3) Serialize as Base64
+				using var ms = new MemoryStream();
+
+				// 3a) Wähle Encoder (verbesserte Encoder-Initialisierung)
+				IImageEncoder encoder = format.ToLower() switch
+				{
+					"png" => new SixLabors.ImageSharp.Formats.Png.PngEncoder(),
+					"jpeg" or "jpg" => new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder(),
+					"gif" => new SixLabors.ImageSharp.Formats.Gif.GifEncoder(),
+					"tiff" or "tif" => new SixLabors.ImageSharp.Formats.Tiff.TiffEncoder(),
+					_ => new SixLabors.ImageSharp.Formats.Png.PngEncoder()
+				};
+
+				// 3b) Speichern in MemoryStream
+				await image.SaveAsync(ms, encoder);
+
+				// 3c) Convert to Base64
+				byte[] bytes = ms.ToArray();
+				string base64 = Convert.ToBase64String(bytes);
+				return base64;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error serializing image '{obj.Name}' (ID: {obj.Id}) to base64: {ex.Message}");
+				return null;
+			}
+			finally
+			{
+				image?.Dispose();
+				sw.Stop();
+				Console.WriteLine($"SerializeBase64Async: Image '{obj.Name}' (Format: {format}, Scale: {scale}x) duration: {sw.ElapsedMilliseconds}ms");
+			}
+		}
+
+		public static async Task<ImageObj?> DeserializeBase64Async(string base64, string? expectedFormat = null, string? name = null)
+		{
+			Stopwatch sw = Stopwatch.StartNew();
+
+			if (string.IsNullOrWhiteSpace(base64))
+			{
+				sw.Stop();
+				Console.WriteLine($"DeserializeBase64Async: Input string is empty. Duration: {sw.ElapsedMilliseconds}ms");
+				return null;
+			}
+
+            expectedFormat ??= "png";
+            name ??= "deserialized_";
+
+			string formatFromMime = expectedFormat;
+			int endMimeType = base64.IndexOf(',');
+			if (endMimeType > 0 && base64.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+			{
+				string mimePart = base64[5..endMimeType];
+				base64 = base64[(endMimeType + 1)..];
+				if (mimePart.Contains('/'))
+				{
+					formatFromMime = mimePart.Split('/')[1].Split(';')[0];
+				}
+			}
+
+			expectedFormat = formatFromMime.ToLowerInvariant().Trim('.');
+			if (!ImageCollection.SupportedFormats.Contains(expectedFormat))
+			{
+				Console.WriteLine($"DeserializeBase64Async: Unsupported format '{expectedFormat}' extracted, defaulting to PNG.");
+				expectedFormat = "png";
+			}
+
+			try
+			{
+				byte[] imageBytes = Convert.FromBase64String(base64);
+
+				// 2) Load using ImageSharp
+				Image<Rgba32> image = await Task.Run(() =>
+				{
+					return SixLabors.ImageSharp.Image.Load<Rgba32>(imageBytes);
+				});
+
+				if (image == null)
+				{
+					return null;
+				}
+
+				var imageObj = new ImageObj(image, name);
+                if (string.IsNullOrEmpty(imageObj.Name) || imageObj.Name == "unknown")
+                {
+                    imageObj.Name = imageObj.Id.ToString();
+				}
+
+				return imageObj;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error deserializing base64 to image '{name}': {ex.Message}");
+				return null;
+			}
+			finally
+			{
+				sw.Stop();
+				Console.WriteLine($"DeserializeBase64Async: Image '{name}' (Expected Format: {expectedFormat}) duration: {sw.ElapsedMilliseconds}ms");
+			}
+		}
+
+        public static async Task<ImageObj?> CreateFromData(IEnumerable<byte> bytes, string? file = null)
+        {
+            if (bytes == null || !bytes.Any())
+            {
+                return null;
+            }
+            ImageObj obj;
+            try
+            {
+                SixLabors.ImageSharp.Image<Rgba32>? img = await Task.Run(() =>
+                {
+                    return SixLabors.ImageSharp.Image.Load<Rgba32>(bytes.ToArray());
+                });
+                if (img == null)
+                {
+                    return null;
+				}
+
+                obj = new ImageObj(img, file ?? "serialized_");
+			}
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating ImageObj from byte array: {ex.Message}");
+                return null;
+            }
+
+            return obj;
+		}
+
+		public static async Task<ImageObj?> CreateFromBase64(string base64String, float? scale = null, string? name = null)
+        {
+            if (string.IsNullOrWhiteSpace(base64String))
+            {
+                return null;
+			}
+
+            scale ??= 1.0f;
+
+			ImageObj? obj = await DeserializeBase64Async(base64String, null, name);
+            if (obj != null && Math.Abs(scale.Value - 1.0f) > 0.01f && obj.Img != null)
+            {
+                await obj.ResizeAsync(scale.Value);
+			}
+
+            return obj;
+		}
 
 	}
 }

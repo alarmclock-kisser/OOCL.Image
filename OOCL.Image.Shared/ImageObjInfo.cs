@@ -19,7 +19,7 @@ namespace OOCL.Image.Shared
 		public Guid Id { get; set; } = Guid.Empty;
 		public DateTime CreatedAt { get; set; } = DateTime.MinValue;
 		public string FilePath { get; set; } = string.Empty;
-		public string FileName { get; set; } = string.Empty;
+		public string Name { get; set; } = string.Empty;
 
 		public SizeInfo Size { get; set; } = new SizeInfo { Width = 0, Height = 0 };
 		public int Channels { get; set; } = 4;
@@ -53,10 +53,10 @@ namespace OOCL.Image.Shared
 			this.CreatedAt = obj.CreatedAt;
 
 			this.FilePath = obj.Filepath;
-			this.FileName = Path.GetFileName(this.FilePath);
-			if (string.IsNullOrEmpty(this.FileName))
+			this.Name = Path.GetFileName(this.FilePath);
+			if (string.IsNullOrEmpty(this.Name))
 			{
-				this.FileName = this.FilePath;
+				this.Name = this.FilePath;
 			}
 
 			this.Size = new SizeInfo { Width = obj.Width, Height = obj.Height };

@@ -84,7 +84,7 @@ namespace OOCL.Image.Api.Controllers
 		[ProducesResponseType(typeof(OpenClServiceInfo), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<OpenClServiceInfo>> InitializeByIdAsync([FromQuery] int deviceId = 2)
+		public async Task<ActionResult<OpenClServiceInfo>> InitializeByIdAsync([FromBody] int deviceId = 2)
 		{
 			try
 			{
@@ -188,12 +188,61 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
+		[HttpGet("kernel-infos")]
+		[ProducesResponseType(typeof(IEnumerable<OpenClKernelInfo>), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<IEnumerable<OpenClKernelInfo>>> GetKernelInfosAsync([FromQuery] bool onlyCompiled = true)
+		{
+			try
+			{
+				if (!this.openClService.Initialized)
+				{
+					return this.BadRequest(new ProblemDetails
+					{
+						Status = 400,
+						Title = "OpenCL Not Initialized",
+						Detail = "Please initialize the OpenCL service before retrieving kernel infos."
+					});
+				}
+				var kernelInfos = await Task.Run(() => this.openClService.Compiler?.KernelFiles.Select(kf => new OpenClKernelInfo(this.openClService.Compiler, this.openClService.Compiler.KernelFiles.ToList().IndexOf(kf))));
+				if (kernelInfos == null)
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Status = 500,
+						Title = "Internal Server Error",
+						Detail = "Failed to retrieve kernel information."
+					});
+				}
+
+				if (onlyCompiled)
+				{
+					kernelInfos = kernelInfos.Where(i => i.CompiledSuccessfully);
+				}
+
+				return this.Ok(kernelInfos);
+			}
+			catch (Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Internal Server Error",
+					Detail = ex.Message
+				});
+			}
+		}
+
+
+
+
+
 		[HttpPost("execute-on-image")]
 		[ProducesResponseType(typeof(ImageObjInfo), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteGenericImageKernelAsync([FromQuery] Guid imageId, [FromQuery] string kernelName, [FromQuery] Dictionary<string, string> arguments)
+		public async Task<ActionResult<ImageObjInfo>> ExecuteGenericImageKernelAsync([FromQuery] Guid imageId, [FromQuery] string kernelName, [FromQuery] Dictionary<string, string> arguments, [FromQuery] ImageObjDto? optionalImageObjDto = null, [FromQuery] float? rescale = null)
 		{
 			try
 			{
@@ -210,12 +259,26 @@ namespace OOCL.Image.Api.Controllers
 				var imageObj = this.imageCollection[imageId];
 				if (imageObj == null)
 				{
-					return this.NotFound(new ProblemDetails()
+					if (optionalImageObjDto == null)
 					{
-						Title = "ImageObj not found for ID: " + imageId.ToString(),
-						Detail = "Error: NotFound()",
-						Status = 404
-					});
+						return this.NotFound(new ProblemDetails()
+						{
+							Title = "ImageObj not found for ID: " + imageId.ToString(),
+							Detail = "Error: NotFound()",
+							Status = 404
+						});
+					}
+
+					imageObj = await ImageCollection.CreateFromBase64(optionalImageObjDto.Data.Base64Data, rescale, optionalImageObjDto.Info.Name);
+					if (imageObj == null)
+					{
+						return this.StatusCode(500, new ProblemDetails
+						{
+							Status = 500,
+							Title = "Image Creation Failed",
+							Detail = "Failed to create ImageObj from provided ImageObjDto."
+						});
+					}
 				}
 
 				// Refine arguments
@@ -259,10 +322,10 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 		[HttpPost("execute-create-image")]
-		[ProducesResponseType(typeof(ImageObjInfo), 200)]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteCreateImageKernelAsync([FromQuery] int width = 480, [FromQuery] int height = 360, [FromQuery] string kernelName = "mandelbrot00", [FromQuery] Dictionary<string, string>? args = null, [FromQuery] string baseColorHex = "#00000000")
+		public async Task<ActionResult<ImageObjInfo>> ExecuteCreateImageKernelAsync([FromQuery] int width = 480, [FromQuery] int height = 360, [FromQuery] string kernelName = "mandelbrot00", [FromBody] Dictionary<string, string>? args = null, [FromQuery] string baseColorHex = "#00000000")
 		{
 			try
 			{
@@ -320,7 +383,10 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
-				return this.Ok(resultInfo);
+				var data = new ImageObjData(result);
+				var dto = new ImageObjDto(resultInfo, data);
+
+				return this.Ok(dto);
 			}
 			catch (Exception ex)
 			{
@@ -333,11 +399,14 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
+
+
+
 		[HttpPost("execute-mandelbrot-test")]
-		[ProducesResponseType(typeof(ImageObjInfo), 200)]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo?>> ExecuteMandelbrotTestAsync([FromQuery] int width = 720, [FromQuery] int height = 480, [FromQuery] string kernelName = "mandelbrot00", [FromQuery] string baseColorHex = "#00000000")
+		public async Task<ActionResult<ImageObjInfo?>> ExecuteMandelbrotTestAsync([FromQuery] int width = 720, [FromQuery] int height = 480, [FromBody] string kernelName = "mandelbrot00", [FromQuery] string baseColorHex = "#00000000")
 		{
 			if (string.IsNullOrEmpty(this.openClService.KernelExists(kernelName)))
 			{
@@ -416,7 +485,10 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
-				return this.Ok(resultInfo);
+				var data = new ImageObjData(result);
+				var dto = new ImageObjDto(resultInfo, data);
+
+				return this.Ok(dto);
 			}
 			catch (Exception ex)
 			{
@@ -428,66 +500,13 @@ namespace OOCL.Image.Api.Controllers
 				});
 			}
 		}
-
-
-
-
-
-		[HttpGet("kernel-infos")]
-		[ProducesResponseType(typeof(IEnumerable<OpenClKernelInfo>), 200)]
-		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<IEnumerable<OpenClKernelInfo>>> GetKernelInfosAsync([FromQuery] bool onlyCompiled = true)
-		{
-			try
-			{
-				if (!this.openClService.Initialized)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "OpenCL Not Initialized",
-						Detail = "Please initialize the OpenCL service before retrieving kernel infos."
-					});
-				}
-				var kernelInfos = await Task.Run(() => this.openClService.Compiler?.KernelFiles.Select(kf => new OpenClKernelInfo(this.openClService.Compiler, this.openClService.Compiler.KernelFiles.ToList().IndexOf(kf))));
-				if (kernelInfos == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Internal Server Error",
-						Detail = "Failed to retrieve kernel information."
-					});
-				}
-
-				if (onlyCompiled)
-				{
-					kernelInfos = kernelInfos.Where(i => i.CompiledSuccessfully);
-				}
-
-				return this.Ok(kernelInfos);
-			}
-			catch (Exception ex)
-			{
-				return this.StatusCode(500, new ProblemDetails
-				{
-					Status = 500,
-					Title = "Internal Server Error",
-					Detail = ex.Message
-				});
-			}
-		}
-
-
-
-
 
 		[HttpPost("execute-edgeDetection00-default")]
-		[ProducesResponseType(typeof(ImageObjInfo), 200)]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteEdgeDetectionDefaultAsync([FromQuery] Guid? imageId = null)
+		public async Task<ActionResult<ImageObjInfo>> ExecuteEdgeDetectionDefaultAsync([FromBody] Guid? imageId = null)
 		{
 			try
 			{
@@ -578,7 +597,10 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
-				return this.Ok(resultInfo);
+				var data = new ImageObjData(resultObj);
+				var dto = new ImageObjDto(resultInfo, data);
+
+				return this.Ok(dto);
 			}
 			catch (Exception ex)
 			{

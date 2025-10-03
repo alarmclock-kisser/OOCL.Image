@@ -1,6 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JS
-@inject OOCL.Image.WebApp.WebAppConfig Config
+@inject OOCL.Image.Shared.WebAppConfig Config
 
 <div class="main-layout">
     <header class="topbar">
@@ -21,7 +21,7 @@
 
     protected override void OnInitialized()
     {
-        isDark = Config.DefaultDarkMode;
+        isDark = Config.DefaultDarkMode.HasValue ? Config.DefaultDarkMode.Value : false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

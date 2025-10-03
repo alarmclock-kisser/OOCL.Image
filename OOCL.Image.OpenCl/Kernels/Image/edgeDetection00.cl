@@ -14,9 +14,9 @@ __kernel void edgeDetection00(
     const int pixelPos = (y * width + x) * 4;
 
     // Clamp all color values to 0-255 (jetzt mit getauschten R/B-Kanälen)
-    const uchar clampedB = (uchar)min(max(edgeR, 0), 255);  // R-Wert geht auf B-Kanal
+    const uchar clampedR = (uchar)min(max(edgeR, 0), 255);  // R-Wert geht auf B-Kanal
     const uchar clampedG = (uchar)min(max(edgeG, 0), 255);
-    const uchar clampedR = (uchar)min(max(edgeB, 0), 255);  // B-Wert geht auf R-Kanal
+    const uchar clampedB = (uchar)min(max(edgeB, 0), 255);  // B-Wert geht auf R-Kanal
     const int clampedThickness = min(max(thickness, 0), 10);
     const float absThreshold = fabs(threshold);
 

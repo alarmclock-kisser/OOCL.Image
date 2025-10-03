@@ -5,6 +5,8 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace OOCL.Image.Api.Controllers
 {
@@ -19,6 +21,243 @@ namespace OOCL.Image.Api.Controllers
 			this.imageCollection = imageCollection;
 		}
 
+		[HttpGet("server-sided-data")]
+		[ProducesResponseType(typeof(bool), 200)]
+		public ActionResult<bool> IsServerSidedData()
+		{
+			return this.Ok(this.imageCollection.ServerSidedData);
+		}
+
+		[HttpGet("pop-new-image")]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<ImageObjDto>> PopNewImageAsync([FromQuery] int width = 512, [FromQuery] int height = 512, [FromQuery] string hexColor = "#00000000", [FromQuery] bool tryAdd = false, [FromQuery] string? optionalSerializationFormat = null)
+		{
+			width = Math.Clamp(width, 1, 32768);
+			height = Math.Clamp(height, 1, 32768);
+			optionalSerializationFormat ??= "png";
+			optionalSerializationFormat = optionalSerializationFormat.ToLowerInvariant().Trim('.');
+			if (!ImageCollection.SupportedFormats.Contains(optionalSerializationFormat))
+			{
+				optionalSerializationFormat = "png";
+			}
+
+			try
+			{
+				ImageObj obj = await Task.Run(() => new ImageObj(width, height, hexColor));
+				if (this.imageCollection.ServerSidedData && tryAdd)
+				{
+					bool added = await Task.Run(() => this.imageCollection.Add(obj));
+					if (!added)
+					{
+						obj.Dispose();
+						return this.StatusCode(500, new ProblemDetails
+						{
+							Title = "Error creating new image",
+							Detail = "Failed to add the new image to the collection.",
+							Status = 500
+						});
+					}
+				}
+
+				var infoDto = new ImageObjInfo(obj);
+				var dataDto = new ImageObjData(obj, optionalSerializationFormat);
+				ImageObjDto dto = new(infoDto, dataDto);
+
+				return this.Ok(dto);
+			}
+			catch (Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Title = "Error creating new image",
+					Detail = ex.Message,
+					Status = 500
+				});
+			}
+		}
+
+		[HttpPost("serialize-image")]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<ImageObjDto>> SerializeImageAsync([FromQuery] Guid id, [FromQuery] string format = "png", [FromQuery] float scale = 1.0f)
+		{
+			try
+			{
+				if (!this.imageCollection.ServerSidedData)
+				{
+					return this.BadRequest(new ProblemDetails
+					{
+						Title = "Server sided mode disabled",
+						Detail = "Serialization by ID is only available when server-sided data storage is enabled.",
+						Status = 400
+					});
+				}
+
+				if (id == Guid.Empty)
+				{
+					return this.BadRequest(new ProblemDetails
+					{
+						Title = "Invalid id",
+						Detail = "You must supply a valid image Guid.",
+						Status = 400
+					});
+				}
+
+				var obj = await Task.Run(() => this.imageCollection[id]);
+				if (obj == null)
+				{
+					return this.NotFound(new ProblemDetails
+					{
+						Title = "Image not found",
+						Detail = $"No image with ID {id} exists.",
+						Status = 404
+					});
+				}
+
+				if (obj.Img == null)
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Image data missing",
+						Detail = "The image exists but underlying pixel data is null.",
+						Status = 500
+					});
+				}
+
+				format = (format ?? "png").Trim('.').ToLowerInvariant();
+				if (!ImageCollection.SupportedFormats.Contains(format))
+				{
+					format = "png";
+				}
+
+				scale = float.IsFinite(scale) ? scale : 1.0f;
+				if (scale <= 0f)
+				{
+					scale = 1.0f;
+				}
+
+				// Optional skalieren + serialisieren (nutzt vorhandenen ImageObjData-Konstruktor; falls du später deine optimierte SerializeBase64Async verwendest, hier austauschen)
+				ImageObjData dataDto = new();
+				if (Math.Abs(scale - 1.0f) > 0.0001f)
+				{
+					int newWidth = Math.Clamp((int)(obj.Width * scale), 1, 32768);
+					int newHeight = Math.Clamp((int)(obj.Height * scale), 1, 32768);
+					dataDto = new(await obj.ResizeAsync(newWidth, newHeight, true, true), format);
+				}
+				else
+				{
+					dataDto = new ImageObjData(obj, format);
+				}
+
+				if (string.IsNullOrEmpty(dataDto.Base64Data))
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Serialization failed",
+						Detail = "Base64 string empty after encoding.",
+						Status = 500
+					});
+				}
+
+				var infoDto = new ImageObjInfo(obj);
+				var dto = new ImageObjDto(infoDto, dataDto);
+				return this.Ok(dto);
+			}
+			catch (Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Title = $"Error serializing image {id}",
+					Detail = ex.Message,
+					Status = 500
+				});
+			}
+		}
+
+		[HttpGet("create-image-from-data")]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<ImageObjDto>> CreateImageFromFileAsync([FromQuery] IEnumerable<int> bytesAsInts, [FromQuery] string file, [FromQuery] string contentType = "image/png", [FromQuery] bool tryAdd = false)
+		{
+			if (bytesAsInts.Count() <= 0)
+			{
+				return this.BadRequest(new ProblemDetails
+				{
+					Title = "No data provided",
+					Detail = "You must provide image data as int array.",
+					Status = 400
+				});
+			}
+			if (string.IsNullOrEmpty(file))
+			{
+				file = "upload.png";
+			}
+			if (string.IsNullOrEmpty(contentType))
+			{
+				return this.BadRequest(new ProblemDetails
+				{
+					Title = "No content type provided",
+					Detail = "You must provide a valid content type (e.g. image/png).",
+					Status = 400
+				});
+			}
+
+			try
+			{
+				var dto = await Task.Run(() => new ImageObjDto(bytesAsInts, file, contentType));
+				if (dto.Id == Guid.Empty || dto.Info.Id == Guid.Empty || string.IsNullOrEmpty(dto.Data.Base64Data))
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Error creating image from data",
+						Detail = "The resulting image object is invalid (empty ID or Base64 data).",
+						Status = 500
+					});
+				}
+				byte[] bytes = await Task.Run(() => bytesAsInts.Select(b => (byte)b).AsParallel().ToArray());
+				var obj = await Task.Run(() => ImageCollection.CreateFromData(bytes, file));
+				if (obj == null || obj.Id == Guid.Empty)
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Error creating image from data",
+						Detail = "Failed to create a valid ImageObj from the provided data.",
+						Status = 500
+					});
+				}
+
+				if (this.imageCollection.ServerSidedData && tryAdd)
+				{
+					bool added= await Task.Run(() => this.imageCollection.Add(obj));
+					if (!added)
+					{
+						return this.StatusCode(500, new ProblemDetails
+						{
+							Title = "Error adding image to collection",
+							Detail = "Failed to add the new image to the server-side collection.",
+							Status = 500
+						});
+					}
+				}
+
+				return this.Ok(dto);
+			}
+			catch (Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Title = "Error creating image from data",
+					Detail = ex.Message,
+					Status = 500
+				});
+			}
+		}
+
+
 		[HttpGet("list")]
 		[ProducesResponseType(typeof(IEnumerable<ImageObjInfo>), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
@@ -26,7 +265,7 @@ namespace OOCL.Image.Api.Controllers
 		{
 			try
 			{
-				var infos = await Task.Run(() => this.imageCollection.Images.Select(img => new Shared.ImageObjInfo(img)));
+				var infos = await Task.Run(() => this.imageCollection.Images.Select(img => new ImageObjInfo(img)));
 
 				return this.Ok(infos);
 			}

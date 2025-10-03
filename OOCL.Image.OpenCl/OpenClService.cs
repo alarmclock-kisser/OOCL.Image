@@ -218,7 +218,7 @@ namespace OOCL.Image.OpenCl
 			if (obj.Pointer == IntPtr.Zero)
 			{
 				var bytes = await obj.GetBytes();
-				var mem = this.Register.PushData<byte>(bytes.ToArray());
+				var mem = this.Register.PushData(bytes.ToArray());
 				if (mem == null)
 				{
 					return obj;
@@ -234,7 +234,7 @@ namespace OOCL.Image.OpenCl
 					return obj;
 				}
 
-				await obj.SetImage(bytes);
+				await obj.SetImageAsync(bytes);
 			}
 
 			return obj;
@@ -320,7 +320,7 @@ namespace OOCL.Image.OpenCl
 			if (inputPointer == IntPtr.Zero)
 			{
 				var data = await obj.GetBytes(true);
-				var mem = this.Register.PushData<byte>(data.ToArray());
+				var mem = this.Register.PushData(data.ToArray());
 				if (mem == null)
 				{
 					Console.WriteLine($"CL-SER | ExecuteEditImage #003: Pushing image data to OpenCL register failed.");

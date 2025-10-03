@@ -118,3 +118,60 @@ body.theme-dark .image-list-entry.selected span { color: #fff; }
 body.theme-dark .image-list-entry .img-id,
 body.theme-dark .image-list-entry .img-size,
 body.theme-dark .image-list-entry .img-bytes { opacity:0.8; }
+/* Themed Panels */
+.themed-panel {
+    border: 1px solid var(--rz-border-color);
+    border-radius: 6px;
+    padding: 0;
+    margin-bottom: 1.25rem;
+    background: var(--rz-base-background);
+    color: var(--rz-text-color);
+}
+
+.kernel-info-panel.small-gap {
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 6px 10px;
+}
+
+/* Neu: flexibler Spacer für rechten Button */
+.panel-header .spacer {
+    flex: 1 1 auto;
+    min-width: 4px;
+}
+
+.panel-title {
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.panel-sub {
+    font-size: 0.75rem;
+    color: var(--rz-text-secondary-color);
+}
+
+.panel-body {
+    padding: 10px 12px 14px;
+}
+
+body.rz-light .themed-panel {
+    background: var(--rz-base-background, #ffffff);
+}
+
+body.rz-dark .themed-panel {
+    background: var(--rz-base-background, #1e1e1e);
+}
+
+body.rz-light .panel-sub {
+    color: var(--rz-text-secondary-color, #555);
+}
+
+body.rz-dark .panel-sub {
+    color: var(--rz-text-secondary-color, #888);
+}

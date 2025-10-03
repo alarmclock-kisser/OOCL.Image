@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using OOCL.Image.Client;
 using OOCL.Image.WebApp.Components;
+using OOCL.Image.Shared;
 
 namespace OOCL.Image.WebApp
 {
@@ -11,42 +12,44 @@ namespace OOCL.Image.WebApp
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
-			// Api Base URL aus Konfiguration
-			var apiBaseUrl = builder.Configuration["ApiBaseUrl"];
-			if (string.IsNullOrWhiteSpace(apiBaseUrl))
-			{
-				throw new InvalidOperationException("ApiBaseUrl ist nicht konfiguriert. Füge sie zu appsettings.json oder Environment Variables hinzu.");
-			}
+			// Api Base URL aus Konfiguration (roh)
+			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"];
+
+			// Normalisieren (Controller haben 'api/[controller]')
+			var normalizedBase = ApiBaseUrlUtility.Normalize(
+				rawApiBaseUrl,
+				builder.Environment.IsDevelopment(),
+				msg => Console.WriteLine("[ApiBaseUrl] " + msg),
+				controllerRoutesHaveApiPrefix: true
+			);
 
 			var defaultDark = builder.Configuration.GetValue<bool?>("DefaultDarkMode") ?? false;
 			var preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "cpu";
-			var maxImages = builder.Configuration.GetValue<int>("ImagesLimit", 0);
+			var maxImages = builder.Configuration.GetValue("ImagesLimit", 0);
+			var appName = typeof(Program).Assembly.GetName().Name ?? "Blazor WebApp (.NET8)";
+			var httpKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Http:Url");
+			var httpsKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Https:Url");
 
-			// Blazor + Radzen
+			// Add config objs (singleton)
+			builder.Services.AddSingleton(new ApiUrlConfig(normalizedBase));
+			WebAppConfig config = new(appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, httpKestrel, httpsKestrel);
+			builder.Services.AddSingleton(config);
+
 			builder.Services.AddRazorPages();
 			builder.Services.AddServerSideBlazor();
 			builder.Services.AddRadzenComponents();
 
-			// Konfig Service
-			builder.Services.AddSingleton(new ApiUrlConfig(apiBaseUrl));
-			builder.Services.AddSingleton(new WebAppConfig(defaultDark, preferredDevice, maxImages));
-
-			// Typed HttpClient für ApiClient (DI-fähiger Konstruktor)
 			builder.Services.AddHttpClient<ApiClient>((sp, client) =>
 			{
 				var cfg = sp.GetRequiredService<ApiUrlConfig>();
-				// Hier MUSS ein Schrägstrich am Ende stehen, wenn ApiBaseUrl keinen hat.
-				client.BaseAddress = new Uri(cfg.BaseUrl.EndsWith("/") ? cfg.BaseUrl : cfg.BaseUrl + "/");
+				client.BaseAddress = new Uri(cfg.BaseUrl); // cfg.BaseUrl endet auf '/'
 				client.Timeout = TimeSpan.FromSeconds(20);
 			});
 
-
 			builder.Services.AddSignalR(o =>
 			{
-				// z.B. 128 MB
 				o.MaximumReceiveMessageSize = 1024 * 1024 * 128;
 			});
-
 
 			var app = builder.Build();
 
@@ -72,27 +75,6 @@ namespace OOCL.Image.WebApp
 	public class ApiUrlConfig
 	{
 		public string BaseUrl { get; set; }
-
-		public ApiUrlConfig(string baseUrl)
-		{
-			this.BaseUrl = baseUrl;
-		}
-	}
-
-	public class WebAppConfig
-	{
-		public bool DefaultDarkMode { get; set; } = false;
-		public string PreferredDevice { get; set; } = "Intel";
-		public int MaxImagesToKeep{ get; set; } = 10;
-
-		public WebAppConfig(bool defaultDarkMode, string preferredDevice = "", int maxImages = 256)
-		{
-			this.DefaultDarkMode = defaultDarkMode;
-			if (!string.IsNullOrWhiteSpace(preferredDevice))
-			{
-				this.PreferredDevice = preferredDevice;
-			}
-			this.MaxImagesToKeep = maxImages;
-		}
+		public ApiUrlConfig(string baseUrl) => this.BaseUrl = baseUrl;
 	}
 }

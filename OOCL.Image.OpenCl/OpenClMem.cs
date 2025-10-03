@@ -26,7 +26,7 @@ namespace OOCL.Image.OpenCl
 		private IntPtr[] lengths { get; set; } = [];
 		public IEnumerable<string> Lengths => this.lengths.Select(length => length.ToString());
 
-		private System.Type elementType { get; set; } = typeof(void);
+		private Type elementType { get; set; } = typeof(void);
 		public string Type => this.elementType.Name;
 
 		public bool AsHex { get; set; } = false;

@@ -2,6 +2,7 @@
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace OOCL.Image.Core
 {
@@ -33,6 +34,14 @@ namespace OOCL.Image.Core
 		public bool OnDevice => this.Pointer != IntPtr.Zero && this.Img == null;
 
 		public double ElapsedProcessingTime { get; set; } = 0.0;
+
+		private Dictionary<string, double> metrics = [];
+		public Dictionary<string, double> Metrics
+		{
+			get => this.metrics;
+			set => this.metrics = value;
+		}
+
 		public Single ScalingFactor { get; set; }
 
 		private readonly object lockObj = new();
@@ -87,6 +96,30 @@ namespace OOCL.Image.Core
 			}
 		}
 
+		public ImageObj(Image<Rgba32> image, string name = "unknown", bool clone = false)
+		{
+			this.Id = Guid.NewGuid();
+			this.Name = name;
+			this.Filepath = string.Empty;
+			if (image == null)
+			{
+				throw new ArgumentNullException(nameof(image), "Provided image is null.");
+			}
+			try
+			{
+				this.Img = clone ? image.CloneAs<Rgba32>() : image;
+				this.Width = this.Img.Width;
+				this.Height = this.Img.Height;
+				this.Channels = 4;
+				this.Bitdepth = this.Img.PixelType.BitsPerPixel;
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error creating ImageObj from provided image: {ex.Message}");
+				this.Img = null;
+			}
+		}
+
 		public ImageObj(IEnumerable<byte> rawPixelData, int width, int height, string name = "UnbenanntesBild")
 		{
 			this.Id = Guid.NewGuid();
@@ -125,7 +158,7 @@ namespace OOCL.Image.Core
 					"png" => new SixLabors.ImageSharp.Formats.Png.PngEncoder(),
 					"jpeg" or "jpg" => new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder(),
 					"gif" => new SixLabors.ImageSharp.Formats.Gif.GifEncoder(),
-					_ => new SixLabors.ImageSharp.Formats.Bmp.BmpEncoder()
+					_ => new BmpEncoder()
 				};
 
 				await imgClone.SaveAsync(ms, encoder);
@@ -171,7 +204,7 @@ namespace OOCL.Image.Core
 			return bytes.AsEnumerable();
 		}
 
-		public async Task<Image<Rgba32>?> SetImage(IEnumerable<byte> bytes, bool keepPointer = false)
+		public async Task<Image<Rgba32>?> SetImageAsync(IEnumerable<byte> bytes, bool keepPointer = false)
 		{
 			if (this.Img != null)
 			{
@@ -213,6 +246,12 @@ namespace OOCL.Image.Core
 			return img;
 		}
 
+		public void SetImage(Image<Rgba32> image, bool clone = false)
+		{
+			this.Img?.Dispose();
+			this.Img = clone ? image.CloneAs<Rgba32>() : image;
+		}
+
 		public void Dispose()
 		{
 			if (this.Img != null)
@@ -235,13 +274,13 @@ namespace OOCL.Image.Core
 
 			// Fallback to Bmp
 			IImageEncoder encoder = format.ToLower() switch
-				{
-					"png" => new SixLabors.ImageSharp.Formats.Png.PngEncoder(),
-					"jpeg" or "jpg" => new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder(),
-					"gif" => new SixLabors.ImageSharp.Formats.Gif.GifEncoder(),
-					// Default to BMP if no valid format is provided + set format to bmp
-					_ => new SixLabors.ImageSharp.Formats.Bmp.BmpEncoder()
-				};
+			{
+				"png" => new SixLabors.ImageSharp.Formats.Png.PngEncoder(),
+				"jpeg" or "jpg" => new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder(),
+				"gif" => new SixLabors.ImageSharp.Formats.Gif.GifEncoder(),
+				// Default to BMP if no valid format is provided + set format to bmp
+				_ => new BmpEncoder()
+			};
 
 			// Determine file extension based on format
 			string extension = format.ToLower() switch
@@ -304,5 +343,111 @@ namespace OOCL.Image.Core
 			return $"{this.Width}x{this.Height} px, {this.Channels} ch., {this.Bitdepth} Bits";
 		}
 
+		public static async Task<ImageObj?> FromBytesAsync(byte[] bytes, string name, string contentType)
+		{
+			try
+			{
+				var img = await Task.Run(() =>
+				{
+					return SixLabors.ImageSharp.Image.Load<Rgba32>(bytes);
+				});
+
+				return new ImageObj(img, name, false);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error creating ImageObj from bytes: {ex.Message}");
+				return null;
+			}
+		}
+
+		public async Task<ImageObj?> CloneAsync()
+		{
+			if (this.Img == null)
+			{
+				return null;
+			}
+			Image<Rgba32> imgClone;
+			lock (this.lockObj)
+			{
+				imgClone = this.Img.CloneAs<Rgba32>();
+			}
+			return await Task.FromResult(new ImageObj(imgClone, this.Name, false));
+		}
+
+		public async Task<ImageObj?> ResizeAsync(int newWidth, int newHeight, bool keepAspectRatio = true, bool createNewImageObj = false)
+		{
+			if (this.Img == null)
+			{
+				return null;
+			}
+
+			Image<Rgba32> imgClone;
+			lock (this.lockObj)
+			{
+				imgClone = this.Img.CloneAs<Rgba32>();
+			}
+			try
+			{
+				float absoluteScale = Math.Max(newWidth / (float) this.Width, newHeight / (float) this.Height);
+
+				if (keepAspectRatio)
+				{
+					var aspectRatio = (float) this.Width / this.Height;
+					if (newWidth / (float) newHeight > aspectRatio)
+					{
+						newWidth = (int) (newHeight * aspectRatio);
+					}
+					else
+					{
+						newHeight = (int) (newWidth / aspectRatio);
+					}
+				}
+				else
+				{
+					float maxScale = Math.Max(newWidth / (float) this.Width, newHeight / (float) this.Height);
+					absoluteScale = maxScale;
+				}
+
+				imgClone.Mutate(x => x.Resize(newWidth, newHeight));
+
+				if (createNewImageObj)
+				{
+					return await Task.FromResult(new ImageObj(imgClone, this.Name + "_resized_" + $"{absoluteScale:F2}" + "", false));
+				}
+				else
+				{
+					this.Img.Dispose();
+					this.Img = imgClone;
+					this.Width = newWidth;
+					this.Height = newHeight;
+					this.ScalingFactor = absoluteScale;
+					return this;
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error resizing image: {ex.Message}");
+				return null;
+			}
+		}
+
+		public async Task<ImageObj?> ResizeAsync(float scale, bool createNewImageObj = false)
+		{
+			if (this.Img == null)
+			{
+				return null;
+			}
+			
+			try
+			{
+				return await this.ResizeAsync((int)(this.Width * scale), (int)(this.Height * scale), true, createNewImageObj);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error resizing image: {ex.Message}");
+				return null;
+			}
+		}
 	}
 }

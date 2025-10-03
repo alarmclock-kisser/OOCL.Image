@@ -98,7 +98,7 @@ namespace OOCL.Image.OpenCl
 			IntPtr length = new(data.LongLength);
 
 			// Create buffer
-			CLBuffer buffer = CL.CreateBuffer<T>(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, data, out CLResultCode error);
+			CLBuffer buffer = CL.CreateBuffer(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, data, out CLResultCode error);
 			if (error != CLResultCode.Success)
 			{
 				this.lastError = error;
@@ -172,7 +172,7 @@ namespace OOCL.Image.OpenCl
 			data = data.Select(x => default(T)).ToArray();
 
 			// Create buffer
-			CLBuffer buffer = CL.CreateBuffer<T>(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, data, out CLResultCode error);
+			CLBuffer buffer = CL.CreateBuffer(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, data, out CLResultCode error);
 			if (error != CLResultCode.Success)
 			{
 				this.lastError = error;
@@ -293,7 +293,7 @@ namespace OOCL.Image.OpenCl
 			// Allocate each buffer
 			for (int i = 0; i < count; i++)
 			{
-				buffers[i] = CL.CreateBuffer<T>(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, new T[size.ToInt64()], out CLResultCode error);
+				buffers[i] = CL.CreateBuffer(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, new T[size.ToInt64()], out CLResultCode error);
 				if (error != CLResultCode.Success)
 				{
 					this.lastError = error;
