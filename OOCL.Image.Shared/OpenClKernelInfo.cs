@@ -19,8 +19,10 @@ namespace OOCL.Image.Shared
 		public string FunctionName { get; set; } = string.Empty;
 
 		public string[] ColorInputArgNames { get; set; } = [];
+		public int PointersCount { get; set; } = 0;
+		public bool NeedsImage { get; set; } = false;
 
-		public bool CompiledSuccessfully { get; set; } = false;
+		public bool? CompiledSuccessfully { get; set; } = null;
 
 
 
@@ -71,6 +73,10 @@ namespace OOCL.Image.Shared
 				{
 					this.CompiledSuccessfully = compiler.TryCompileKernel(this.Filepath) ?? false;
 				}
+
+				this.PointersCount = this.ArgumentType.Count(t => t.EndsWith("*"));
+				this.NeedsImage = this.ArgumentNames.Any(name => name.ToLowerInvariant().Contains("image") || name.ToLowerInvariant().Contains("img") || name.ToLowerInvariant().Contains("input"));
+				this.PointersCount = this.ArgumentType.Count(t => t.EndsWith("*"));
 			}
 		}
 

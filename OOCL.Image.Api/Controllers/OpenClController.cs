@@ -212,7 +212,7 @@ namespace OOCL.Image.Api.Controllers
 
 				if (onlyCompiled)
 				{
-					kernelInfos = kernelInfos.Where(i => i.CompiledSuccessfully);
+					kernelInfos = kernelInfos.Where(ki => (Boolean) (ki.CompiledSuccessfully ?? false));
 				}
 
 				return this.Ok(kernelInfos);
@@ -240,9 +240,9 @@ namespace OOCL.Image.Api.Controllers
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
 			}
 
-			if (request.ImageId == Guid.Empty)
+			if (request.ImageId == Guid.Empty && request.OptionalImage == null)
 			{
-				return this.BadRequest(new ProblemDetails { Status = 400, Title = "ImageId required" });
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Either ImageId or OptionalImage required" });
 			}
 
 			var img = this.imageCollection[request.ImageId];
@@ -323,13 +323,6 @@ namespace OOCL.Image.Api.Controllers
 					return this.Ok(new ImageObjDto(result));
 				}
 			}
-
-			// Dummy creation
-			var dummy = new ImageObj(100, 100, "#ff0000");
-			var dto = new ImageObjDto(dummy);
-			Console.WriteLine($"Dummy DTO: {dto.Data?.Width}x{dto.Data?.Height}");
-
-			Console.WriteLine($"Result: {result?.Id} {result?.Width}x{result?.Height} Name={result?.Name}");
 
 			return this.Ok(new ImageObjDto(result));
 		}

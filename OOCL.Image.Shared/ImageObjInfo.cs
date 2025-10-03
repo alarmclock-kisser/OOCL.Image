@@ -10,8 +10,36 @@ namespace OOCL.Image.Shared
 {
 	public class SizeInfo
 	{
-		public int Width { get; set; }
-		public int Height { get; set; }
+		public int Width { get; set; } = 0;
+		public int Height { get; set; } = 0;
+
+
+
+		public SizeInfo()
+		{
+			// Parameterless constructor for serialization
+		}
+
+		[JsonConstructor]
+		public SizeInfo(int width, int height)
+		{
+			this.Width = width;
+			this.Height = height;
+		}
+
+		public override string ToString()
+		{
+			return $"{Width} x {Height}";
+		}
+
+		public float AspectRatio()
+		{
+			if (Height == 0)
+			{
+				return 0.0f;
+			}
+			return (float)Width / (float)Height;
+		}
 	}
 
 	public class ImageObjInfo
@@ -41,7 +69,6 @@ namespace OOCL.Image.Shared
 			// Parameterless constructor for serialization
 		}
 
-		[JsonConstructor]
 		public ImageObjInfo(ImageObj? obj)
 		{
 			if (obj == null)
@@ -52,7 +79,7 @@ namespace OOCL.Image.Shared
 			this.Id = obj.Id;
 			this.CreatedAt = obj.CreatedAt;
 
-			this.FilePath = !string.IsNullOrEmpty(obj.FilePath) ? Path.GetFullPath(obj.FilePath) : "no file path provided       ";
+			this.FilePath = !string.IsNullOrEmpty(obj.FilePath) ? Path.GetFullPath(obj.FilePath) : "no file path provided";
 			this.Name = Path.GetFileName(this.FilePath);
 			if (string.IsNullOrEmpty(this.Name))
 			{

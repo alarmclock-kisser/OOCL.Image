@@ -19,13 +19,19 @@ namespace OOCL.Image.Shared
 		public string? KestelEndpointHttp { get; set; } = null;
 		public string? KestelEndpointHttps { get; set; } = null;
 
+		public string? DefaultKernel { get; set; } = null;
+		public string? DefaultFormat { get; set; } = null;
+		public string? DefaultUnit { get; set; } = null;
+
 		public WebAppConfig()
 		{
 
 		}
 
 		[JsonConstructor]
-		public WebAppConfig(string environment, string applicationName = "Blazor WebApp using dotnet8", bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null)
+		public WebAppConfig(string environment, string applicationName = "Blazor WebApp using dotnet8",
+			bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null,
+			string? defaultKernel = null, string? defaultFormat = null, string? defaultUnit = null)
 		{
 			this.Environment = environment;
 			this.ApplicationName = applicationName;
@@ -35,6 +41,9 @@ namespace OOCL.Image.Shared
 			this.ApiBaseUrl = apiBaseUrl;
 			this.KestelEndpointHttp = kestelEndpointHttp;
 			this.KestelEndpointHttps = kestelEndpointHttps;
+			this.DefaultKernel = defaultKernel;
+			this.DefaultFormat = defaultFormat;
+			this.DefaultUnit = defaultUnit;
 		}
 	}
 }

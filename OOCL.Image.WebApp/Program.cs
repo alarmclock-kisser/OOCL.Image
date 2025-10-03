@@ -32,10 +32,14 @@ namespace OOCL.Image.WebApp
 			var appName = typeof(Program).Assembly.GetName().Name ?? "Blazor WebApp (.NET8)";
 			var httpKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Http:Url");
 			var httpsKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Https:Url");
+			var defaults = builder.Configuration.GetSection("DefaultSelections");
+			var defaultKernel = defaults.GetValue<string>("Kernel");
+			var defaultFormat = defaults.GetValue<string>("Format");
+			var defaultUnit = defaults.GetValue<string>("Unit");
 
 			// Add config objs (singleton)
 			builder.Services.AddSingleton(new ApiUrlConfig(normalizedBase));
-			WebAppConfig config = new(environment, appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, httpKestrel, httpsKestrel);
+			WebAppConfig config = new(environment, appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, httpKestrel, httpsKestrel, defaultKernel, defaultFormat, defaultUnit);
 			builder.Services.AddSingleton(config);
 
 			builder.Services.AddRazorPages();
@@ -45,8 +49,8 @@ namespace OOCL.Image.WebApp
 			builder.Services.AddHttpClient<ApiClient>((sp, client) =>
 			{
 				var cfg = sp.GetRequiredService<ApiUrlConfig>();
-				client.BaseAddress = new Uri(cfg.BaseUrl); // cfg.BaseUrl endet auf '/'
-				client.Timeout = TimeSpan.FromSeconds(20);
+				client.BaseAddress = new Uri(cfg.BaseUrl);
+				client.Timeout = TimeSpan.FromSeconds(24);
 			});
 
 			builder.Services.AddSignalR(o =>

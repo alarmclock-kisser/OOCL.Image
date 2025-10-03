@@ -290,7 +290,7 @@
             : "kein gerät initialisiert";
 
     private string GetConfigSummary()
-        => $"API: {Config.ApiBaseUrl}, PreferredDevice: {Config.PreferredDevice}, Image Limit: {Config.ImagesLimit}";
+        => $"API: {Config.ApiBaseUrl}, PreferredDevice: '{Config.PreferredDevice}', ImageLimit: {Config.ImagesLimit}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -484,7 +484,6 @@
     }
 
     private async Task OnMaxImagesChanged() { await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); await VM.LoadImages(); StateHasChanged(); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = $"Max images set to {VM.MaxImagesToKeepNumeric}", Duration = 2000 }); }
-    private async Task OnKernelChanged(object value) { await VM.OnKernelChanged(value); StateHasChanged(); }
     private bool IsWidthOrHeight(HomeViewModel.KernelArgViewModel arg) => VM.IsWidthOrHeight(arg);
     private bool IsColorGroupRepresentative(HomeViewModel.KernelArgViewModel arg) => VM.IsColorGroupRepresentative(arg);
     private string GetRgbLabel(string hex) => VM.GetRgbLabel(hex);
@@ -500,6 +499,12 @@
         StateHasChanged();
         if (VM.redrawAfterValueChange && CanExecute)
             await ExecuteKernel();
+    }
+
+    private void OnKernelChanged(object value)
+    {
+        VM.OnKernelChanged(value);
+        StateHasChanged(); // <-- Der magische Aufruf
     }
 
     // Anpassung: OnUseExistingImageChanged ruft neue VM-Methode auf

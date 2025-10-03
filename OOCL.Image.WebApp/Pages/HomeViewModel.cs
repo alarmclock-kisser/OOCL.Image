@@ -157,7 +157,49 @@ namespace OOCL.Image.WebApp.Pages
 			}
 
 			this.UpdateMagnitudeFactor();
-         }
+
+            // Not working.
+            /*this.selectedKernelName = this.Config?.DefaultKernel ?? string.Empty;
+            this.SelectedMagnitude = this.Config?.DefaultUnit ?? "KB";
+            this.selectedFormat = this.Config?.DefaultFormat ?? "png";*/
+
+            await this.FirstApplyDefaultSelections();
+		}
+
+        public async Task FirstApplyDefaultSelections()
+        {
+			// From config set default kernel, unit, format
+            if (!string.IsNullOrEmpty(this.Config?.PreferredDevice) && !this.openClServiceInfo.Initialized)
+            {
+                var index = this.devices.FindIndex(d => d.DeviceName.ToLowerInvariant().Contains(this.Config.PreferredDevice, StringComparison.OrdinalIgnoreCase));
+                if (index >= 0)
+                {
+                    this.selectedDeviceIndex = index;
+                    await this.InitializeDevice();
+                }
+			}
+
+            if (!string.IsNullOrEmpty(this.Config?.DefaultKernel) && this.kernelNames.Contains(this.Config.DefaultKernel))
+            {
+                this.selectedKernelName = this.Config.DefaultKernel;
+                this.OnKernelChanged(this.selectedKernelName);
+            }
+            if (!string.IsNullOrEmpty(this.Config?.DefaultUnit) && this.Magnitudes.Contains(this.Config.DefaultUnit))
+            {
+                this.SelectedMagnitude = this.Config.DefaultUnit;
+                this.UpdateMagnitudeFactor();
+            }
+            if (!string.IsNullOrEmpty(this.Config?.DefaultFormat) && this.formats.Contains(this.Config.DefaultFormat))
+            {
+                this.selectedFormat = this.Config.DefaultFormat;
+			}
+
+            // Ensure image data is loaded
+            await this.UpdateImageData();
+
+			// Notify user
+            this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Default selections applied", Duration = 3000 });
+		}
 
 		public void UpdateMagnitudeFactor()
 		{
@@ -183,6 +225,7 @@ namespace OOCL.Image.WebApp.Pages
 					this.MagnitudeFactor = 1000.0; break;
 			}
 		}
+
 		public async Task LoadDevices() => this.devices = (await this.Api.GetOpenClDevicesAsync()).ToList();
 
 		public async Task LoadImages()
@@ -257,14 +300,22 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task LoadKernels()
         {
-			this.kernelInfos = (await this.Api.GetOpenClKernelsAsync()).ToList();
-			this.kernelNames = this.kernelInfos.Select(k => k.FunctionName).ToList();
-            if (this.kernelNames.Count > 0)
+			try
             {
-				this.selectedKernelName = this.kernelNames[0];
-                await this.OnKernelChanged(this.selectedKernelName);
+				this.kernelInfos = (await this.Api.GetOpenClKernelsAsync()).ToList();
+				this.kernelNames = this.kernelInfos.Select(k => k.FunctionName).ToList();
+				if (this.kernelNames.Count > 0)
+				{
+					this.selectedKernelName = this.kernelNames[0];
+					this.OnKernelChanged(this.selectedKernelName);
+				}
+			}
+            catch { }
+            finally
+            {
+                await Task.Yield();
             }
-        }
+		}
 
         public async Task OnDeviceChanged(object value)
         {
@@ -465,7 +516,7 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
-		public async Task OnKernelChanged(object value)
+		public void OnKernelChanged(object value)
         {
 			this.selectedKernelName = value?.ToString() ?? string.Empty;
 			this.selectedKernelInfo = this.kernelInfos.FirstOrDefault(k => k.FunctionName == this.selectedKernelName);
@@ -513,7 +564,9 @@ namespace OOCL.Image.WebApp.Pages
                 }
 				this.BuildKernelInfoText();
 
-                if (!this.useExistingImage)
+                // Optionally toggle OnImage Checkbox if selectedKernelInfo.NeedsImage
+                this.useExistingImage = this.selectedKernelInfo.NeedsImage;
+				if (!this.useExistingImage)
                 {
                     foreach (var arg in this.kernelArgViewModels)
                     {
@@ -539,7 +592,6 @@ namespace OOCL.Image.WebApp.Pages
                 var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
 				this.UpdateWidthHeightFromImage(info);
             }
-            await Task.CompletedTask;
 		}
 
         // Liefert passenden Decimal Default (roh) aus Dictionary oder 0
@@ -807,7 +859,17 @@ namespace OOCL.Image.WebApp.Pages
             try
             {
 				this.NormalizeAllArgValues();
-                return await this.Api.ExecuteGenericImageKernel(id, kernelName, argNames, argVals);
+
+                bool serverSideData = await this.Api.IsServersidedDataAsync();
+
+				var optionalImageDto = serverSideData ? null : this.ClientImageCollection.FirstOrDefault(d => d.Info.Id == id);
+                if (optionalImageDto != null)
+                {
+					// Set guid to empty to avoid confusion
+                    id = Guid.Empty;
+				}
+
+				return await this.Api.ExecuteGenericImageKernel(id, kernelName, argNames, argVals, optionalImageDto);
             }
             catch { return null; }
         }
@@ -853,6 +915,7 @@ namespace OOCL.Image.WebApp.Pages
             {
                 sb.AppendLine($"Color Group: {string.Join(", ", this.selectedKernelInfo.ColorInputArgNames)}");
             }
+            sb.AppendLine($"Needs Image: {(this.selectedKernelInfo.NeedsImage ? "Yes" : "No")}");
 			this.kernelInfoText = sb.ToString();
         }
 
