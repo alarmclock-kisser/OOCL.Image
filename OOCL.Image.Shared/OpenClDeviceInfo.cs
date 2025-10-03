@@ -41,7 +41,6 @@ namespace OOCL.Image.Shared
 			// Empty default ctor
 		}
 
-		[JsonConstructor]
 		public OpenClDeviceInfo(OpenClService? obj, int index = -1)
 		{
 			this.DeviceId = index;

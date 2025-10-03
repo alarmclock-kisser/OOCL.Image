@@ -31,7 +31,6 @@ namespace OOCL.Image.Shared
 			// Empty default ctor
 		}
 
-		[JsonConstructor]
 		public OpenClKernelInfo(OpenClCompiler? obj, int index, bool tryCompile = true)
 		{
 			if (obj == null)

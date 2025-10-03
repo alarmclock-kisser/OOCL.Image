@@ -30,7 +30,6 @@ namespace OOCL.Image.Shared
 			// Empty default ctor
 		}
 
-		[JsonConstructor]
 		public OpenClMemoryInfo(OpenClMem? obj = null)
 		{
 			if (obj == null)

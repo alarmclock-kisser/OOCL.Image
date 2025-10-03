@@ -20,7 +20,6 @@ namespace OOCL.Image.Shared
 			// Default constructor for serialization
 		}
 
-		[JsonConstructor]
 		public OpenClServiceInfo(OpenClService? obj)
 		{
 			if (obj == null)

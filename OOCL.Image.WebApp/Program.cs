@@ -30,7 +30,6 @@ namespace OOCL.Image.WebApp
 			var preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "cpu";
 			var maxImages = builder.Configuration.GetValue("ImagesLimit", 0);
 			var appName = typeof(Program).Assembly.GetName().Name ?? "Blazor WebApp (.NET8)";
-			var httpKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Http:Url");
 			var httpsKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Https:Url");
 			var defaults = builder.Configuration.GetSection("DefaultSelections");
 			var defaultKernel = defaults.GetValue<string>("Kernel");
@@ -39,7 +38,7 @@ namespace OOCL.Image.WebApp
 
 			// Add config objs (singleton)
 			builder.Services.AddSingleton(new ApiUrlConfig(normalizedBase));
-			WebAppConfig config = new(environment, appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, httpKestrel, httpsKestrel, defaultKernel, defaultFormat, defaultUnit);
+			WebAppConfig config = new(environment, appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, "", httpsKestrel, defaultKernel, defaultFormat, defaultUnit);
 			builder.Services.AddSingleton(config);
 
 			builder.Services.AddRazorPages();

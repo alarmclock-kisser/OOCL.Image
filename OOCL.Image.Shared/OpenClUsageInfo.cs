@@ -25,7 +25,6 @@ namespace OOCL.Image.Shared
 
 		}
 
-		[JsonConstructor]
 		public OpenClUsageInfo(OpenClRegister? obj, string magnitude = "KB")
 		{
 			if (obj == null)
