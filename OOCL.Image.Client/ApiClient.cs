@@ -17,7 +17,7 @@ namespace OOCL.Image.Client
 		private readonly InternalClient internalClient;
 		private readonly HttpClient httpClient;
 		private readonly string baseUrl;
-		private JsonSerializerOptions jsonSerializerOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+		private JsonSerializerOptions jsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
 
 		public string BaseUrl => this.baseUrl;
 
@@ -30,7 +30,18 @@ namespace OOCL.Image.Client
 		}
 
 
-
+		public async Task<WebApiConfig> GetApiConfigAsync()
+		{
+			try
+			{
+				return await this.internalClient.ApiConfigAsync();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return new WebApiConfig();
+			}
+		}
 
 		public async Task<bool> IsServersidedDataAsync()
 		{
@@ -266,16 +277,27 @@ namespace OOCL.Image.Client
 
 
 
-		public async Task<ImageObjInfo> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argValues)
+		public async Task<ImageObjInfo> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argValues, ImageObjDto? optionalImageObjDto = null)
 		{
 			try
 			{
-				Dictionary<string, string> argsDict = [];
+				ExecuteOnImageRequest request = new();
+				request.ImageId = id;
+				request.KernelName = kernelName;
+				request.Arguments = [];
 				for (int i = 0; i < argNames.Length && i < argValues.Length; i++)
 				{
-					argsDict[argNames[i]] = argValues[i];
+					if (!string.IsNullOrWhiteSpace(argNames[i]) && !string.IsNullOrWhiteSpace(argValues[i]))
+					{
+						request.Arguments[argNames[i]] = argValues[i];
+					}
 				}
-				return await this.internalClient.ExecuteOnImageAsync(id, kernelName, argsDict);
+				if (optionalImageObjDto != null && optionalImageObjDto.Info != null && optionalImageObjDto.Data != null)
+				{
+					request.OptionalImage = optionalImageObjDto;
+				}
+
+				return await this.internalClient.ExecuteOnImageAsync(request);
 			}
 			catch (Exception ex)
 			{
@@ -288,13 +310,25 @@ namespace OOCL.Image.Client
 		{
 			try
 			{
-				Dictionary<string, string> argsDict = [];
+				CreateImageRequest request = new();
+
+				request.Width = width;
+				request.Height = height;
+				request.KernelName = kernelName;
+				request.Arguments = [];
+				if (!string.IsNullOrWhiteSpace(baseColorHex) && Regex.IsMatch(baseColorHex, "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"))
+				{
+					request.Arguments["baseColor"] = baseColorHex;
+				}
 				for (int i = 0; i < argNames.Length && i < argValues.Length; i++)
 				{
-					argsDict[argNames[i]] = argValues[i];
+					if (!string.IsNullOrWhiteSpace(argNames[i]) && !string.IsNullOrWhiteSpace(argValues[i]))
+					{
+						request.Arguments[argNames[i]] = argValues[i];
+					}
 				}
 
-				return await this.internalClient.ExecuteCreateImageAsync(width, height, kernelName, argsDict, baseColorHex);
+				return await this.internalClient.ExecuteCreateImageAsync(request);
 			}
 			catch (Exception ex)
 			{

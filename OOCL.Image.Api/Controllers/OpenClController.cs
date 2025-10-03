@@ -2,26 +2,21 @@
 using OOCL.Image.Core;
 using OOCL.Image.OpenCl;
 using OOCL.Image.Shared;
-using System.Runtime.CompilerServices;
 
 namespace OOCL.Image.Api.Controllers
 {
-	[ApiController]
-	[Route("api/[controller]")]
-	public class OpenClController : ControllerBase
-	{
-		private readonly OpenClService openClService;
-		private readonly ImageCollection imageCollection;
+    [ApiController]
+    [Route("api/[controller]")]
+    public class OpenClController : ControllerBase
+    {
+        private readonly OpenClService openClService;
+        private readonly ImageCollection imageCollection;
 
-
-
-		public OpenClController(OpenClService openClService, ImageCollection imageCollection)
-		{
-			this.openClService = openClService;
-			this.imageCollection = imageCollection;
-		}
-
-
+        public OpenClController(OpenClService openClService, ImageCollection imageCollection)
+        {
+            this.openClService = openClService;
+            this.imageCollection = imageCollection;
+        }
 
 		[HttpGet("status")]
 		[ProducesResponseType(typeof(OpenClServiceInfo), 200)]
@@ -233,388 +228,96 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-
-
-
-
 		[HttpPost("execute-on-image")]
 		[ProducesResponseType(typeof(ImageObjInfo), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteGenericImageKernelAsync([FromQuery] Guid imageId, [FromQuery] string kernelName, [FromQuery] Dictionary<string, string> arguments, [FromQuery] ImageObjDto? optionalImageObjDto = null, [FromQuery] float? rescale = null)
+		public async Task<ActionResult<ImageObjInfo>> ExecuteOnImageAsync([FromBody] ExecuteOnImageRequest request)
 		{
-			try
+			if (!this.openClService.Initialized)
 			{
-				if (!this.openClService.Initialized)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "OpenCL Not Initialized",
-						Detail = "Please initialize the OpenCL service before executing kernels."
-					});
-				}
-
-				var imageObj = this.imageCollection[imageId];
-				if (imageObj == null)
-				{
-					if (optionalImageObjDto == null)
-					{
-						return this.NotFound(new ProblemDetails()
-						{
-							Title = "ImageObj not found for ID: " + imageId.ToString(),
-							Detail = "Error: NotFound()",
-							Status = 404
-						});
-					}
-
-					imageObj = await ImageCollection.CreateFromBase64(optionalImageObjDto.Data.Base64Data, rescale, optionalImageObjDto.Info.Name);
-					if (imageObj == null)
-					{
-						return this.StatusCode(500, new ProblemDetails
-						{
-							Status = 500,
-							Title = "Image Creation Failed",
-							Detail = "Failed to create ImageObj from provided ImageObjDto."
-						});
-					}
-				}
-
-				// Refine arguments
-				arguments["width"] = imageObj.Width.ToString();
-				arguments["height"] = imageObj.Height.ToString();
-
-				ImageObj? result = await this.openClService.ExecuteEditImage(imageObj, kernelName, arguments);
-				if (result == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Kernel Execution Failed",
-						Detail = "The kernel execution did not return a valid ImageObj."
-					});
-				}
-
-				bool added = this.imageCollection.Add(result);
-				if (!added)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Image Collection Error",
-						Detail = "Failed to add the created ImageObj to the ImageCollection."
-					});
-				}
-
-				var resultInfo = new ImageObjInfo(result);
-				return this.Ok(resultInfo);
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
 			}
-			catch (Exception ex)
+
+			if (request.ImageId == Guid.Empty)
 			{
-				return this.StatusCode(500, new ProblemDetails
-				{
-					Status = 500,
-					Title = "Internal Server Error",
-					Detail = ex.Message
-				});
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "ImageId required" });
 			}
+
+			var img = this.imageCollection[request.ImageId];
+			if (img == null)
+			{
+				if (request.OptionalImage == null)
+				{
+					return this.NotFound(new ProblemDetails { Status = 404, Title = $"Image {request.ImageId} not found" });
+				}
+
+				// Optionales Nachladen aus Base64
+				if (string.IsNullOrWhiteSpace(request.OptionalImage.Data?.Base64Data))
+				{
+					return this.BadRequest(new ProblemDetails { Status = 400, Title = "OptionalImage missing Base64Data" });
+				}
+
+				var created = await ImageCollection.CreateFromBase64(request.OptionalImage.Data.Base64Data, request.Rescale, request.OptionalImage.Info?.Name);
+				if (created == null)
+				{
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp image" });
+				}
+
+				img = created;
+			}
+
+			var args = request.Arguments ?? new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+			args["width"] = img.Width.ToString();
+			args["height"] = img.Height.ToString();
+
+			var result = await this.openClService.ExecuteEditImage(img, request.KernelName, args);
+			if (result == null)
+			{
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
+			}
+
+			if (!this.imageCollection.Add(result))
+			{
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+			}
+
+			return this.Ok(new ImageObjInfo(result));
 		}
 
 		[HttpPost("execute-create-image")]
-		[ProducesResponseType(typeof(ImageObjDto), 200)]
+		[ProducesResponseType(typeof(ImageObjInfo), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteCreateImageKernelAsync([FromQuery] int width = 480, [FromQuery] int height = 360, [FromQuery] string kernelName = "mandelbrot00", [FromBody] Dictionary<string, string>? args = null, [FromQuery] string baseColorHex = "#00000000")
+		public async Task<ActionResult<ImageObjInfo>> ExecuteCreateImageAsync([FromBody] CreateImageRequest request)
 		{
-			try
+			if (!this.openClService.Initialized)
 			{
-				if (!this.openClService.Initialized)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "OpenCL Not Initialized",
-						Detail = "Please initialize the OpenCL service before executing kernels."
-					});
-				}
-
-				if (width <= 0 || height <= 0)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "Invalid Image Dimensions",
-						Detail = "Width and Height must be positive integers."
-					});
-				}
-
-				// Übergib das Dictionary direkt an den OpenCl-Layer
-				ImageObj? result = await this.openClService.ExecuteCreateImage(width, height, kernelName, baseColorHex, args);
-				if (result == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Kernel Execution Failed",
-						Detail = "The kernel execution did not return a valid ImageObj."
-					});
-				}
-
-				bool added = this.imageCollection.Add(result);
-				if (!added)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Image Collection Error",
-						Detail = "Failed to add the created ImageObj to the ImageCollection."
-					});
-				}
-
-				var resultInfo = new ImageObjInfo(result);
-				if (resultInfo == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Internal Server Error",
-						Detail = "Failed to create ImageObjInfo from the resulting ImageObj."
-					});
-				}
-
-				var data = new ImageObjData(result);
-				var dto = new ImageObjDto(resultInfo, data);
-
-				return this.Ok(dto);
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
 			}
-			catch (Exception ex)
+
+			if (request.Width <= 0 || request.Height <= 0)
 			{
-				return this.StatusCode(500, new ProblemDetails
-				{
-					Status = 500,
-					Title = "Internal Server Error",
-					Detail = ex.Message
-				});
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Invalid dimensions" });
 			}
+
+			var args = request.Arguments ?? new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+			args["width"] = request.Width.ToString();
+			args["height"] = request.Height.ToString();
+
+			var result = await this.openClService.ExecuteCreateImage(request.Width, request.Height, request.KernelName, request.BaseColorHex, args);
+			if (result == null)
+			{
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
+			}
+
+			if (!this.imageCollection.Add(result))
+			{
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+			}
+
+			return this.Ok(new ImageObjInfo(result));
 		}
-
-
-
-
-		[HttpPost("execute-mandelbrot-test")]
-		[ProducesResponseType(typeof(ImageObjDto), 200)]
-		[ProducesResponseType(typeof(ProblemDetails), 400)]
-		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo?>> ExecuteMandelbrotTestAsync([FromQuery] int width = 720, [FromQuery] int height = 480, [FromBody] string kernelName = "mandelbrot00", [FromQuery] string baseColorHex = "#00000000")
-		{
-			if (string.IsNullOrEmpty(this.openClService.KernelExists(kernelName)))
-			{
-				return this.BadRequest(new ProblemDetails
-				{
-					Status = 400,
-					Title = "Kernel Not Found",
-					Detail = $"The specified kernel '{kernelName}' does not exist."
-				});
-			}
-
-			try
-			{
-				if (!this.openClService.Initialized)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "OpenCL Not Initialized",
-						Detail = "Please initialize the OpenCL service before executing kernels."
-					});
-				}
-
-				if (width <= 0 || height <= 0)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "Invalid Image Dimensions",
-						Detail = "Width and Height must be positive integers."
-					});
-				}
-
-				// Dict for color args
-				int[] rgb = ImageCollection.GetRgbFromHexColor(baseColorHex);
-				Dictionary<string, string> args = new()
-				{
-					{ "baseR", rgb[0].ToString() },
-					{ "baseG", rgb[1].ToString() },
-					{ "baseB", rgb[2].ToString() }
-				};
-
-				// LOG CONSOLE
-				Console.WriteLine("EXEC-Mandelbrot-Test: " + kernelName + " | Size: " + width + "x" + height + " | BaseColor: " + baseColorHex + " (R=" + rgb[0] + ",G=" + rgb[1] + ",B=" + rgb[2] + ")");
-
-				ImageObj? result = await this.openClService.ExecuteCreateImage(width, height, kernelName, baseColorHex, args);
-				if (result == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Kernel Execution Failed",
-						Detail = "The kernel execution did not return a valid ImageObj."
-					});
-				}
-
-				bool added = this.imageCollection.Add(result);
-				if (!added)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Image Collection Error",
-						Detail = "Failed to add the created ImageObj to the ImageCollection."
-					});
-				}
-
-				var resultInfo = new ImageObjInfo(result);
-				if (resultInfo == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Internal Server Error",
-						Detail = "Failed to create ImageObjInfo from the resulting ImageObj."
-					});
-				}
-
-				var data = new ImageObjData(result);
-				var dto = new ImageObjDto(resultInfo, data);
-
-				return this.Ok(dto);
-			}
-			catch (Exception ex)
-			{
-				return this.StatusCode(500, new ProblemDetails
-				{
-					Status = 500,
-					Title = "Internal Server Error",
-					Detail = ex.Message
-				});
-			}
-		}
-
-		[HttpPost("execute-edgeDetection00-default")]
-		[ProducesResponseType(typeof(ImageObjDto), 200)]
-		[ProducesResponseType(typeof(ProblemDetails), 400)]
-		[ProducesResponseType(typeof(ProblemDetails), 404)]
-		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteEdgeDetectionDefaultAsync([FromBody] Guid? imageId = null)
-		{
-			try
-			{
-				if (!this.openClService.Initialized)
-				{
-					return this.BadRequest(new ProblemDetails
-					{
-						Status = 400,
-						Title = "OpenCL Not Initialized",
-						Detail = "Please initialize the OpenCL service before executing kernels."
-					});
-				}
-
-				if (imageId == null || imageId == Guid.Empty)
-				{
-					if (this.imageCollection.Images.Count <= 0)
-					{
-						// Try loading resources
-						var loaded = await this.imageCollection.LoadResourcesAsync();
-						if (loaded?.Count() == 0)
-						{
-							return this.BadRequest(new ProblemDetails
-							{
-								Status = 400,
-								Title = "No Images Available",
-								Detail = "No images are available in the collection. Please upload or load images before executing the edge detection."
-							});
-						}
-					}
-
-					// Use the last image in the collection if no ID is provided
-					imageId = this.imageCollection.Images.Last().Id;
-				}
-
-				var imageObj = this.imageCollection[imageId.Value];
-				if (imageObj == null)
-				{
-					return this.NotFound(new ProblemDetails()
-					{
-						Title = "ImageObj not found for ID: " + imageId.ToString(),
-						Detail = "Error: NotFound()",
-						Status = 404
-					});
-				}
-
-				Dictionary<string, string> arguments = new()
-				{
-					{ "inputPixels", "0" },
-					{ "outputPixels", "0" },
-					{"width", imageObj.Width.ToString() },
-					{"height", imageObj.Height.ToString() },
-					{ "threshold", "0.25" },
-					{ "thickness", "1" },
-					{ "edgeR", "255" },
-					{ "edgeG", "0" },
-					{ "edgeB", "0" }
-				};
-
-				var resultObj = await this.openClService.ExecuteEditImage(imageObj, "edgeDetection00", arguments);
-				if (resultObj == null)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Kernel Execution Failed",
-						Detail = "The kernel execution did not return a valid ImageObj."
-					});
-				}
-
-				if (!this.imageCollection.Add(resultObj))
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Image Collection Error",
-						Detail = "Failed to add the created ImageObj to the ImageCollection."
-					});
-				}
-
-				ImageObjInfo resultInfo = new(this.imageCollection[resultObj.Id]);
-				if (resultInfo.Id == Guid.Empty)
-				{
-					return this.StatusCode(500, new ProblemDetails
-					{
-						Status = 500,
-						Title = "Internal Server Error",
-						Detail = "Failed to create ImageObjInfo from the resulting ImageObj. (Adding to collection maybe failed.)"
-					});
-				}
-
-				var data = new ImageObjData(resultObj);
-				var dto = new ImageObjDto(resultInfo, data);
-
-				return this.Ok(dto);
-			}
-			catch (Exception ex)
-			{
-				return this.StatusCode(500, new ProblemDetails
-				{
-					Status = 500,
-					Title = "Internal Server Error",
-					Detail = ex.Message
-				});
-			}
-		}
-
-
-
-
 	}
 }

@@ -175,3 +175,51 @@ body.rz-light .panel-sub {
 body.rz-dark .panel-sub {
     color: var(--rz-text-secondary-color, #888);
 }
+
+/* Image list entry layout (RFC Anpassung) */
+.image-list-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Reduziere den Abstand, um Platz für die GUID zu schaffen */
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    position: relative;
+    /* Entferne das feste Gap-Setzen hier, wir nutzen Margin/Padding für die Trennung */
+}
+
+    /* Stil für die GUID */
+    .image-list-entry .img-id {
+        flex: 0 0 auto;
+        font-size: 0.65rem;
+        font-family: monospace;
+        opacity: 0.85;
+        letter-spacing: normal; /* Muss normal sein, da wir Zeilenumbrüche nutzen */
+        max-width: none; /* Keine Breite begrenzen, da der Umbruch gewollt ist */
+        white-space: normal; /* WICHTIG: Erlaubt den Umbruch */
+        line-height: 1; /* Reduziere Zeilenabstand für die GUID */
+        padding-right: 8px; /* Kleiner Abstand nach rechts */
+    }
+
+    /* Stil für den Anzeigenamen */
+    .image-list-entry .img-name {
+        flex: 1 1 auto; /* WICHTIG: Nimmt den gesamten verfügbaren Platz ein */
+        text-align: left; /* Typischerweise linksbündig für Namen */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 40px;
+        padding: 0 4px;
+    }
+
+    /* Stil für Metadaten */
+    .image-list-entry .img-meta {
+        /* WICHTIG: Verschiebt dieses Element ganz nach rechts, indem es den verbleibenden Platz einnimmt */
+        margin-left: auto;
+        flex: 0 0 auto;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        font-size: 0.75rem;
+        white-space: nowrap;
+    }

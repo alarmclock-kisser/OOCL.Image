@@ -931,6 +931,35 @@
         }
       }
     },
+    "/api/Info/api-config": {
+      "get": {
+        "tags": [
+          "Info"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebApiConfig"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebApiConfig"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebApiConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/OpenCl/status": {
       "get": {
         "tags": [
@@ -1043,17 +1072,31 @@
         "tags": [
           "OpenCl"
         ],
-        "parameters": [
-          {
-            "name": "deviceId",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 2
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "integer",
+                "format": "int32",
+                "default": 2
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "integer",
+                "format": "int32",
+                "default": 2
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "integer",
+                "format": "int32",
+                "default": 2
+              }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -1246,39 +1289,98 @@
         }
       }
     },
-    "/api/OpenCl/execute-on-image": {
-      "post": {
+    "/api/OpenCl/kernel-infos": {
+      "get": {
         "tags": [
           "OpenCl"
         ],
         "parameters": [
           {
-            "name": "imageId",
+            "name": "onlyCompiled",
             "in": "query",
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "kernelName",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "arguments",
-            "in": "query",
-            "style": "deepObject",
-            "schema": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
+              "type": "boolean",
+              "default": true
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenClKernelInfo"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenClKernelInfo"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenClKernelInfo"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/OpenCl/execute-on-image": {
+      "post": {
+        "tags": [
+          "OpenCl"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteOnImageRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteOnImageRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteOnImageRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -1368,53 +1470,25 @@
         "tags": [
           "OpenCl"
         ],
-        "parameters": [
-          {
-            "name": "width",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 480
-            }
-          },
-          {
-            "name": "height",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 360
-            }
-          },
-          {
-            "name": "kernelName",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "mandelbrot00"
-            }
-          },
-          {
-            "name": "args",
-            "in": "query",
-            "style": "deepObject",
-            "schema": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageRequest"
               }
             }
-          },
-          {
-            "name": "baseColorHex",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "#00000000"
-            }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -1438,278 +1512,6 @@
           },
           "400": {
             "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/OpenCl/execute-mandelbrot-test": {
-      "post": {
-        "tags": [
-          "OpenCl"
-        ],
-        "parameters": [
-          {
-            "name": "width",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 720
-            }
-          },
-          {
-            "name": "height",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 480
-            }
-          },
-          {
-            "name": "kernelName",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "mandelbrot00"
-            }
-          },
-          {
-            "name": "baseColorHex",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "#00000000"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageObjInfo"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageObjInfo"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageObjInfo"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/OpenCl/kernel-infos": {
-      "get": {
-        "tags": [
-          "OpenCl"
-        ],
-        "parameters": [
-          {
-            "name": "onlyCompiled",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OpenClKernelInfo"
-                  }
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OpenClKernelInfo"
-                  }
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OpenClKernelInfo"
-                  }
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/OpenCl/execute-edgeDetection00-default": {
-      "post": {
-        "tags": [
-          "OpenCl"
-        ],
-        "parameters": [
-          {
-            "name": "imageId",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageObjInfo"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageObjInfo"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImageObjInfo"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1754,6 +1556,69 @@
   },
   "components": {
     "schemas": {
+      "CreateImageRequest": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "kernelName": {
+            "type": "string",
+            "nullable": true
+          },
+          "baseColorHex": {
+            "type": "string",
+            "nullable": true
+          },
+          "arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "rescale": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExecuteOnImageRequest": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kernelName": {
+            "type": "string",
+            "nullable": true
+          },
+          "arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "optionalImage": {
+            "$ref": "#/components/schemas/ImageObjDto"
+          },
+          "rescale": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ImageObjData": {
         "type": "object",
         "properties": {
@@ -1823,7 +1688,7 @@
             "type": "string",
             "nullable": true
           },
-          "fileName": {
+          "name": {
             "type": "string",
             "nullable": true
           },
@@ -2080,6 +1945,46 @@
           "height": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebApiConfig": {
+        "type": "object",
+        "properties": {
+          "applicationName": {
+            "type": "string",
+            "nullable": true
+          },
+          "swaggerEnabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "maxUploadSizeMb": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "imagesLimit": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "preferredDevice": {
+            "type": "string",
+            "nullable": true
+          },
+          "loadResources": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "serverSidedData": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "usePathBase": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false

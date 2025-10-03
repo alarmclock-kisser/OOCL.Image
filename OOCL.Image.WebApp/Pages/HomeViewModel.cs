@@ -1,4 +1,10 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
+using OOCL.Image.Client;
+using OOCL.Image.Shared;
+using Radzen;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Globalization;
@@ -6,11 +12,6 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.JSInterop;
-using OOCL.Image.Client;
-using OOCL.Image.Shared;
-using Radzen;
 
 namespace OOCL.Image.WebApp.Pages
 {
@@ -43,7 +44,7 @@ namespace OOCL.Image.WebApp.Pages
 
         // --- WebAppConfig text ---
         private JsonSerializerOptions jsonSerializerOptions = new() { WriteIndented = true };
-        public string webAppConfigText { 
+        public string WebAppConfigText { 
             get => JsonSerializer.Serialize(this.Config, this.jsonSerializerOptions);
             set
             {
@@ -65,6 +66,22 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
         public WebApiConfig ApiConfig { get; set; } = new();
+        public string WebApiConfigText
+        {
+            get => JsonSerializer.Serialize(this.ApiConfig, this.jsonSerializerOptions);
+            set
+            {
+                try
+                {
+                    var cfg = JsonSerializer.Deserialize<WebApiConfig>(value, this.jsonSerializerOptions);
+                    if (cfg != null)
+                    {
+                        this.ApiConfig = cfg;
+                    }
+                }
+                catch { }
+            }
+        }
 
 		// --- Public state used by the UI (kept with same names as before) ---
 		public List<OpenClDeviceInfo> devices { get; set; }
@@ -124,7 +141,10 @@ namespace OOCL.Image.WebApp.Pages
 		// --- Initialization / loading ---
 		public async Task InitializeAsync()
         {
-            await this.LoadDevices();
+			// Update api config (webapp config is alread injected)
+			this.ApiConfig = await this.Api.GetApiConfigAsync();
+
+			await this.LoadDevices();
             await this.LoadImages();
             await this.LoadOpenClStatus();
             await this.LoadKernels();
@@ -169,7 +189,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			// Die Basis-Klasse für die Liste, die angezeigt wird (vermutlich ImageObjInfo)
 			// Dies muss auf der Client-Seite die Quelldaten von der API (true) ODER vom Client-Store (false) sein.
-			List<ImageObjInfo> imageInfoList = new List<ImageObjInfo>();
+			List<ImageObjInfo> imageInfoList = new();
 
 			if (await this.Api.IsServersidedDataAsync())
 			{
@@ -221,6 +241,12 @@ namespace OOCL.Image.WebApp.Pages
 			{
 				this.selectedImageId = Guid.Empty;
 				this.lastKernelProcessingTimeMs = 0;
+			}
+
+			if (this.useExistingImage)
+			{
+				var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
+				UpdateWidthHeightFromImage(info);
 			}
 		}
 
@@ -456,11 +482,11 @@ namespace OOCL.Image.WebApp.Pages
                     }
                     else
                     {
-                        defaultValue = GetDefaultArgDecimal(name);
+                        defaultValue = this.GetDefaultArgDecimal(name);
                     }
 
                     // Auf Typ anpassen (Runden / Clamp für Integer, Byte etc.)
-                    defaultValue = AdjustValueForType(defaultValue, t);
+                    defaultValue = this.AdjustValueForType(defaultValue, t);
 
 					this.kernelArgViewModels.Add(new KernelArgViewModel
                     {
@@ -500,6 +526,11 @@ namespace OOCL.Image.WebApp.Pages
                 }
             } 
 
+            if (this.useExistingImage)
+            {
+                var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
+                UpdateWidthHeightFromImage(info);
+            }
             await Task.CompletedTask;
 		}
 
@@ -716,7 +747,7 @@ namespace OOCL.Image.WebApp.Pages
 				return;
 			}
 
-			vm.Value = AdjustValueForType(vm.Value, vm.Type);
+			vm.Value = this.AdjustValueForType(vm.Value, vm.Type);
         }
 
         // Vor Ausführung alles normalisieren
@@ -724,7 +755,7 @@ namespace OOCL.Image.WebApp.Pages
         {
             foreach (var vm in this.kernelArgViewModels)
             {
-                vm.Value = AdjustValueForType(vm.Value, vm.Type);
+                vm.Value = this.AdjustValueForType(vm.Value, vm.Type);
             }
         }
 
@@ -767,7 +798,7 @@ namespace OOCL.Image.WebApp.Pages
         {
             try
             {
-                NormalizeAllArgValues();
+				this.NormalizeAllArgValues();
                 return await this.Api.ExecuteGenericImageKernel(id, kernelName, argNames, argVals);
             }
             catch { return null; }
@@ -777,7 +808,7 @@ namespace OOCL.Image.WebApp.Pages
         {
             try
             {
-                NormalizeAllArgValues();
+				this.NormalizeAllArgValues();
                 return await this.Api.ExecuteCreateImageAsync(width, height, kernelName, baseColorHex, argNames, argVals);
             }
             catch { return null; }
@@ -896,7 +927,7 @@ namespace OOCL.Image.WebApp.Pages
 			var t = type.Trim();
 
             // Erst normalisieren
-            value = AdjustValueForType(value, t);
+            value = this.AdjustValueForType(value, t);
 
             var tl = t.ToLowerInvariant();
             if (tl.Contains("single") || tl == "float")
@@ -1253,5 +1284,234 @@ namespace OOCL.Image.WebApp.Pages
 				this.OnBaseColorChanged(this.colorHexForNewImage);
 			}
 		}
+
+        // NEU: Methode zum Anpassen der Width/Height-Argumente an selektiertes Bild oder 0
+        public void UpdateWidthHeightFromImage(ImageObjInfo? info)
+        {
+            if (this.kernelArgViewModels == null || this.kernelArgViewModels.Count == 0)
+                return;
+
+            int w = info?.Size?.Width ?? 0;
+            int h = info?.Size?.Height ?? 0;
+
+            foreach (var a in this.kernelArgViewModels)
+            {
+                var lname = a.Name.ToLowerInvariant();
+                if (lname.Contains("width"))
+                    a.Value = w;
+                else if (lname.Contains("height"))
+                    a.Value = h;
+            }
+        }
+
+        // NEU: Aufruf wenn Modus (useExistingImage) geändert wird
+        public void OnUseExistingModeChanged(ImageObjInfo? currentImageInfo)
+        {
+            if (this.useExistingImage)
+            {
+                UpdateWidthHeightFromImage(currentImageInfo);
+            }
+            else
+            {
+                // Beim Umschalten auf "neues Bild" bisherige Default-Werte beibehalten oder falls 0 -> Standard
+                foreach (var a in this.kernelArgViewModels)
+                {
+                    if (IsWidthOrHeight(a) && a.Value <= 0)
+                    {
+                        var lname = a.Name.ToLower();
+                        if (lname.Contains("width")) a.Value = 720;
+                        if (lname.Contains("height")) a.Value = 480;
+                    }
+                }
+            }
+        }
+
+        // NEU: Snap für Dimensionen (Auflösungsschritte)
+        public decimal SnapDimensionValue(string name, decimal previous, decimal requested)
+        {
+            var lname = name.ToLowerInvariant();
+            decimal[] steps = lname.Contains("width")
+                ? WidthSteps
+                : HeightSteps;
+
+            // Wenn Pfeil-Inkrement → requested unterscheidet sich typischerweise um +1 / -1 oder kleinen Wert
+            bool increased = requested > previous;
+
+            // Falls vorher noch 0 (z.B. beim Start), auf ersten sinnvollen Wert springen
+            if (previous <= 0)
+                return steps.First();
+			// Suche nächsthöheren / nächstniedrigeren Wert
+            if (increased)
+            {
+                foreach (var s in steps)
+                {
+                    if (s > previous)
+                        return s;
+                }
+                return steps.Last(); // Maximalwert
+            }
+            else
+            {
+                for (int i = steps.Length - 1; i >= 0; i--)
+                {
+                    if (steps[i] < previous)
+                        return steps[i];
+                }
+                return steps.First(); // Minimalwert
+			}
+        }
+
+		// Füge diese Methode zu deinem @code-Block oder ViewModel hinzu
+		public MarkupString FormatGuidForDisplay(Guid id)
+		{
+			// Die Standard-GUID-Segmente sind: 8-4-4-4-12
+			string[] segments = id.ToString("D").Split('-'); // z.B. ["b9888563", "e203", "4b77", "9c0d", "7051a9d1ac06"]
+
+			// Wir bauen den formatierten String hier auf
+			var sb = new System.Text.StringBuilder();
+
+			// Die Segmente, die wir in der aktuellen Zeile sammeln
+			string currentLine = "";
+
+			// Die maximale Länge (ohne Bindestriche), die wir in einer Zeile erlauben
+			const int MaxLineLength = 10;
+
+			for (int i = 0; i < segments.Length; i++)
+			{
+				string segment = segments[i];
+
+				// 1. Prüfe, ob das aktuelle Segment und die bereits gesammelte Zeile das Limit überschreiten
+				// Wir prüfen, ob das Hinzufügen des nächsten Segments (inkl. Bindestrich) das Limit überschreitet.
+				if (currentLine.Length > 0 && (currentLine.Length + 1 + segment.Length) > MaxLineLength)
+				{
+					// Die Zeile ist zu lang für das nächste Segment, also Zeilenumbruch einfügen
+					sb.Append("<br>");
+					currentLine = ""; // Starte eine neue Zeile
+				}
+
+				// 2. Füge das Segment zur Zeile hinzu
+				if (currentLine.Length > 0)
+				{
+					currentLine += "-"; // Füge Bindestrich vor dem Segment hinzu
+				}
+				currentLine += segment;
+
+				// 3. Füge den aktuellen gesammelten Teil zum StringBuilder hinzu
+				// Wir fügen nur dann den Zeilenumbruch HINTER dem Segment hinzu, 
+				// wenn es das letzte Segment ist ODER die Zeile ihr Limit erreicht hat (was oben behandelt wird).
+
+				// Da wir das Segment bereits in 'currentLine' haben, können wir es direkt in den SB schreiben
+				// und danach 'currentLine' leeren und ggf. einen <br> setzen, WENN die Zeile lang genug ist.
+
+				// Da die Logik oben kompliziert wird, wenn man versucht VORAUSZUSCHAUEN, vereinfachen wir:
+				// Füge das Segment (ggf. mit Bindestrich) zum StringBuilder hinzu
+
+				if (i > 0)
+				{
+					sb.Append('-');
+				}
+				sb.Append(segment);
+
+				// WICHTIGE ENTSCHEIDUNG: Zeilenumbruch setzen?
+				// Setze einen Umbruch, wenn:
+				// a) Es ist NICHT das letzte Segment, ODER
+				// b) Das Segment lang ist (z.B. 8 Zeichen), ODER
+				// c) Das nächste Segment (falls vorhanden) nicht mehr in die Zeile passen würde.
+
+				// Die einfachste und robusteste Logik für das "Zusammenfügen kurzer Segmente" ist:
+				// Hänge das nächste Segment an, solange die Gesamtlänge <= 10 ist.
+
+				// Wir resetten den StringBuilder und bauen es neu auf, um die Logik zu vereinfachen:
+			}
+
+			// --- NEUE VEREINFACHTE LOGIK ---
+
+			var finalSb = new System.Text.StringBuilder();
+			string currentLineSegments = "";
+
+			for (int i = 0; i < segments.Length; i++)
+			{
+				string segment = segments[i];
+				string nextSegmentSeparator = (i < segments.Length - 1) ? "-" : "";
+
+				// Prüfe die Länge, wenn das nächste Segment hinzugefügt wird (currentLineSegments + '-' + segment)
+				// (Länge des aktuellen Segments + Länge des nächsten Segments + Bindestrich)
+				int newLength = currentLineSegments.Length + segment.Length;
+				if (currentLineSegments.Length > 0)
+				{
+					newLength++; // Zähle den Bindestrich
+				}
+
+				// Wenn die neue Zeile das Limit überschreitet (oder es das erste Segment ist, das schon zu lang ist)
+				if (newLength > MaxLineLength && currentLineSegments.Length > 0)
+				{
+					// Wenn die aktuelle Zeile schon was hat UND das neue Segment nicht passt -> Umbruch VOR dem neuen Segment.
+					finalSb.Append("<br>");
+					finalSb.Append(segment);
+					currentLineSegments = segment; // Starte neue Zeile nur mit diesem Segment
+				}
+				else if (currentLineSegments.Length > 0)
+				{
+					// Hänge an die aktuelle Zeile an, da es passt
+					finalSb.Append('-');
+					finalSb.Append(segment);
+					currentLineSegments += ("-" + segment);
+				}
+				else
+				{
+					// Erste Segment in der aktuellen Zeile
+					finalSb.Append(segment);
+					currentLineSegments = segment;
+				}
+
+				// Nach dem 4. Segment (Index 3) ist es oft sinnvoll, einen Umbruch zu erzwingen, 
+				// auch wenn es kurz ist, da der Rest (12 Zeichen) lang ist. 
+				if (i == 3 && i != segments.Length - 1)
+				{
+					finalSb.Append("<br>-");
+					currentLineSegments = ""; // Muss im nächsten Durchlauf als 4-Segment starten
+				}
+			}
+
+			// Da die 8-4-4-4-12 Struktur fest ist, ist die Logik einfacher.
+			// Wir schauen nur auf die 4er Segmente!
+
+			// Beispiel: 8 (Länge 8) - 4 (Länge 4) - 4 (Länge 4) - 4 (Länge 4) - 12 (Länge 12)
+
+			return (MarkupString) finalSb.ToString();
+		}
+
+		public MarkupString FormatGuidForDisplaySimple(Guid id)
+		{
+			// Struktur: {A}8-{B}4-{C}4-{D}4-{E}12
+			string fullId = id.ToString("D");
+			string[] segments = fullId.Split('-');
+
+			if (segments.Length != 5) return (MarkupString) fullId; // Fehlerfall
+
+			var sb = new System.Text.StringBuilder();
+
+			// 1. Segment (8 Zeichen)
+			sb.Append(segments[0]);
+			sb.Append("<br>-"); // Immer Umbruch nach dem ersten Segment
+
+			// 2. und 3. Segment (4-4 = 9 Zeichen gesamt)
+			// Hier fügen wir sie zusammen:
+			sb.Append(segments[1]);
+			sb.Append('-');
+			sb.Append(segments[2]);
+			sb.Append("<br>-"); // Immer Umbruch nach dem dritten Segment
+
+			// 4. Segment (4 Zeichen)
+			sb.Append(segments[3]);
+			sb.Append("<br>-"); // Immer Umbruch nach dem vierten Segment
+
+			// 5. Segment (12 Zeichen)
+			sb.Append(segments[4]);
+
+			return (MarkupString) sb.ToString();
+		}
 	}
- }
+}
+
+
