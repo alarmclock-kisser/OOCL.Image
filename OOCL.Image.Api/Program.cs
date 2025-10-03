@@ -78,7 +78,7 @@ namespace OOCL.Image.Api
 			app.UseSwagger(c =>
 			{
 				// Stellt sicher, dass die JSON-Definition den /api/-Präfix erhält
-				c.RouteTemplate = "api/swagger/{documentName}/swagger.json";
+				c.RouteTemplate = "swagger/{documentName}/swagger.json";
 			});
 
 			// Development-only Middlewares
@@ -94,7 +94,7 @@ namespace OOCL.Image.Api
 				app.UseSwaggerUI(c =>
 				{
 					c.SwaggerEndpoint("/api/swagger/v1/swagger.json", "OOCL.Image API v1");
-					c.RoutePrefix = "swagger"; // Wenn Sie unter /api/swagger/ zugreifen wollen
+					c.RoutePrefix = string.Empty;
 				});
 			}
 

@@ -35,7 +35,9 @@ namespace OOCL.Image.WebApp
 			builder.Services.AddHttpClient<ApiClient>((sp, client) =>
 			{
 				var cfg = sp.GetRequiredService<ApiUrlConfig>();
-				client.BaseAddress = new Uri(cfg.BaseUrl);
+				// Hier MUSS ein Schrägstrich am Ende stehen, wenn ApiBaseUrl keinen hat.
+				client.BaseAddress = new Uri(cfg.BaseUrl.EndsWith("/") ? cfg.BaseUrl : cfg.BaseUrl + "/");
+				client.Timeout = TimeSpan.FromSeconds(20);
 			});
 
 
@@ -80,8 +82,8 @@ namespace OOCL.Image.WebApp
 	public class WebAppConfig
 	{
 		public bool DefaultDarkMode { get; set; } = false;
-		public string PreferredDevice { get; set; } = "Core";
-		public int MaxImagesToKeep{ get; set; } = 256;
+		public string PreferredDevice { get; set; } = "Intel";
+		public int MaxImagesToKeep{ get; set; } = 10;
 
 		public WebAppConfig(bool defaultDarkMode, string preferredDevice = "", int maxImages = 256)
 		{
