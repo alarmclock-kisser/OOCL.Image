@@ -21,7 +21,6 @@ namespace OOCL.Image.Shared
 		public float FrameBase64SizeMb { get; set; } = 0.0f;
 		public float ScalingFactor { get; set; } = 1.0f;
 
-		// private readonly float maxJsonBase64SizeMb = 134.217728f;
 
 		public ImageObjData()
 		{
