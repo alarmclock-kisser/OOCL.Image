@@ -70,8 +70,8 @@ namespace OOCL.Image.Core
                 Console.WriteLine("ImageCollection: Memory saving enabled. All images will be disposed on add.");
             }
 
-            if (loadResources)
-            {
+            if (loadResources & serverSidedData)
+			{
                 var _ = this.LoadResourcesAsync().Result;
 			}
 		}

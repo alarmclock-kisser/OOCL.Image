@@ -52,11 +52,19 @@ namespace OOCL.Image.Shared
 			this.Id = obj.Id;
 			this.CreatedAt = obj.CreatedAt;
 
-			this.FilePath = obj.Filepath;
+			this.FilePath = !string.IsNullOrEmpty(obj.FilePath) ? Path.GetFullPath(obj.FilePath) : "no file path provided       ";
 			this.Name = Path.GetFileName(this.FilePath);
 			if (string.IsNullOrEmpty(this.Name))
 			{
 				this.Name = this.FilePath;
+			}
+			if (string.IsNullOrEmpty(this.Name))
+			{
+				this.Name = obj.Name;
+			}
+			if (string.IsNullOrEmpty(this.Name))
+			{
+				this.Name = obj.Id.ToString();
 			}
 
 			this.Size = new SizeInfo { Width = obj.Width, Height = obj.Height };

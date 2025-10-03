@@ -22,18 +22,24 @@ namespace OOCL.Image.Shared
 			// Empty constructor for serialization purposes
 		}
 
-		public ImageObjDto(IEnumerable<int> bytesAsInts, string fileName, string contentType)
+		public static async Task<ImageObjDto> FromBytesAsync(byte[] bytes, string fileName, string contentType)
 		{
-			byte[] bytes = bytesAsInts.Select(b => (byte)b).AsParallel().ToArray();
+			return await ConvertToImageObjAsync(bytes, fileName, contentType);
+		}
 
-			var task = ConvertToImageObjAsync(bytes, fileName, contentType).ConfigureAwait(false);
-			task.GetAwaiter().OnCompleted(() =>
+		public ImageObjDto(ImageObj? obj)
+		{
+			if (obj == null)
 			{
-				var result = task.GetAwaiter().GetResult();
-				this.Id = result.Id;
-				this.Info = result.Info;
-				this.Data = result.Data;
-			});
+				return;
+			}
+
+			var info = new ImageObjInfo(obj);
+			var data = new ImageObjData(obj);
+
+			this.Id = info.Id;
+			this.Info = info;
+			this.Data = data;
 		}
 
 		[JsonConstructor]
@@ -62,5 +68,7 @@ namespace OOCL.Image.Shared
 
 			return new ImageObjDto(info, data);
 		}
+
+
 	}
 }

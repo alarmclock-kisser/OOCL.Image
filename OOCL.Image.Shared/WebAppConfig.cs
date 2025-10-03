@@ -9,17 +9,7 @@ namespace OOCL.Image.Shared
 {
 	public class WebAppConfig
 	{
-						/*
-						"ApiBaseUrl": "https://api.oocl.work",
-				  "DefaultDarkMode": false,
-				  "PreferredDevice": "CPU",
-				  "ImagesLimit": 0,
-				  "Kestrel": {
-					"Endpoints": {
-					  "Http": { "Url": "http://0.0.0.0:5040" },
-					  "Https": { "Url": "https://0.0.0.0:7240" }
-						*/
-
+		public string Environment { get; set; } = "UNDEFINED ENVIRONMENT";
 		public string ApplicationName { get; set; } = "Blazor WebApp using dotnet8";
 		public string? ApiBaseUrl { get; set; } = null;
 		public bool? DefaultDarkMode { get; set; } = null;
@@ -35,8 +25,9 @@ namespace OOCL.Image.Shared
 		}
 
 		[JsonConstructor]
-		public WebAppConfig(string applicationName = "Blazor WebApp using dotnet8", bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null)
+		public WebAppConfig(string environment, string applicationName = "Blazor WebApp using dotnet8", bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null)
 		{
+			this.Environment = environment;
 			this.ApplicationName = applicationName;
 			this.DefaultDarkMode = defaultDarkMode;
 			this.PreferredDevice = preferredDevice;

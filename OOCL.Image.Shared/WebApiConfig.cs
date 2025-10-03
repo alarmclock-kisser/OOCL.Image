@@ -9,6 +9,7 @@ namespace OOCL.Image.Shared
 {
 	public class WebApiConfig
 	{
+		public string Environment { get; set; } = "UNDEFINED ENVIRONMENT";
 		public string ApplicationName { get; set; } = "ASP.NET WebAPI using dotnet8";
 		public bool? SwaggerEnabled { get; set; }
 		public int? MaxUploadSizeMb { get; set; }
@@ -24,8 +25,9 @@ namespace OOCL.Image.Shared
 		}
 
 		[JsonConstructor]
-		public WebApiConfig(string applicationName, bool? swaggerEnabled, int? maxUploadSizeMb, int? imagesLimit, string? preferredDevice, bool? loadResources, bool? serverSidedData, bool? usePathBase)
+		public WebApiConfig(string environment, string applicationName, bool? swaggerEnabled, int? maxUploadSizeMb, int? imagesLimit, string? preferredDevice, bool? loadResources, bool? serverSidedData, bool? usePathBase)
 		{
+			this.Environment = environment;
 			this.ApplicationName = applicationName;
 			this.SwaggerEnabled = swaggerEnabled;
 			this.MaxUploadSizeMb = maxUploadSizeMb;

@@ -208,7 +208,7 @@ namespace OOCL.Image.Api.Controllers
 
 			try
 			{
-				var dto = await Task.Run(() => new ImageObjDto(bytesAsInts, file, contentType));
+				var dto = await ImageObjDto.FromBytesAsync(bytesAsInts.Select(b => (byte)b).ToArray(), file, contentType);
 				if (dto.Id == Guid.Empty || dto.Info.Id == Guid.Empty || string.IsNullOrEmpty(dto.Data.Base64Data))
 				{
 					return this.StatusCode(500, new ProblemDetails
@@ -218,7 +218,7 @@ namespace OOCL.Image.Api.Controllers
 						Status = 500
 					});
 				}
-				byte[] bytes = await Task.Run(() => bytesAsInts.Select(b => (byte)b).AsParallel().ToArray());
+				byte[] bytes = await Task.Run(() => bytesAsInts.Select(b => (byte)b).ToArray());
 				var obj = await Task.Run(() => ImageCollection.CreateFromData(bytes, file));
 				if (obj == null || obj.Id == Guid.Empty)
 				{

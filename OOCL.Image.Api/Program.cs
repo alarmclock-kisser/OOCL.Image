@@ -13,6 +13,9 @@ namespace OOCL.Image.Api
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
+			// Get assembly environment (appsettings used)
+			string environment = builder.Environment.EnvironmentName;
+
 			bool swaggerEnabled = builder.Configuration.GetValue("SwaggerEnabled", true);
 			int maxUploadSize = builder.Configuration.GetValue<int>("MaxUploadSizeMb", 128) * 1_000_000;
 			int imagesLimit = builder.Configuration.GetValue<int>("ImagesLimit");
@@ -21,11 +24,17 @@ namespace OOCL.Image.Api
 			bool serverSidedData = builder.Configuration.GetValue<bool>("ServerSidedData", false);
 			bool usePathBase = builder.Configuration.GetValue("UsePathBase", false);
 
+			// Refine (logic)
+			if (!serverSidedData)
+			{
+				loadResources = false;
+			}
+
 			// Get assembly name for Swagger UI
 			string appName = typeof(Program).Assembly.GetName().Name ?? "ASP.NET WebAPI (.NET8)";
 
 			// Add WebApiConfig (singleton)
-			WebApiConfig config = new(appName, swaggerEnabled, maxUploadSize / 1_000_000, imagesLimit, preferredDevice, loadResources, serverSidedData, usePathBase);
+			WebApiConfig config = new(environment, appName, swaggerEnabled, maxUploadSize / 1_000_000, imagesLimit, preferredDevice, loadResources, serverSidedData, usePathBase);
 			builder.Services.AddSingleton(config);
 
 			if (serverSidedData)

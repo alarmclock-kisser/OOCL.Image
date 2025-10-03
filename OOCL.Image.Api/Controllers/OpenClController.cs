@@ -229,11 +229,11 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 		[HttpPost("execute-on-image")]
-		[ProducesResponseType(typeof(ImageObjInfo), 200)]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteOnImageAsync([FromBody] ExecuteOnImageRequest request)
+		public async Task<ActionResult<ImageObjDto>> ExecuteOnImageAsync([FromBody] ExecuteOnImageRequest request)
 		{
 			if (!this.openClService.Initialized)
 			{
@@ -283,14 +283,14 @@ namespace OOCL.Image.Api.Controllers
 				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
 			}
 
-			return this.Ok(new ImageObjInfo(result));
+			return this.Ok(new ImageObjDto(result));
 		}
 
 		[HttpPost("execute-create-image")]
-		[ProducesResponseType(typeof(ImageObjInfo), 200)]
+		[ProducesResponseType(typeof(ImageObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<ImageObjInfo>> ExecuteCreateImageAsync([FromBody] CreateImageRequest request)
+		public async Task<ActionResult<ImageObjDto>> ExecuteCreateImageAsync([FromBody] CreateImageRequest request)
 		{
 			if (!this.openClService.Initialized)
 			{
@@ -302,22 +302,36 @@ namespace OOCL.Image.Api.Controllers
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Invalid dimensions" });
 			}
 
-			var args = request.Arguments ?? new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+			var args = request.Arguments ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 			args["width"] = request.Width.ToString();
 			args["height"] = request.Height.ToString();
 
 			var result = await this.openClService.ExecuteCreateImage(request.Width, request.Height, request.KernelName, request.BaseColorHex, args);
 			if (result == null)
 			{
+				Console.WriteLine("OpenCL returned null image!");
 				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
 			}
 
-			if (!this.imageCollection.Add(result))
+			if (this.imageCollection.ServerSidedData)
 			{
-				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+
+				if (!this.imageCollection.Add(result))
+				{
+					Console.WriteLine("Failed to add result to collection, still returning result DTO");
+					// return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+					return this.Ok(new ImageObjDto(result));
+				}
 			}
 
-			return this.Ok(new ImageObjInfo(result));
+			// Dummy creation
+			var dummy = new ImageObj(100, 100, "#ff0000");
+			var dto = new ImageObjDto(dummy);
+			Console.WriteLine($"Dummy DTO: {dto.Data?.Width}x{dto.Data?.Height}");
+
+			Console.WriteLine($"Result: {result?.Id} {result?.Width}x{result?.Height} Name={result?.Name}");
+
+			return this.Ok(new ImageObjDto(result));
 		}
 	}
 }

@@ -91,7 +91,7 @@ namespace OOCL.Image.Client
 			else
 			{
 				var data = await new StreamContent(file.Data).ReadAsByteArrayAsync();
-				var ints = data.Select(b => (int)b).AsParallel().ToArray();
+				var ints = data.Select(b => (int)b).ToArray();
 				var dto = await this.internalClient.CreateImageFromDataAsync(ints, file.FileName, file.ContentType, false);
 				
 				return dto ?? new ImageObjDto();
@@ -277,7 +277,7 @@ namespace OOCL.Image.Client
 
 
 
-		public async Task<ImageObjInfo> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argValues, ImageObjDto? optionalImageObjDto = null)
+		public async Task<ImageObjDto> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argValues, ImageObjDto? optionalImageObjDto = null)
 		{
 			try
 			{
@@ -302,11 +302,11 @@ namespace OOCL.Image.Client
 			catch (Exception ex)
 			{
 				Console.WriteLine(ex);
-				return new ImageObjInfo();
+				return new ImageObjDto();
 			}
 		}
 
-		public async Task<ImageObjInfo> ExecuteCreateImageAsync(int width, int height, string kernelName, string baseColorHex, string[] argNames, string[] argValues)
+		public async Task<ImageObjDto> ExecuteCreateImageAsync(int width, int height, string kernelName, string baseColorHex, string[] argNames, string[] argValues)
 		{
 			try
 			{
@@ -316,10 +316,16 @@ namespace OOCL.Image.Client
 				request.Height = height;
 				request.KernelName = kernelName;
 				request.Arguments = [];
-				if (!string.IsNullOrWhiteSpace(baseColorHex) && Regex.IsMatch(baseColorHex, "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"))
+				/*if (!string.IsNullOrWhiteSpace(baseColorHex) && Regex.IsMatch(baseColorHex, "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"))
 				{
-					request.Arguments["baseColor"] = baseColorHex;
-				}
+					string red, green, blue, alpha;
+					red = Convert.ToInt32(baseColorHex.Substring(1, 2), 16).ToString();
+					green = Convert.ToInt32(baseColorHex.Substring(3, 2), 16).ToString();
+					blue = Convert.ToInt32(baseColorHex.Substring(5, 2), 16).ToString();
+					alpha = baseColorHex.Length == 9 ? Convert.ToInt32(baseColorHex.Substring(7, 2), 16).ToString() : "255";
+
+					// Try find index of match in argNames
+				}*/
 				for (int i = 0; i < argNames.Length && i < argValues.Length; i++)
 				{
 					if (!string.IsNullOrWhiteSpace(argNames[i]) && !string.IsNullOrWhiteSpace(argValues[i]))
@@ -333,7 +339,7 @@ namespace OOCL.Image.Client
 			catch (Exception ex)
 			{
 				Console.WriteLine(ex);
-				return new ImageObjInfo();
+				return new ImageObjDto();
 			}
 		}
 

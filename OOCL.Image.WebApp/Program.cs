@@ -12,6 +12,9 @@ namespace OOCL.Image.WebApp
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
+			// Get assembly environment (appsettings used)
+			string environment = builder.Environment.EnvironmentName;
+
 			// Api Base URL aus Konfiguration (roh)
 			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"];
 
@@ -32,7 +35,7 @@ namespace OOCL.Image.WebApp
 
 			// Add config objs (singleton)
 			builder.Services.AddSingleton(new ApiUrlConfig(normalizedBase));
-			WebAppConfig config = new(appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, httpKestrel, httpsKestrel);
+			WebAppConfig config = new(environment, appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, httpKestrel, httpsKestrel);
 			builder.Services.AddSingleton(config);
 
 			builder.Services.AddRazorPages();

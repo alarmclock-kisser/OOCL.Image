@@ -40,7 +40,7 @@ namespace OOCL.Image.WebApp.Pages
         }
 
 		// --- If no server sided data provided, use internal dto list of images ---
-        public IEnumerable<ImageObjDto> ClientImageCollection { get; set; } = [];
+        public List<ImageObjDto> ClientImageCollection { get; set; } = [];
 
         // --- WebAppConfig text ---
         private JsonSerializerOptions jsonSerializerOptions = new() { WriteIndented = true };
@@ -246,7 +246,7 @@ namespace OOCL.Image.WebApp.Pages
 			if (this.useExistingImage)
 			{
 				var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
-				UpdateWidthHeightFromImage(info);
+				this.UpdateWidthHeightFromImage(info);
 			}
 		}
 
@@ -328,17 +328,25 @@ namespace OOCL.Image.WebApp.Pages
             }
             else
             {
-                // Client sided data
-                var dto = this.ClientImageCollection.FirstOrDefault(d => d.Info.Id == id);
-                if (dto == null || dto.Data == null || string.IsNullOrEmpty(dto.Data.Base64Data))
-                {
-                    return;
-                }
+				// Client sided data
+				var dto = this.ClientImageCollection.FirstOrDefault(d => d.Info.Id == id);
 
-                var base64Data = dto.Data.Base64Data;
-                var mimeType = dto.Data.MimeType;
-                var fileName = $"image_{id.ToString().Substring(0, 8)}.{format}";
-                await this.JS.InvokeVoidAsync("downloadFileFromBase64", fileName, mimeType, base64Data);
+				if (dto == null || dto.Data == null || string.IsNullOrEmpty(dto.Data.Base64Data))
+				{
+					return;
+				}
+
+				var base64Data = dto.Data.Base64Data;
+				var mimeType = dto.Data.MimeType;
+				var fileName = $"image_{id.ToString().Substring(0, 8)}.{format}";
+
+				// **KORREKTUR: Erstellen des vollständigen Data-URI-Strings**
+				// Struktur: data:[MIME-Type];base64,[Base64-Daten]
+				string dataUri = $"data:{mimeType};base64,{base64Data}";
+
+				// Übergeben Sie den Data-URI-String an die JS-Funktion
+				// Wir vereinfachen die JS-Übergabe, indem wir nur den URI und den Dateinamen senden
+				await this.JS.InvokeVoidAsync("downloadFileFromDataUri", fileName, dataUri);
 			}
         }
 
@@ -412,7 +420,7 @@ namespace OOCL.Image.WebApp.Pages
                 }
                 else
                 {
-                    ImageObjDto dto = await Task.Run(() => new ImageObjDto(bytes.Select(b => (int) b).AsParallel().AsEnumerable(), file.Name, file.ContentType));
+                    ImageObjDto dto = await ImageObjDto.FromBytesAsync(bytes, file.Name, file.ContentType);
 
 					// Client sided upload
 					var list = this.ClientImageCollection.ToList();
@@ -529,7 +537,7 @@ namespace OOCL.Image.WebApp.Pages
             if (this.useExistingImage)
             {
                 var info = this.images.FirstOrDefault(i => i.Id == this.selectedImageId);
-                UpdateWidthHeightFromImage(info);
+				this.UpdateWidthHeightFromImage(info);
             }
             await Task.CompletedTask;
 		}
@@ -794,7 +802,7 @@ namespace OOCL.Image.WebApp.Pages
             }
         }
 
-        public async Task<ImageObjInfo?> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argVals)
+        public async Task<ImageObjDto?> ExecuteGenericImageKernel(Guid id, string kernelName, string[] argNames, string[] argVals)
         {
             try
             {
@@ -804,7 +812,7 @@ namespace OOCL.Image.WebApp.Pages
             catch { return null; }
         }
 
-        public async Task<ImageObjInfo?> ExecuteCreateImageAsync(int width, int height, string kernelName, string baseColorHex, string[] argNames, string[] argVals)
+        public async Task<ImageObjDto?> ExecuteCreateImageAsync(int width, int height, string kernelName, string baseColorHex, string[] argNames, string[] argVals)
         {
             try
             {
@@ -1309,14 +1317,14 @@ namespace OOCL.Image.WebApp.Pages
         {
             if (this.useExistingImage)
             {
-                UpdateWidthHeightFromImage(currentImageInfo);
+				this.UpdateWidthHeightFromImage(currentImageInfo);
             }
             else
             {
                 // Beim Umschalten auf "neues Bild" bisherige Default-Werte beibehalten oder falls 0 -> Standard
                 foreach (var a in this.kernelArgViewModels)
                 {
-                    if (IsWidthOrHeight(a) && a.Value <= 0)
+                    if (this.IsWidthOrHeight(a) && a.Value <= 0)
                     {
                         var lname = a.Name.ToLower();
                         if (lname.Contains("width")) a.Value = 720;
@@ -1364,67 +1372,34 @@ namespace OOCL.Image.WebApp.Pages
 		// Füge diese Methode zu deinem @code-Block oder ViewModel hinzu
 		public MarkupString FormatGuidForDisplay(Guid id)
 		{
-			// Die Standard-GUID-Segmente sind: 8-4-4-4-12
-			string[] segments = id.ToString("D").Split('-'); // z.B. ["b9888563", "e203", "4b77", "9c0d", "7051a9d1ac06"]
+			string[] segments = id.ToString("D").Split('-');
 
-			// Wir bauen den formatierten String hier auf
 			var sb = new System.Text.StringBuilder();
 
-			// Die Segmente, die wir in der aktuellen Zeile sammeln
 			string currentLine = "";
-
-			// Die maximale Länge (ohne Bindestriche), die wir in einer Zeile erlauben
 			const int MaxLineLength = 10;
 
 			for (int i = 0; i < segments.Length; i++)
 			{
 				string segment = segments[i];
-
-				// 1. Prüfe, ob das aktuelle Segment und die bereits gesammelte Zeile das Limit überschreiten
-				// Wir prüfen, ob das Hinzufügen des nächsten Segments (inkl. Bindestrich) das Limit überschreitet.
 				if (currentLine.Length > 0 && (currentLine.Length + 1 + segment.Length) > MaxLineLength)
 				{
-					// Die Zeile ist zu lang für das nächste Segment, also Zeilenumbruch einfügen
 					sb.Append("<br>");
-					currentLine = ""; // Starte eine neue Zeile
+					currentLine = "";
 				}
 
-				// 2. Füge das Segment zur Zeile hinzu
 				if (currentLine.Length > 0)
 				{
-					currentLine += "-"; // Füge Bindestrich vor dem Segment hinzu
+					currentLine += "-"; 
 				}
 				currentLine += segment;
-
-				// 3. Füge den aktuellen gesammelten Teil zum StringBuilder hinzu
-				// Wir fügen nur dann den Zeilenumbruch HINTER dem Segment hinzu, 
-				// wenn es das letzte Segment ist ODER die Zeile ihr Limit erreicht hat (was oben behandelt wird).
-
-				// Da wir das Segment bereits in 'currentLine' haben, können wir es direkt in den SB schreiben
-				// und danach 'currentLine' leeren und ggf. einen <br> setzen, WENN die Zeile lang genug ist.
-
-				// Da die Logik oben kompliziert wird, wenn man versucht VORAUSZUSCHAUEN, vereinfachen wir:
-				// Füge das Segment (ggf. mit Bindestrich) zum StringBuilder hinzu
 
 				if (i > 0)
 				{
 					sb.Append('-');
 				}
 				sb.Append(segment);
-
-				// WICHTIGE ENTSCHEIDUNG: Zeilenumbruch setzen?
-				// Setze einen Umbruch, wenn:
-				// a) Es ist NICHT das letzte Segment, ODER
-				// b) Das Segment lang ist (z.B. 8 Zeichen), ODER
-				// c) Das nächste Segment (falls vorhanden) nicht mehr in die Zeile passen würde.
-
-				// Die einfachste und robusteste Logik für das "Zusammenfügen kurzer Segmente" ist:
-				// Hänge das nächste Segment an, solange die Gesamtlänge <= 10 ist.
-
-				// Wir resetten den StringBuilder und bauen es neu auf, um die Logik zu vereinfachen:
 			}
-
-			// --- NEUE VEREINFACHTE LOGIK ---
 
 			var finalSb = new System.Text.StringBuilder();
 			string currentLineSegments = "";
@@ -1433,84 +1408,39 @@ namespace OOCL.Image.WebApp.Pages
 			{
 				string segment = segments[i];
 				string nextSegmentSeparator = (i < segments.Length - 1) ? "-" : "";
-
-				// Prüfe die Länge, wenn das nächste Segment hinzugefügt wird (currentLineSegments + '-' + segment)
-				// (Länge des aktuellen Segments + Länge des nächsten Segments + Bindestrich)
 				int newLength = currentLineSegments.Length + segment.Length;
 				if (currentLineSegments.Length > 0)
 				{
-					newLength++; // Zähle den Bindestrich
+					newLength++;
 				}
 
-				// Wenn die neue Zeile das Limit überschreitet (oder es das erste Segment ist, das schon zu lang ist)
 				if (newLength > MaxLineLength && currentLineSegments.Length > 0)
 				{
-					// Wenn die aktuelle Zeile schon was hat UND das neue Segment nicht passt -> Umbruch VOR dem neuen Segment.
 					finalSb.Append("<br>");
 					finalSb.Append(segment);
-					currentLineSegments = segment; // Starte neue Zeile nur mit diesem Segment
+					currentLineSegments = segment;
 				}
 				else if (currentLineSegments.Length > 0)
 				{
-					// Hänge an die aktuelle Zeile an, da es passt
 					finalSb.Append('-');
 					finalSb.Append(segment);
 					currentLineSegments += ("-" + segment);
 				}
 				else
 				{
-					// Erste Segment in der aktuellen Zeile
 					finalSb.Append(segment);
 					currentLineSegments = segment;
-				}
-
-				// Nach dem 4. Segment (Index 3) ist es oft sinnvoll, einen Umbruch zu erzwingen, 
-				// auch wenn es kurz ist, da der Rest (12 Zeichen) lang ist. 
+				} 
 				if (i == 3 && i != segments.Length - 1)
 				{
 					finalSb.Append("<br>-");
-					currentLineSegments = ""; // Muss im nächsten Durchlauf als 4-Segment starten
+					currentLineSegments = "";
 				}
 			}
-
-			// Da die 8-4-4-4-12 Struktur fest ist, ist die Logik einfacher.
-			// Wir schauen nur auf die 4er Segmente!
-
-			// Beispiel: 8 (Länge 8) - 4 (Länge 4) - 4 (Länge 4) - 4 (Länge 4) - 12 (Länge 12)
 
 			return (MarkupString) finalSb.ToString();
 		}
 
-		public MarkupString FormatGuidForDisplaySimple(Guid id)
-		{
-			// Struktur: {A}8-{B}4-{C}4-{D}4-{E}12
-			string fullId = id.ToString("D");
-			string[] segments = fullId.Split('-');
-
-			if (segments.Length != 5) return (MarkupString) fullId; // Fehlerfall
-
-			var sb = new System.Text.StringBuilder();
-
-			// 1. Segment (8 Zeichen)
-			sb.Append(segments[0]);
-			sb.Append("<br>-"); // Immer Umbruch nach dem ersten Segment
-
-			// 2. und 3. Segment (4-4 = 9 Zeichen gesamt)
-			// Hier fügen wir sie zusammen:
-			sb.Append(segments[1]);
-			sb.Append('-');
-			sb.Append(segments[2]);
-			sb.Append("<br>-"); // Immer Umbruch nach dem dritten Segment
-
-			// 4. Segment (4 Zeichen)
-			sb.Append(segments[3]);
-			sb.Append("<br>-"); // Immer Umbruch nach dem vierten Segment
-
-			// 5. Segment (12 Zeichen)
-			sb.Append(segments[4]);
-
-			return (MarkupString) sb.ToString();
-		}
 	}
 }
 

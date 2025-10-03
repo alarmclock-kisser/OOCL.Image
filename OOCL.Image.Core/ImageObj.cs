@@ -11,7 +11,7 @@ namespace OOCL.Image.Core
 		public Guid Id { get; private set; }
 		public DateTime CreatedAt { get; private set; } = DateTime.Now;
 
-		public string Filepath { get; set; } = string.Empty;
+		public string FilePath { get; set; } = string.Empty;
 		public string Name { get; set; } = string.Empty;
 
 		public Image<Rgba32>? Img { get; set; } = null;
@@ -50,7 +50,7 @@ namespace OOCL.Image.Core
 		public ImageObj(string filePath)
 		{
 			this.Id = Guid.NewGuid();
-			this.Filepath = filePath;
+			this.FilePath = filePath;
 			this.Name = Path.GetFileNameWithoutExtension(filePath);
 
 			try
@@ -81,7 +81,7 @@ namespace OOCL.Image.Core
 			this.Channels = 4;
 			this.Bitdepth = 32;
 
-			this.Filepath = string.Empty;
+			this.FilePath = string.Empty;
 			this.ScalingFactor = 1.0f;
 			try
 			{
@@ -100,7 +100,7 @@ namespace OOCL.Image.Core
 		{
 			this.Id = Guid.NewGuid();
 			this.Name = name;
-			this.Filepath = string.Empty;
+			this.FilePath = string.Empty;
 			if (image == null)
 			{
 				throw new ArgumentNullException(nameof(image), "Provided image is null.");
@@ -124,7 +124,7 @@ namespace OOCL.Image.Core
 		{
 			this.Id = Guid.NewGuid();
 			this.Name = name;
-			this.Filepath = string.Empty;
+			this.FilePath = string.Empty;
 
 			try
 			{
