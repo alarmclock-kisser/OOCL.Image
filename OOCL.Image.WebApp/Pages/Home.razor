@@ -183,14 +183,14 @@
             <div style="flex:0 0 auto;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                     <div style="display:flex;align-items:center;gap:6px;">
-                        <label style="font-size:0.9em;margin-right:4px;">Unit: </label>
+                        <label style="font-size:0.9em;margin-right:4px;">Max Keep: </label>
                         <RadzenNumeric TValue="int"
                                        @bind-Value="VM.MaxImagesToKeepNumeric"
                                        Min="@(VM.GetMaxImagesConfig() > 0 ? 1 : 0)"
                                        Max="@(VM.GetMaxImagesConfig() > 0 ? VM.GetMaxImagesConfig() : int.MaxValue)"
                                        Change="@OnMaxImagesChanged"
                                        Style="width:90px;" />
-                        <label style="font-size:0.9em;margin-right:4px;">Max keep:</label>
+                        <label style="font-size:0.9em;margin-right:4px;">Unit: </label>
                         <RadzenDropDown Data="@VM.Magnitudes" @bind-Value="VM.SelectedMagnitude" Change="@(args => { VM.UpdateMagnitudeFactor(); StateHasChanged(); })" Style="width:90px;" />
                     </div>
                 </div>
@@ -493,7 +493,7 @@
         decimal previous = arg.Value;
         if (!VM.useExistingImage && IsWidthOrHeight(arg))
         {
-            v = VM.SnapDimensionNearest(arg.Name, v);
+            v = VM.SnapDimensionValue(arg.Name, previous, v);
         }
         arg.Value = v;
         StateHasChanged();
