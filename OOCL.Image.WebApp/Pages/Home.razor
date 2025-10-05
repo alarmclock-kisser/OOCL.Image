@@ -42,7 +42,7 @@
                 <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;">
                     <!-- Device Selection -->
                     <div style="flex:1 1 260px;min-width:250px;border:1px solid var(--rz-border-color,#333);border-radius:4px;padding:10px;">
-                        <h4 style="margin:0 0 6px;font-size:0.95rem;">Geräteauswahl</h4>
+                        <h4 style="margin:0 0 6px;font-size:0.95rem;">Device selection</h4>
                         <RadzenDropDown TValue="int"
                                         Data="@devices"
                                         @bind-Value="selectedDeviceIndex"
@@ -72,7 +72,7 @@
 
                     <!-- Actions -->
                     <div style="flex:1 1 260px;min-width:250px;border:1px solid var(--rz-border-color,#333);border-radius:4px;padding:10px;display:flex;flex-direction:column;gap:8px;">
-                        <h4 style="margin:0 0 4px;font-size:0.95rem;">Aktionen</h4>
+                        <h4 style="margin:0 0 4px;font-size:0.95rem;">Actions</h4>
                         <div style="display:flex;flex-wrap:wrap;gap:6px;">
                             <RadzenButton Icon="play_arrow" Text="Initialize" Click="@InitializeDevice" />
                             <RadzenButton Icon="close" Text="Dispose" ButtonStyle="ButtonStyle.Danger" Click="@ReleaseDevice" />
@@ -287,7 +287,7 @@
     private string GetDeviceSummary()
         => openClServiceInfo?.Initialized == true
             ? $"{openClServiceInfo.DeviceName} [{openClServiceInfo.DeviceId}]"
-            : "kein gerät initialisiert";
+            : "No OpenCL-Device initialized.";
 
     private string GetConfigSummary()
         => $"API: {Config.ApiBaseUrl}, PreferredDevice: '{Config.PreferredDevice}', ImageLimit: {Config.ImagesLimit}";
@@ -493,7 +493,7 @@
         decimal previous = arg.Value;
         if (!VM.useExistingImage && IsWidthOrHeight(arg))
         {
-            v = VM.SnapDimensionValue(arg.Name, previous, v);
+            v = VM.SnapDimensionNearest(arg.Name, v);
         }
         arg.Value = v;
         StateHasChanged();

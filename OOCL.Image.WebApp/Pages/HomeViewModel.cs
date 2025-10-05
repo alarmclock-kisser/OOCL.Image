@@ -1432,6 +1432,25 @@ namespace OOCL.Image.WebApp.Pages
 			}
         }
 
+		public decimal SnapDimensionNearest(string name, decimal requested)
+		{
+			var steps = GetDimensionSteps(name);
+			if (steps == null || steps.Length == 0)
+				return requested;
+			decimal best = steps[0];
+			decimal bestDiff = Math.Abs(best - requested);
+			foreach (var s in steps)
+			{
+				var diff = Math.Abs(s - requested);
+				if (diff < bestDiff)
+				{
+					best = s;
+					bestDiff = diff;
+				}
+			}
+			return best;
+		}
+
 		// Füge diese Methode zu deinem @code-Block oder ViewModel hinzu
 		public MarkupString FormatGuidForDisplay(Guid id)
 		{
