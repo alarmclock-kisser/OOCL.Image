@@ -103,6 +103,8 @@ namespace OOCL.Image.WebApp
 			}
 
 			app.UseHttpsRedirection();
+
+
 			app.UseStaticFiles();
 			app.UseRouting();
 			app.UseAntiforgery();

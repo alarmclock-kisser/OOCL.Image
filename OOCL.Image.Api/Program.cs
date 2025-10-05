@@ -71,7 +71,7 @@ namespace OOCL.Image.Api
 					policy.WithOrigins(
 						"https://api.oocl.work",
 						"http://api.oocl.work",
-						"https://localhost:7220",
+						"https://localhost:7240",
 						"http://localhost:5019"
 					)
 					.AllowAnyHeader()

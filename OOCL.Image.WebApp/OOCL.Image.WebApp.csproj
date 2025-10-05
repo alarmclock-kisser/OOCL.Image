@@ -15,4 +15,8 @@
     <ProjectReference Include="..\OOCL.Image.Shared\OOCL.Image.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="wwwroot\_content\" />
+  </ItemGroup>
+
 </Project>
