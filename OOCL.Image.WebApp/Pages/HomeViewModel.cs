@@ -404,24 +404,87 @@ namespace OOCL.Image.WebApp.Pages
 
         public bool GifDoLoop { get; set; } = true;
         public int GifFrameRate { get; set; } = 10;
-        public decimal GifRescaleFactor { get; set; } = 1.0m;
+        public double GifRescaleFactor { get; set; } = 1.0;
 		public async Task DownloadCreateGif()
-        {
-            FileResponse? file = null;
-            if (await this.Api.IsServersidedDataAsync())
-            {
-                // Server sided data
-                file = await this.Api.DownloadAsGif(null, null, this.GifFrameRate, (double)this.GifRescaleFactor, this.GifDoLoop);
-            }
-            else
-            {
-                // Client sided data
-                file = await this.Api.DownloadAsGif(null, this.ClientImageCollection.ToArray(), this.GifFrameRate, (double) this.GifRescaleFactor, this.GifDoLoop);
-            }
+		{
+			try
+			{
+				bool isServer = await this.Api.IsServersidedDataAsync();
 
-            if (file == null || file.Stream == null || file.Stream.Length == 0)
-            {
-                return;
+				Guid[]? ids = null;
+				ImageObjDto[]? dtos = null;
+
+				if (isServer)
+				{
+					// Alle vorhandenen Bilder (oder optional nur eine Auswahl) in zeitlicher Reihenfolge
+					ids = this.images
+						.OrderBy(i => i.CreatedAt)
+						.Select(i => i.Id)
+						.ToArray();
+				}
+				else
+				{
+					// Nur DTOs mit gültigen Bilddaten
+					dtos = this.ClientImageCollection
+						.Where(d => d?.Data != null && !string.IsNullOrEmpty(d.Data.Base64Data))
+						.OrderBy(d => d.Info.CreatedAt)
+						.ToArray();
+				}
+
+				if ((ids == null || ids.Length == 0) && (dtos == null || dtos.Length == 0))
+				{
+					this.Notifications.Notify(new NotificationMessage
+					{
+						Severity = NotificationSeverity.Warning,
+						Summary = "No frames giveon for GIF-creation",
+						Detail = "No images have been found for creating a gif animation.",
+						Duration = 3000
+					});
+					return;
+				}
+
+				var file = await this.Api.DownloadAsGif(ids, dtos, this.GifFrameRate, this.GifRescaleFactor, this.GifDoLoop);
+
+				if (file == null || file.Stream == null || file.Stream.Length == 0)
+				{
+					this.Notifications.Notify(new NotificationMessage
+					{
+						Severity = NotificationSeverity.Error,
+						Summary = "GIF-creation failed.",
+						Duration = 4000
+					});
+					return;
+				}
+
+				// Stream in Base64 konvertieren und Download triggern
+				using var ms = new MemoryStream();
+				await file.Stream.CopyToAsync(ms);
+				var bytes = ms.ToArray();
+				var base64 = Convert.ToBase64String(bytes);
+
+				string mime = "image/gif";
+				string filename = $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{(isServer ? "srv" : "client")}.gif";
+
+				await this.JS.InvokeVoidAsync("eval",
+					$"(function(){{var a=document.createElement('a');a.href='data:{mime};base64,{base64}';a.download='{filename}';document.body.appendChild(a);a.click();document.body.removeChild(a);}})();");
+
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Success,
+					Summary = "GIF created",
+					Detail = $"{(ids?.Length ?? dtos?.Length ?? 0)} Frames, Rate {this.GifFrameRate} fps, Scale {this.GifRescaleFactor:F2}",
+					Duration = 3500
+				});
+			}
+			catch (Exception ex)
+			{
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Error,
+					Summary = "GIF Error",
+					Detail = ex.Message,
+					Duration = 5000
+				});
 			}
 		}
 

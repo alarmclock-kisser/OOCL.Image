@@ -231,11 +231,11 @@
             </div>
             <div>
                 <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
-                <RadzenButton Icon="gif" Text="Download GIF" Click="@(async () => await VM.DownloadCreateGif())" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
+                <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
                 <label style="font-size:0.9em;margin-right:4px;">FrameRate:</label>
-                <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min="1" Max="60" Style="width:80px;" />
+                <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min=1 Max=60 Style="width:80px;" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Rescale:</label>
-                <RadzenNumeric TValue="decimal" @bind-Value="VM.GifRescaleFactor" Min="0.1m" Max="10m" Step="0.1m" Style="width:80px;" />
+                <RadzenNumeric TValue="double" @bind-Value="VM.GifRescaleFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
                 <RadzenCheckBox @bind-Value="VM.GifDoLoop" TValue="bool" Style="margin-top:8px;" />
             </div>
@@ -289,6 +289,10 @@
     private bool isKernelInfoExpanded = false;
     private bool isDeviceSectionExpanded = false;
     private bool isConfigInfoSectionExpanded = false;
+
+    private decimal GifRescaleMin => 0.1m;
+    private decimal GifRescaleMax => 5.0m;
+    private decimal GifRescaleStep => 0.1m;
 
     private void ToggleKernelInfo() => isKernelInfoExpanded = !isKernelInfoExpanded;
     private void ToggleDeviceSection() => isDeviceSectionExpanded = !isDeviceSectionExpanded;
@@ -390,6 +394,11 @@
             $"(function(){{var a=document.createElement('a');a.href='data:{mime};base64,{base64}';a.download='{filename}';document.body.appendChild(a);a.click();document.body.removeChild(a);}})();");
         Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Download gestartet", Duration = 2000 });
     }
+    private async Task DownloadGif()
+    {
+        await VM.DownloadCreateGif();
+    }
+
 
     private async Task RemoveImage() { await VM.RemoveImage(selectedImageId); await VM.LoadImages(); await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Image removed", Duration = 2000 }); }
     private async Task ClearImages() { await VM.ClearImages(); await VM.LoadImages(); await VM.SetMaxImagesAsync(VM.MaxImagesToKeepNumeric); Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "All images removed", Duration = 2000 }); }

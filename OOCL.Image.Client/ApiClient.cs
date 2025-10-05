@@ -187,7 +187,7 @@ namespace OOCL.Image.Client
 					return null;
 				}
 				
-				return await this.internalClient.CreateGifAsync(ids, dtos, frameRate, rescaleFactor, doLoop);
+				return await this.internalClient.CreateGifAsync(ids ?? [], dtos ?? [], frameRate, rescaleFactor, doLoop);
 			}
 			catch (Exception ex)
 			{

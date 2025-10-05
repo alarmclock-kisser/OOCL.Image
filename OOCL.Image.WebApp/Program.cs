@@ -72,6 +72,12 @@ namespace OOCL.Image.WebApp
 
 			builder.Services.AddSignalR(o => o.MaximumReceiveMessageSize = 1024 * 1024 * 128);
 
+			builder.Services.AddServerSideBlazor(options =>
+			{
+				// Zeigt detaillierte Fehler in der Konsole/im Browser an
+				options.DetailedErrors = true;
+			});
+
 			var app = builder.Build();
 
 			app.Logger.LogInformation("WebApp Startup: ENV={Env}; RawBase={Raw}; Normalized={Norm}; EffectiveBase={Eff}",
