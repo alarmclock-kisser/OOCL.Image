@@ -124,10 +124,10 @@ namespace OOCL.Image.WebApp.Pages
 
         public bool RandomizeRgb { get; set; } = false;
 
-		private Dictionary<string, decimal> defaultArgValues = new()
+		private Dictionary<string, decimal> defaultArgValues => new()
 		{
-	            { "width", 720.0m },
-	            { "height", 480.0m },
+	            { "width", this.lastWidthValue },
+	            { "height", this.lastHeightValue },
 				{ "zoom", 1.0m },
 				{ "iter", 8.0m },
 				{ "coef", 8.0m },
@@ -516,6 +516,7 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
+
 		public void OnKernelChanged(object value)
         {
 			this.selectedKernelName = value?.ToString() ?? string.Empty;
@@ -575,12 +576,12 @@ namespace OOCL.Image.WebApp.Pages
                         {
                             if (lname2.Contains("width") && arg.Value == 0)
 							{
-								arg.Value = 720;
+								arg.Value = this.lastWidthValue;
 							}
 
 							if (lname2.Contains("height") && arg.Value == 0)
 							{
-								arg.Value = 480;
+								arg.Value = this.lastHeightValue;
 							}
 						}
                     }
@@ -869,6 +870,12 @@ namespace OOCL.Image.WebApp.Pages
                     id = Guid.Empty;
 				}
 
+				// If randomizeColors is set, and color args exist, randomize them now
+                if (this.RandomizeRgb && this.selectedKernelInfo?.ColorInputArgNames != null)
+                {
+                    this.RandomizeColor();
+				}
+
 				return await this.Api.ExecuteGenericImageKernel(id, kernelName, argNames, argVals, optionalImageDto);
             }
             catch { return null; }
@@ -882,6 +889,13 @@ namespace OOCL.Image.WebApp.Pages
                 return await this.Api.ExecuteCreateImageAsync(width, height, kernelName, baseColorHex, argNames, argVals);
             }
             catch { return null; }
+            finally
+            {
+                if (this.RandomizeRgb && this.selectedKernelInfo?.ColorInputArgNames != null)
+                {
+                    this.RandomizeColor();
+				}
+            }
         }
 
         public void BuildKernelInfoText()
@@ -929,7 +943,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (t.Contains("single") || t.Contains("float"))
 			{
-				return 0.05m; // changed to 0.1 for floats
+				return 0.1m; // changed to 0.1 for floats
 			}
 
 			if (t.Contains("double"))
@@ -1268,7 +1282,7 @@ namespace OOCL.Image.WebApp.Pages
                     if (value > 0)
                     {
                         this.ClientImageCollection = this.ClientImageCollection
-                            .OrderBy(i => i.Info.CreatedAt)
+                            .OrderByDescending(i => i.Info.CreatedAt)
                             .Take(value)
                             .ToList();
                     }
@@ -1398,12 +1412,12 @@ namespace OOCL.Image.WebApp.Pages
                         var lname = a.Name.ToLower();
                         if (lname.Contains("width"))
 						{
-							a.Value = 720;
+							a.Value = this.lastWidthValue;
 						}
 
 						if (lname.Contains("height"))
 						{
-							a.Value = 480;
+							a.Value = this.lastHeightValue;
 						}
 					}
                 }
@@ -1411,53 +1425,9 @@ namespace OOCL.Image.WebApp.Pages
         }
 
 		// NEU: Snap für Dimensionen (Auflösungsschritte)
-		private decimal lastWidthValue = 0m; // optional falls später gebraucht
-        private decimal lastHeightValue = 0m; // optional falls später gebraucht
-		public decimal SnapDimensionValue(string name, decimal previous, decimal requested)
-		{
-			var steps = GetDimensionSteps(name);
-			if (steps == null || steps.Length == 0)
-				return requested;
-
-			if (previous <= 0)
-				return steps[0];
-
-			// Key normalisieren (nur "width" oder "height" speichern)
-			string key = name.ToLowerInvariant().Contains("width")
-				? "width"
-				: name.ToLowerInvariant().Contains("height")
-					? "height"
-					: name.ToLowerInvariant();
-
-			decimal delta = requested - previous;
-            int dir;
-            if (delta > 0.0001m) dir = 1;
-            else if (delta < -0.0001m) dir = -1;
-            else dir = 0; // kein sichtbares Delta -> alte Richtung
-
-            if (dir == 0)
-                dir = 1; // Default: hoch
-
-            // Aktuellen Step-Index bestimmen (größter Step <= previous)
-            int idx = 0;
-            for (int i = 0; i < steps.Length; i++)
-            {
-                if (steps[i] <= previous) idx = i; else break;
-            }
-
-            decimal result;
-            if (dir > 0)
-            {
-                result = (idx < steps.Length - 1) ? steps[idx + 1] : steps[^1];
-            }
-            else
-            {
-                result = (idx > 0) ? steps[idx - 1] : steps[0];
-            }
-
-            return result;
-		}
-
+		private decimal lastWidthValue = 720.0m; // optional falls später gebraucht
+        private decimal lastHeightValue = 480.0m; // optional falls später gebraucht
+		
 		public decimal SnapDimensionNearest(string name, decimal requested)
 		{
 			var steps = GetDimensionSteps(name);
@@ -1505,42 +1475,20 @@ namespace OOCL.Image.WebApp.Pages
                 }
 			}
 
+			// Update last values
+            var lname = name.ToLower();
+            if (lname.Contains("width"))
+            {
+                this.lastWidthValue = best;
+            }
+            else if (lname.Contains("height"))
+            {
+                this.lastHeightValue = best;
+			}
+
 			return best;
 		}
 
-        public decimal SnapDimensionUp(string name, decimal requested)
-        {
-            var steps = GetDimensionSteps(name);
-            if (steps == null || steps.Length == 0)
-            {
-                return requested;
-            }
-            for (int i = 0; i < steps.Length; i++)
-            {
-                if (steps[i] > requested)
-                {
-                    return steps[i];
-                }
-            }
-            return steps[^1];
-		}
-
-        public decimal SnapDimensionDown(string name, decimal requested)
-        {
-            var steps = GetDimensionSteps(name);
-            if (steps == null || steps.Length == 0)
-            {
-                return requested;
-            }
-            for (int i = steps.Length - 1; i >= 0; i--)
-            {
-                if (steps[i] < requested)
-                {
-                    return steps[i];
-                }
-            }
-            return steps[0];
-		}
 
 		// Füge diese Methode zu deinem @code-Block oder ViewModel hinzu
 		public MarkupString FormatGuidForDisplay(Guid id)
