@@ -493,7 +493,9 @@
         decimal previous = arg.Value;
         if (!VM.useExistingImage && IsWidthOrHeight(arg))
         {
-            v = VM.SnapDimensionValue(arg.Name, previous, v);
+            v = VM.SnapDimensionNearest(arg.Name, v);
+
+            if (v < 1) v = 1;
         }
         arg.Value = v;
         StateHasChanged();

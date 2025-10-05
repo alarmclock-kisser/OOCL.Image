@@ -16,7 +16,9 @@ namespace OOCL.Image.WebApp
 			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"]; // erwartet: https://api.oocl.work/api
 
 			if (string.IsNullOrWhiteSpace(rawApiBaseUrl))
+			{
 				throw new InvalidOperationException("ApiBaseUrl fehlt.");
+			}
 
 			// WICHTIG: Controller behalten 'api/[controller]' -> trailing /api NICHT entfernen
 			var normalizedBase = ApiBaseUrlUtility.Normalize(
