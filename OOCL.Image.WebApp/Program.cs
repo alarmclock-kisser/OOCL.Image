@@ -12,33 +12,48 @@ namespace OOCL.Image.WebApp
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
-			// Get assembly environment (appsettings used)
 			string environment = builder.Environment.EnvironmentName;
+			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"]; // erwartet: https://api.oocl.work/api
 
-			// Api Base URL aus Konfiguration (roh)
-			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"];
+			if (string.IsNullOrWhiteSpace(rawApiBaseUrl))
+				throw new InvalidOperationException("ApiBaseUrl fehlt.");
 
-			// Normalisieren (Controller haben 'api/[controller]')
+			// WICHTIG: Controller behalten 'api/[controller]' -> trailing /api NICHT entfernen
 			var normalizedBase = ApiBaseUrlUtility.Normalize(
 				rawApiBaseUrl,
 				builder.Environment.IsDevelopment(),
 				msg => Console.WriteLine("[ApiBaseUrl] " + msg),
-				controllerRoutesHaveApiPrefix: true
+				controllerRoutesHaveApiPrefix: false
 			);
 
-			var defaultDark = builder.Configuration.GetValue<bool?>("DefaultDarkMode") ?? false;
-			var preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "cpu";
-			var maxImages = builder.Configuration.GetValue("ImagesLimit", 0);
-			var appName = typeof(Program).Assembly.GetName().Name ?? "Blazor WebApp (.NET8)";
-			var httpsKestrel = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Https:Url");
-			var defaults = builder.Configuration.GetSection("DefaultSelections");
-			var defaultKernel = defaults.GetValue<string>("Kernel");
-			var defaultFormat = defaults.GetValue<string>("Format");
-			var defaultUnit = defaults.GetValue<string>("Unit");
+			// normalizedBase endet immer mit Slash -> wir nutzen ohne doppelten Slash
+			var effectiveBase = normalizedBase.TrimEnd('/'); // erwartet: https://api.oocl.work/api
 
-			// Add config objs (singleton)
-			builder.Services.AddSingleton(new ApiUrlConfig(normalizedBase));
-			WebAppConfig config = new(environment, appName, defaultDark, preferredDevice, maxImages, rawApiBaseUrl, "", httpsKestrel, defaultKernel, defaultFormat, defaultUnit);
+			var defaultDark     = builder.Configuration.GetValue<bool?>("DefaultDarkMode") ?? false;
+			var preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "cpu";
+			var maxImages       = builder.Configuration.GetValue("ImagesLimit", 0);
+			var appName         = typeof(Program).Assembly.GetName().Name ?? "Blazor WebApp (.NET8)";
+			var httpsKestrel    = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Https:Url");
+			var defaults        = builder.Configuration.GetSection("DefaultSelections");
+			var defaultKernel   = defaults.GetValue<string>("Kernel");
+			var defaultFormat   = defaults.GetValue<string>("Format");
+			var defaultUnit     = defaults.GetValue<string>("Unit");
+
+			builder.Services.AddSingleton(new ApiUrlConfig(effectiveBase));
+
+			WebAppConfig config = new(
+				environment,
+				appName,
+				defaultDark,
+				preferredDevice,
+				maxImages,
+				effectiveBase,
+				null,
+				httpsKestrel,
+				defaultKernel,
+				defaultFormat,
+				defaultUnit
+			);
 			builder.Services.AddSingleton(config);
 
 			builder.Services.AddRazorPages();
@@ -48,16 +63,36 @@ namespace OOCL.Image.WebApp
 			builder.Services.AddHttpClient<ApiClient>((sp, client) =>
 			{
 				var cfg = sp.GetRequiredService<ApiUrlConfig>();
-				client.BaseAddress = new Uri(cfg.BaseUrl);
+				// BaseAddress = https://api.oocl.work/api/
+				client.BaseAddress = new Uri(cfg.BaseUrl.EndsWith("/") ? cfg.BaseUrl : (cfg.BaseUrl + "/"));
 				client.Timeout = TimeSpan.FromSeconds(24);
 			});
 
-			builder.Services.AddSignalR(o =>
-			{
-				o.MaximumReceiveMessageSize = 1024 * 1024 * 128;
-			});
+			builder.Services.AddSignalR(o => o.MaximumReceiveMessageSize = 1024 * 1024 * 128);
 
 			var app = builder.Build();
+
+			app.Logger.LogInformation("WebApp Startup: ENV={Env}; RawBase={Raw}; Normalized={Norm}; EffectiveBase={Eff}",
+				app.Environment.EnvironmentName,
+				rawApiBaseUrl,
+				normalizedBase,
+				effectiveBase);
+
+			// Selbsttest: erwartet funktionierende externe URL-Kette -> /api/api/OpenCl/status
+			using (var scope = app.Services.CreateScope())
+			{
+				try
+				{
+					var apiClient = scope.ServiceProvider.GetRequiredService<ApiClient>();
+					app.Logger.LogInformation("API Selftest: GET api/OpenCl/status (ergibt extern /api/api/OpenCl/status) ...");
+					var status = apiClient.GetOpenClServiceInfoAsync().GetAwaiter().GetResult();
+					app.Logger.LogInformation("API OK: Device={Device} Initialized={Init}", status.DeviceName, status.Initialized);
+				}
+				catch (Exception ex)
+				{
+					app.Logger.LogError(ex, "API Selftest FEHLGESCHLAGEN. Base={Base}", effectiveBase);
+				}
+			}
 
 			if (!app.Environment.IsDevelopment())
 			{
@@ -81,6 +116,6 @@ namespace OOCL.Image.WebApp
 	public class ApiUrlConfig
 	{
 		public string BaseUrl { get; set; }
-		public ApiUrlConfig(string baseUrl) => this.BaseUrl = baseUrl;
+		public ApiUrlConfig(string baseUrl) => BaseUrl = baseUrl;
 	}
 }

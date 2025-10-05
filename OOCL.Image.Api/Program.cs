@@ -13,22 +13,22 @@ namespace OOCL.Image.Api
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
-			string environment = builder.Environment.EnvironmentName;
-
-			bool swaggerEnabled = builder.Configuration.GetValue("SwaggerEnabled", true);
-			int maxUploadSize = builder.Configuration.GetValue<int>("MaxUploadSizeMb", 128) * 1_000_000;
-			int imagesLimit = builder.Configuration.GetValue<int>("ImagesLimit");
-			string preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "CPU";
-			bool loadResources = builder.Configuration.GetValue("LoadResources", false);
-			bool serverSidedData = builder.Configuration.GetValue<bool>("ServerSidedData", false);
-			bool usePathBase = builder.Configuration.GetValue("UsePathBase", false);
+			string environment      = builder.Environment.EnvironmentName;
+			bool   swaggerEnabled   = builder.Configuration.GetValue("SwaggerEnabled", true);
+			int    maxUploadSize    = builder.Configuration.GetValue<int>("MaxUploadSizeMb", 128) * 1_000_000;
+			int    imagesLimit      = builder.Configuration.GetValue<int>("ImagesLimit");
+			string preferredDevice  = builder.Configuration.GetValue<string>("PreferredDevice") ?? "CPU";
+			bool   loadResources    = builder.Configuration.GetValue("LoadResources", false);
+			bool   serverSidedData  = builder.Configuration.GetValue<bool>("ServerSidedData", false);
+			bool   usePathBase      = builder.Configuration.GetValue("UsePathBase", false); // jetzt false
 
 			if (!serverSidedData)
 				loadResources = false;
 
 			string appName = typeof(Program).Assembly.GetName().Name ?? "ASP.NET WebAPI (.NET8)";
 
-			WebApiConfig config = new(environment, appName, swaggerEnabled, maxUploadSize / 1_000_000, imagesLimit, preferredDevice, loadResources, serverSidedData, usePathBase);
+			WebApiConfig config = new(environment, appName, swaggerEnabled, maxUploadSize / 1_000_000,
+				imagesLimit, preferredDevice, loadResources, serverSidedData, usePathBase);
 			builder.Services.AddSingleton(config);
 
 			if (serverSidedData)
@@ -64,7 +64,6 @@ namespace OOCL.Image.Api
 			builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
 			builder.Services.AddControllers();
-
 			builder.Services.AddCors(options =>
 			{
 				options.AddPolicy("OOCLImageCors", policy =>
@@ -87,6 +86,7 @@ namespace OOCL.Image.Api
 				ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 			});
 
+			// usePathBase ist jetzt false -> kein Prefix mehr
 			if (usePathBase)
 				app.UsePathBase("/api");
 
@@ -94,21 +94,33 @@ namespace OOCL.Image.Api
 
 			app.UseSwagger(c => c.RouteTemplate = "swagger/{documentName}/swagger.json");
 
-			if (swaggerEnabled)
+			app.UseSwaggerUI(c =>
 			{
-				var prefix = usePathBase ? "/api" : "";
-				app.UseSwaggerUI(c =>
-				{
-					c.SwaggerEndpoint($"{prefix}/swagger/v1/swagger.json", "OOCL.Image API v1");
-					c.RoutePrefix = "swagger";
-				});
-			}
+				// Explizit relative Referenz (./) schützt vor Root-Fehlinterpretation auf manchen Clients/Caches
+				c.SwaggerEndpoint("./v1/swagger.json", "OOCL.Image API v1");
+				c.RoutePrefix = "swagger";
+				c.DisplayRequestDuration();
+			});
+			
+			// Optional: Fallback-Redirect falls Clients noch /swagger/v1/... ohne /api nutzen (IIS Rewrite besser, hier API-Ebene):
+			app.MapGet("/swagger/v1/swagger.json", ctx =>
+			{
+				ctx.Response.Headers.Location = "/api/swagger/v1/swagger.json";
+				ctx.Response.StatusCode = StatusCodes.Status302Found;
+				return Task.CompletedTask;
+			}).ExcludeFromDescription();
 
 			if (app.Environment.IsDevelopment())
 				app.UseDeveloperExceptionPage();
 
 			app.UseCors("OOCLImageCors");
 			app.MapControllers();
+
+			app.Logger.LogInformation("Startup: ENV={Env}; UsePathBase={UsePathBase}; ApiBaseUrl={ApiBaseUrl}",
+				app.Environment.EnvironmentName,
+				usePathBase,
+				builder.Configuration["ApiBaseUrl"]);
+
 			app.Run();
 		}
 	}
