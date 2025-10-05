@@ -401,7 +401,31 @@ namespace OOCL.Image.WebApp.Pages
 			}
         }
 
-        public async Task RemoveImage(Guid id)
+
+        public bool GifDoLoop { get; set; } = true;
+        public int GifFrameRate { get; set; } = 10;
+        public decimal GifRescaleFactor { get; set; } = 1.0m;
+		public async Task DownloadCreateGif()
+        {
+            FileResponse? file = null;
+            if (await this.Api.IsServersidedDataAsync())
+            {
+                // Server sided data
+                file = await this.Api.DownloadAsGif(null, null, this.GifFrameRate, (double)this.GifRescaleFactor, this.GifDoLoop);
+            }
+            else
+            {
+                // Client sided data
+                file = await this.Api.DownloadAsGif(null, this.ClientImageCollection.ToArray(), this.GifFrameRate, (double) this.GifRescaleFactor, this.GifDoLoop);
+            }
+
+            if (file == null || file.Stream == null || file.Stream.Length == 0)
+            {
+                return;
+			}
+		}
+
+		public async Task RemoveImage(Guid id)
         {
             if (id == Guid.Empty)
 			{

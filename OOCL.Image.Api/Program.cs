@@ -23,7 +23,9 @@ namespace OOCL.Image.Api
 			bool   usePathBase      = builder.Configuration.GetValue("UsePathBase", false); // jetzt false
 
 			if (!serverSidedData)
+			{
 				loadResources = false;
+			}
 
 			string appName = typeof(Program).Assembly.GetName().Name ?? "ASP.NET WebAPI (.NET8)";
 
@@ -32,9 +34,13 @@ namespace OOCL.Image.Api
 			builder.Services.AddSingleton(config);
 
 			if (serverSidedData)
+			{
 				builder.Services.AddSingleton(sp => new ImageCollection(false, 720, 480, imagesLimit, loadResources, serverSidedData));
+			}
 			else
+			{
 				builder.Services.AddScoped(sp => new ImageCollection(false, 720, 480, imagesLimit, loadResources, serverSidedData));
+			}
 
 			builder.Services.AddSingleton(sp => new OpenClService(preferredDevice));
 
@@ -88,7 +94,9 @@ namespace OOCL.Image.Api
 
 			// usePathBase ist jetzt false -> kein Prefix mehr
 			if (usePathBase)
+			{
 				app.UsePathBase("/api");
+			}
 
 			app.UseHttpsRedirection();
 
@@ -111,7 +119,9 @@ namespace OOCL.Image.Api
 			}).ExcludeFromDescription();
 
 			if (app.Environment.IsDevelopment())
+			{
 				app.UseDeveloperExceptionPage();
+			}
 
 			app.UseCors("OOCLImageCors");
 			app.MapControllers();

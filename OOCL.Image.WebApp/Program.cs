@@ -13,7 +13,7 @@ namespace OOCL.Image.WebApp
 			var builder = WebApplication.CreateBuilder(args);
 
 			string environment = builder.Environment.EnvironmentName;
-			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"]; // erwartet: https://api.oocl.work/api
+			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"];
 
 			if (string.IsNullOrWhiteSpace(rawApiBaseUrl))
 			{

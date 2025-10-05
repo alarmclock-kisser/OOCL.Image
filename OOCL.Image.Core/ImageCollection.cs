@@ -1,5 +1,6 @@
 ﻿using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using System.Collections.Concurrent;
@@ -439,172 +440,6 @@ namespace OOCL.Image.Core
 
 
 
-		/*public static async Task<string?> SerializeImageAsBase64(ImageObj obj, string format = "png", float scale = 1.0f, bool createAsNewObj = false, bool inParallel = true)
-        {
-            // Check imageobj data
-            if (obj.Img == null)
-            {
-                return null;
-            }
-
-            format = format.ToLowerInvariant().Trim('.');
-			if (!ImageCollection.SupportedFormats.Contains(format))
-            {
-				Console.WriteLine($"SerializeImageAsBase64: Unsupported format specified('{format}'), defaulting to PNG.");
-				format = "png";
-			}
-
-            Stopwatch sw = Stopwatch.StartNew();
-
-			try
-            {
-				// 1) Clone
-				var image = await Task.Run(obj.Img.CloneAs<Rgba32>);
-				if (image == null)
-				{
-					return null;
-				}
-
-                byte[] bytes = [];
-
-				// 2) Scale if scale differs from 1.0f by more than 0.01f
-				if (Math.Abs(scale - 1.0f) > 0.01f)
-				{
-					int newWidth = (int) (image.Width * scale);
-					int newHeight = (int) (image.Height * scale);
-					newWidth = Math.Clamp(newWidth, 1, 32768);
-					newHeight = Math.Clamp(newHeight, 1, 32768);
-
-					if (inParallel)
-                    {
-						// 3a) GetBytes in parallel, transform in parallel
-						bytes = (await obj.GetBytes()).ToArray();
-						if (bytes.LongLength <= 0)
-						{
-							image.Dispose();
-							return null;
-						}
-
-						byte[] resizedBytes = new byte[(newWidth * newHeight * obj.Bitdepth)];
-                        await Task.Run(() =>
-                        {
-                            Parallel.For(0, newHeight, y =>
-                            {
-                                for (int x = 0; x < newWidth; x++)
-                                {
-                                    int srcX = (int) (x / scale);
-                                    int srcY = (int) (y / scale);
-                                    srcX = Math.Clamp(srcX, 0, image.Width - 1);
-                                    srcY = Math.Clamp(srcY, 0, image.Height - 1);
-                                    int srcIndex = (srcY * image.Width + srcX) * obj.Bitdepth;
-                                    int destIndex = (y * newWidth + x) * obj.Bitdepth;
-                                    if (srcIndex + obj.Bitdepth <= bytes.Length && destIndex + obj.Bitdepth <= resizedBytes.Length)
-                                    {
-                                        Array.Copy(bytes, srcIndex, resizedBytes, destIndex, obj.Bitdepth);
-                                    }
-                                }
-                            });
-                        });
-
-                        image.Dispose();
-
-						obj.Metrics["rescale_parallel"] = sw.Elapsed.TotalMilliseconds;
-					}
-					else
-                    {
-						// 3b) Resize in single thread async using ImageSharp
-						await Task.Run(() =>
-						{
-							image.Mutate(ctx => ctx.Resize(newWidth, newHeight));
-						});
-
-						obj.Metrics["rescale"] = sw.Elapsed.TotalMilliseconds;
-					}
-
-					sw.Restart();
-				}
-
-                string? base64 = string.Empty;
-
-				// 4) Serialize as string
-				if (inParallel)
-				{
-					// 4a) Aufteilung in Chunks (dieser Teil ist korrekt)
-					byte[][] byteChunks = await Task.Run(() =>
-					{
-						int processorCount = Environment.ProcessorCount;
-						int chunkSize = (int) Math.Ceiling((double) bytes.Length / processorCount);
-						return Enumerable.Range(0, processorCount)
-							.Select(i => bytes.Skip(i * chunkSize).Take(chunkSize).ToArray())
-							.Where(chunk => chunk.Length > 0)
-							.ToArray();
-					});
-
-					// 4b) Base64-Kodierung in Parallel und Zusammenfügen des Strings
-					base64 = await Task.Run(() =>
-					{
-						// Ergebnis-Array zum Speichern der Base64-Teil-Strings
-						string[] base64Parts = new string[byteChunks.Length];
-
-						// Parallele Kodierung der Byte-Arrays in Base64-Strings
-						Parallel.For(0, byteChunks.Length, i =>
-						{
-							// Korrektur: Base64-String direkt im Ergebnis-Array speichern
-							base64Parts[i] = Convert.ToBase64String(byteChunks[i]);
-						});
-
-						// Die Base64-Teil-Strings zu einem finalen String zusammenfügen
-						return string.Concat(base64Parts);
-					});
-
-                    obj.Metrics["serialize_parallel"] = sw.Elapsed.TotalMilliseconds;
-				}
-				else
-                {
-                    using var ms = new MemoryStream();
-                    IImageEncoder encoder = format.ToLower() switch
-                    {
-                        "png" => new SixLabors.ImageSharp.Formats.Png.PngEncoder(),
-                        "jpeg" or "jpg" => new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder(),
-                        "gif" => new SixLabors.ImageSharp.Formats.Gif.GifEncoder(),
-                        "tiff" or "tif" => new SixLabors.ImageSharp.Formats.Tiff.TiffEncoder(),
-						_ => new SixLabors.ImageSharp.Formats.Bmp.BmpEncoder()
-                    };
-
-                    await image.SaveAsync(ms, encoder);
-                    bytes = ms.ToArray();
-
-                    base64 = await Task.Run(() =>
-                    {
-                        return Convert.ToBase64String(bytes);
-                    });
-
-					obj.Metrics["serialize"] = sw.Elapsed.TotalMilliseconds;
-				}
-
-                if (!createAsNewObj)
-                {
-                    obj.SetImage(image);
-				}
-                else
-                {
-                    var newObj = new ImageObj(image, obj.Name + "_serialized");
-				}
-
-				// DON'T dispose image!
-				return base64;
-			}
-			catch (Exception ex)
-            {
-                Console.WriteLine($"Error serializing image '{obj.Name}' (ID: {obj.Id}) to base64: {ex.Message}");
-                return null;
-            }
-            finally
-            {
-                sw.Stop();
-			}
-		}*/
-
 
 		public static async Task<string?> SerializeBase64Async(ImageObj obj, string format = "png", float scale = 1.0f)
 		{
@@ -798,6 +633,135 @@ namespace OOCL.Image.Core
 
             return obj;
 		}
+
+
+		public static async Task<string?> CreateGifAsync(
+				Image<Rgba32>[] images,
+				string? outPath = null,
+				string name = "animated_BMZ_",
+				int frameRate = 5,
+				bool doLoop = false,
+				int? maxDegreeOfParallelism = null,
+				ResizeMode resizeMode = ResizeMode.Stretch)
+		{
+			// Get temp path if none specified
+            if (string.IsNullOrWhiteSpace(outPath))
+            {
+                outPath = Path.GetTempPath();
+			}
+
+			// --- Validierung ---
+			if (images is null || images.Length <= 0)
+			{
+                return null;
+			}
+
+			if (images.Any(img => img is null))
+			{
+                return "ERROR creating gif: There are null-Images in array.";
+			}
+
+			frameRate = Math.Clamp(frameRate, 1, 144);
+
+			Directory.CreateDirectory(outPath);
+
+			// Zielgröße an erster Frame orientieren:
+			var targetSize = new SixLabors.ImageSharp.Size(images[0].Width, images[0].Height);
+
+			// GIF-Frame-Delay (in 1/100 Sekunden). Beispiel: 5 FPS => 20 (200ms)
+			int frameDelay = Math.Max(2, (int) Math.Round(100d / frameRate)); // clamp >= 2 (20ms), einige Viewer ignorieren < 2
+
+			// --- Frames parallel vorbereiten (Clone + optional Resize + Delay setzen) ---
+			var prepped = new Image<Rgba32>[images.Length];
+			var po = new ParallelOptions
+			{
+				MaxDegreeOfParallelism = maxDegreeOfParallelism ?? Environment.ProcessorCount
+			};
+
+			Parallel.For(0, images.Length, po, i =>
+			{
+				// WICHTIG: immer clonen, damit der Aufrufer-Buffer unberührt bleibt
+				var clone = images[i].Clone(ctx =>
+				{
+					if (images[i].Width != targetSize.Width || images[i].Height != targetSize.Height)
+					{
+						ctx.Resize(new ResizeOptions
+						{
+							Size = targetSize,
+							Mode = resizeMode,
+							Sampler = KnownResamplers.Lanczos3,
+							PremultiplyAlpha = true
+						});
+					}
+				});
+
+				// Frame-Delay direkt am RootFrame setzen (wird später kopiert/übernommen)
+				clone.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = frameDelay;
+
+				prepped[i] = clone;
+			});
+
+			// --- GIF bauen & speichern ---
+			string fileName = $"{name}{DateTimeOffset.Now:yyyyMMdd_HHmmss}.gif";
+			string fullPath = Path.Combine(outPath, fileName);
+
+			try
+			{
+				await Task.Run(async () =>
+				{
+					using var gif = prepped[0].Clone();
+
+					// Looping steuern:
+					var gifMeta = gif.Metadata.GetGifMetadata();
+					if (doLoop)
+					{
+						gifMeta.RepeatCount = 0; // 0 => infinite loop
+					}
+					// else: nicht setzen => die meisten Viewer spielen einmal
+
+					// Sicherheit: Delay am ersten Frame setzen
+					gif.Frames.RootFrame.Metadata.GetGifMetadata().FrameDelay = frameDelay;
+
+					// Weitere Frames hinzufügen
+					for (int i = 1; i < prepped.Length; i++)
+					{
+						// AddFrame klont intern die Pixel der Quelle
+						var added = gif.Frames.AddFrame(prepped[i].Frames.RootFrame);
+						var meta = added.Metadata.GetGifMetadata();
+						meta.FrameDelay = frameDelay;
+						// Optional: Disposal-Strategie (falls Überlagerungen relevant sind)
+						meta.DisposalMethod = GifDisposalMethod.RestoreToBackground; // oder RestoreToBackground
+					}
+
+					// Encoder-Feintuning
+					var encoder = new GifEncoder
+					{
+						// Lokale Paletten geben oft bessere Farbtreue bei Foto/Renderframes:
+						ColorTableMode = GifColorTableMode.Local,
+						// Solider Allround-Quantizer (alternativ: KnownQuantizers.Wu, WebSafe, etc.)
+						Quantizer = KnownQuantizers.Octree
+						// TransparencyThreshold, Dither etc. bei Bedarf ergänzen
+					};
+
+					// Sicherstes Save-Pattern über Stream (funktioniert in allen ImageSharp-Versionen):
+					await using var fs = File.Create(fullPath);
+					await gif.SaveAsGifAsync(fs, encoder).ConfigureAwait(false);
+				}).ConfigureAwait(false);
+			}
+			finally
+			{
+				// Speicher freigeben
+				foreach (var img in prepped)
+				{
+					img?.Dispose();
+				}
+			}
+
+			return fullPath;
+		}
+
+
+
 
 	}
 }

@@ -178,6 +178,26 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task<FileResponse?> DownloadAsGif(Guid[]? ids = null, ImageObjDto[]? dtos = null, int frameRate = 10, double rescaleFactor = 1.0, bool doLoop = true)
+		{
+			try
+			{
+				if ((ids == null || ids.Length == 0) && (dtos == null || dtos.Length == 0))
+				{
+					return null;
+				}
+				
+				return await this.internalClient.CreateGifAsync(ids, dtos, frameRate, rescaleFactor, doLoop);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return null;
+			}
+		}
+
+
+
 		public async Task<int> CleanupOldImages(int maxImages = 0)
 		{
 			try

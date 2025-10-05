@@ -607,5 +607,92 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
+		[HttpGet("create-gif")]
+		[ProducesResponseType(typeof(FileContentResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<IActionResult> CreateGifAsync([FromQuery] IEnumerable<Guid>? ids = null, [FromQuery] IEnumerable<ImageObjDto>? dtos = null, [FromQuery] int frameRate = 10, [FromQuery] double rescale = 1.0, [FromQuery] bool doLoop = false)
+		{
+			List<ImageObj> objs = [];
+			string fileName = $"animation_{DateTime.Now:yyyyMMdd_HHmmss}.gif";
+
+			try
+			{
+				// If Guids are provided, load those images from the collection
+				if (ids != null && ids.Count() > 0)
+				{
+					await Task.Run(async () =>
+					{
+						foreach (var id in ids)
+						{
+							var img = this.imageCollection[id];
+							if (img != null)
+							{
+								if (Math.Abs(rescale - 1.0) > 0.01f)
+								{
+									await img.ResizeAsync((int) (img.Width * rescale), (int) (img.Height * rescale), true, false);
+								}
+								objs.Add(img);
+							}
+						}
+					});
+				}
+				else if (dtos != null && dtos.Count() > 0)
+				{
+					List<string> base64s = dtos.Select(d => d.Data.Base64Data).Where(b64 => !string.IsNullOrEmpty(b64)).ToList();
+					foreach (var b64 in base64s)
+					{
+						var img = await ImageCollection.CreateFromBase64(b64, (float)rescale);
+						if (img != null)
+						{
+							objs.Add(img);
+						}
+					}
+				}
+
+				if ((dtos == null || dtos.Count() <= 0) && (ids == null || ids.Count() <= 0))
+				{
+					objs = this.imageCollection.Images.ToList();
+				}
+
+				if (objs.Count <= 0)
+				{
+					return this.BadRequest(new ProblemDetails
+					{
+						Title = "No images provided",
+						Detail = "You must provide at least one valid image ID or DTO to create a GIF.",
+						Status = 400
+					});
+				}
+
+				fileName = objs.FirstOrDefault()?.Name ?? fileName;
+				Image<Rgba32>[] arr = objs.Select(o => o.Img).OfType<Image<Rgba32>>().ToArray();
+
+				string? gifPath = await ImageCollection.CreateGifAsync(arr, null, fileName, frameRate, doLoop);
+				if (string.IsNullOrEmpty(gifPath) || !System.IO.File.Exists(gifPath))
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Error creating GIF",
+						Detail = "GIF file was not created successfully.",
+						Status = 500
+					});
+				}
+
+				var gifBytes = await System.IO.File.ReadAllBytesAsync(gifPath);
+				return this.File(gifBytes, "image/gif", Path.GetFileName(gifPath));
+			}
+			catch (Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Title = "Error creating GIF",
+					Detail = ex.Message,
+					Status = 500
+				});
+			}
+		}
+
 	}
 }
