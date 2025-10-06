@@ -49,6 +49,18 @@ else
                     Color @(VM.HasColorGroup ? $"R:{VM.Red} G:{VM.Green} B:{VM.Blue}" : "n/a")
                 </span>
             </div>
+
+            <!-- NEU: Kernel Auswahl (nur Create-/Non-Image-Kernels) -->
+            <div style="display:flex;align-items:center;gap:.4rem;">
+                <label style="font-size:0.7rem;">Kernel</label>
+                <RadzenDropDown TValue="string"
+                                Data="@VM.AvailableCreateKernelNames"
+                                Value="@VM.SelectedKernelName"
+                                Change="@((args) => OnKernelChanged(args as string))"
+                                Style="min-width:220px;"
+                                Placeholder="Select kernel..." />
+            </div>
+
             <div style="flex:1 1 auto;"></div>
             <div>
                 <RadzenButton Text="Render" Icon="play_arrow" Click="async ()=> await VM.RenderAsync(true)" Disabled="@(VM == null)" />
@@ -72,7 +84,32 @@ else
             {
                 <span style="color:#777;font-size:0.85rem;">No image yet</span>
             }
-            <div style="position:absolute;bottom:6px;right:8px;font-size:0.65rem;color:#ccc;background:rgba(0,0,0,.45);padding:2px 6px;border-radius:4px;">Drag = Pan | Wheel = Zoom | Ctrl/Shift+Wheel = Iter</div>
+
+            <!-- Kombinierter Overlay (Bedienhinweis + Renderstatus) -->
+            <div style="position:absolute;bottom:6px;right:8px;font-size:0.65rem;color:#ccc;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:4px;display:flex;flex-direction:column;gap:2px;align-items:flex-end;">
+                <span>Drag = Pan | Wheel = Zoom | Shift+Wheel = Iter</span>
+                @if (VM?.IsRendering == true)
+                {
+                    <span>Rendering...</span>
+                }
+                else if (VM?.CurrentImageInfo != null)
+                {
+                    <span>Last Render: @VM.CurrentImageInfo.LastProcessingTimeMs ms</span>
+                }
+            </div>
+        </div>
+        <div>
+            <!-- Label with VM.RecordedStatus + CheckBox for recording -->
+            <label style="font-size:0.9em;margin-right:4px;">Recording: @(VM.RecordedStatus)</label>
+            <RadzenCheckBox @bind-Value="VM.RecordToClientCollection" TValue="bool" Style="margin-top:8px;"></RadzenCheckBox>
+            <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
+            <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
+            <label style="font-size:0.9em;margin-right:4px;">FrameRate:</label>
+            <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min="1" Max="144" Style="width:80px;" Disabled="@(VM == null)" />
+            <label style="font-size:0.9em;margin:0 8px 0 16px;">Rescale:</label>
+            <RadzenNumeric TValue="double" @bind-Value="VM.GifScalingFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
+            <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
+            <RadzenCheckBox @bind-Value="VM.GifDoLoop" TValue="bool" Style="margin-top:8px;" />
         </div>
     </div>
 }
@@ -85,6 +122,10 @@ else
     private ExplorerViewModel? VM;
     private ElementReference imageRef;
 
+    private bool CanDownload => VM != null && VM.ClientImageCollection != null && VM.ClientImageCollection.Count > 0;
+    private decimal GifRescaleMin = 0.1m;
+    private decimal GifRescaleMax = 5.0m;
+
     protected override async Task OnInitializedAsync()
     {
         VM = new ExplorerViewModel(Api, Config, Notifications, JS, DialogService);
@@ -96,6 +137,14 @@ else
         }
 
         await VM.InitializeAsync();
+    }
+
+    private async Task OnKernelChanged(string? kernelName)
+    {
+        if (VM == null || string.IsNullOrWhiteSpace(kernelName)) return;
+        VM.SetSelectedKernel(kernelName);
+        await VM.RenderAsync(true);
+        StateHasChanged();
     }
 
     private async Task OnResolutionChanged()
@@ -138,5 +187,11 @@ else
         VM.ApplyPickedColor(hex);
         await VM.RenderAsync(true);
         StateHasChanged();
+    }
+
+    private async Task DownloadGif()
+    {
+        if (VM == null) return;
+        await VM.DownloadCreateGif();
     }
 }

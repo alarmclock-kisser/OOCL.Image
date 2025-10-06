@@ -140,7 +140,10 @@ namespace OOCL.Image.WebApp.Pages
 		public void InjectPreloadedMeta(OpenClServiceInfo? openClInfo, List<OpenClKernelInfo>? kernelInfos)
 		{
 			if (openClInfo != null)
+			{
 				this.openClServiceInfo = openClInfo;
+			}
+
 			if (kernelInfos != null && kernelInfos.Count > 0)
 			{
 				this.kernelInfos = kernelInfos;
@@ -376,7 +379,7 @@ namespace OOCL.Image.WebApp.Pages
         }
 
         // NEU: Hilfsmethode für Server-Downloads (FileResponse -> Browser Download)
-        private async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
+        public async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
         {
             try
             {
@@ -427,7 +430,7 @@ namespace OOCL.Image.WebApp.Pages
         }
 
         // NEU: heuristische MIME-Erkennung aus Response-Headern
-        private static string? DetectMimeFromHeaders(FileResponse file)
+        public static string? DetectMimeFromHeaders(FileResponse file)
         {
             try
             {

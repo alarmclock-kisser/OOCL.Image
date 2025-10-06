@@ -105,6 +105,9 @@ namespace OOCL.Image.Shared
 			this.OnDevice = obj.OnDevice;
 			this.Pointer = obj.Pointer.ToString();
 			this.LastProcessingTimeMs = obj.ElapsedProcessingTime;
+
+			// Round last processing time to 3 decimal places
+			this.LastProcessingTimeMs = Math.Round(this.LastProcessingTimeMs, 3);
 		}
 	}
 }

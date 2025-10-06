@@ -46,7 +46,8 @@ namespace OOCL.Image.Api
 
 			builder.Services.AddSingleton(sp => new RollingFileLogger(maxLogLines, cleanupPreviousLogs, null, "log_" + environment + "_api_"));
 
-			builder.Services.AddSingleton(sp => new OpenClService(preferredDevice));
+			var openClService = new OpenClService(preferredDevice);
+			builder.Services.AddSingleton(openClService);
 
 			builder.Services.AddEndpointsApiExplorer();
 			builder.Services.AddSwaggerGen(c =>

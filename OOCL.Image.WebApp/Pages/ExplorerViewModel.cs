@@ -5,10 +5,11 @@ using OOCL.Image.Client;
 using OOCL.Image.Shared;
 using Radzen;
 using System.Globalization;
+using System.Linq;
 
 namespace OOCL.Image.WebApp.Pages
 {
-	public class ExplorerViewModel
+	public partial class ExplorerViewModel
 	{
 		private readonly ApiClient Api;
 		private readonly WebAppConfig Config;
@@ -30,6 +31,7 @@ namespace OOCL.Image.WebApp.Pages
 		public List<OpenClKernelInfo> KernelInfos { get; private set; } = [];
 		public OpenClKernelInfo? SelectedKernel { get; private set; }
 		public string SelectedKernelName { get; private set; } = string.Empty;
+		public bool IsRendering => this.isRendering;
 
 		public int Width { get; set; } = 800;
 		public int Height { get; set; } = 600;
@@ -58,8 +60,12 @@ namespace OOCL.Image.WebApp.Pages
 
 		public Guid CurrentImageId { get; private set; }
 		public ImageObjData? CurrentImageData { get; private set; }
+		public ImageObjInfo? CurrentImageInfo => this.CurrentImageData != null ? this.ClientImageCollection.Where(d => d.Info.Id == this.CurrentImageData.Id).Select(d => d.Info).FirstOrDefault() : null;
 		public Dictionary<Guid, string> ImageCache { get; } = [];
 		public List<ImageObjDto> ClientImageCollection { get; private set; }
+		public string RecordedStatus => this.RecordToClientCollection
+			? $"{this.ClientImageCollection.Count} frame(s)"
+			: "-";
 
 		public bool IsDragging { get; private set; }
 		private double dragStartX;
@@ -70,6 +76,11 @@ namespace OOCL.Image.WebApp.Pages
 		public string StatusSummary => this.openClServiceInfo?.Initialized == true
 			? $"{this.openClServiceInfo.DeviceName} [{this.openClServiceInfo.DeviceId}]"
 			: "Device not initialized";
+
+		public bool RecordToClientCollection { get; set; } = false;
+		public int GifFrameRate { get; set; } = 10;
+		public double GifScalingFactor { get; set; } = 1.0;
+		public bool GifDoLoop { get; set; } = false;
 
 		public void InjectPreloadedMeta(OpenClServiceInfo? info, List<OpenClKernelInfo>? kernels)
 		{
@@ -143,9 +154,21 @@ namespace OOCL.Image.WebApp.Pages
 		private void SyncColorComponents()
 		{
 			var hex = this.ColorHex;
-			if (string.IsNullOrWhiteSpace(hex)) return;
-			if (!hex.StartsWith('#')) hex = "#" + hex.Trim();
-			if (hex.Length != 7) return; // nur #RRGGBB
+			if (string.IsNullOrWhiteSpace(hex))
+			{
+				return;
+			}
+
+			if (!hex.StartsWith('#'))
+			{
+				hex = "#" + hex.Trim();
+			}
+
+			if (hex.Length != 7)
+			{
+				return; // nur #RRGGBB
+			}
+
 			try
 			{
 				this.Red = int.Parse(hex.Substring(1, 2), NumberStyles.HexNumber);
@@ -157,9 +180,20 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task RenderAsync(bool force = false)
 		{
-			if (this.isRendering) return;
-			if (!force && DateTime.UtcNow - this.lastRender < this.minRenderInterval) return;
-			if (this.SelectedKernel == null) return;
+			if (this.isRendering)
+			{
+				return;
+			}
+
+			if (!force && DateTime.UtcNow - this.lastRender < this.minRenderInterval)
+			{
+				return;
+			}
+
+			if (this.SelectedKernel == null)
+			{
+				return;
+			}
 
 			this.isRendering = true;
 			try
@@ -205,25 +239,45 @@ namespace OOCL.Image.WebApp.Pages
 					}
 
 					if (n.Contains("width"))
+					{
 						argVals[i] = this.Width.ToString(CultureInfo.InvariantCulture);
+					}
 					else if (n.Contains("height"))
+					{
 						argVals[i] = this.Height.ToString(CultureInfo.InvariantCulture);
+					}
 					else if (n.Contains("zoom"))
+					{
 						argVals[i] = this.Zoom.ToString(CultureInfo.InvariantCulture);
+					}
 					else if (n.Contains("xoffset") || n.Contains("x_off") || (n.Contains("x") && n.Contains("offset")))
+					{
 						argVals[i] = this.OffsetX.ToString(CultureInfo.InvariantCulture);
+					}
 					else if (n.Contains("yoffset") || n.Contains("y_off") || (n.Contains("y") && n.Contains("offset")))
+					{
 						argVals[i] = this.OffsetY.ToString(CultureInfo.InvariantCulture);
+					}
 					else if (n.Contains("iter"))
+					{
 						argVals[i] = this.Iterations.ToString(CultureInfo.InvariantCulture);
+					}
 					else if (n.EndsWith("r") || n.Contains("red"))
+					{
 						argVals[i] = AsColorComponent(this.Red);
+					}
 					else if (n.EndsWith("g") || n.Contains("green"))
+					{
 						argVals[i] = AsColorComponent(this.Green);
+					}
 					else if (n.EndsWith("b") || n.Contains("blue"))
+					{
 						argVals[i] = AsColorComponent(this.Blue);
+					}
 					else
+					{
 						argVals[i] = "0";
+					}
 				}
 
 				var dto = await this.Api.ExecuteCreateImageAsync(this.Width, this.Height, this.SelectedKernelName, this.BaseColorHex, argNames, argVals);
@@ -237,13 +291,25 @@ namespace OOCL.Image.WebApp.Pages
 
 				if (!this.isServerSideData)
 				{
-					var list = this.ClientImageCollection.ToList();
-					list.Add(dto);
-					this.ClientImageCollection = list;
-					this.CurrentImageData = dto.Data;
-					if (this.CurrentImageData != null && !string.IsNullOrEmpty(this.CurrentImageData.Base64Data))
+					if (this.RecordToClientCollection)
 					{
-						this.ImageCache[this.CurrentImageId] = this.CurrentImageData.Base64Data;
+						var list = this.ClientImageCollection.ToList();
+						list.Add(dto);
+						this.ClientImageCollection = list;
+						this.CurrentImageData = dto.Data;
+						if (this.CurrentImageData != null && !string.IsNullOrEmpty(this.CurrentImageData.Base64Data))
+						{
+							this.ImageCache[this.CurrentImageId] = this.CurrentImageData.Base64Data;
+						}
+					}
+					else
+					{
+						this.ClientImageCollection = [];
+						this.CurrentImageData = dto.Data;
+						if (this.CurrentImageData != null && !string.IsNullOrEmpty(this.CurrentImageData.Base64Data))
+						{
+							this.ImageCache[this.CurrentImageId] = this.CurrentImageData.Base64Data;
+						}
 					}
 				}
 				else
@@ -265,7 +331,10 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task OnWheelAsync(WheelEventArgs e)
 		{
-			if (e == null) return;
+			if (e == null)
+			{
+				return;
+			}
 
 			if (e.ShiftKey || e.CtrlKey)
 			{
@@ -292,7 +361,10 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task OnMouseMoveAsync(double clientX, double clientY)
 		{
-			if (!this.IsDragging) return;
+			if (!this.IsDragging)
+			{
+				return;
+			}
 
 			double dx = clientX - this.dragStartX;
 			double dy = clientY - this.dragStartY;
@@ -304,7 +376,10 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task OnMouseUpAsync()
 		{
-			if (!this.IsDragging) return;
+			if (!this.IsDragging)
+			{
+				return;
+			}
 
 			this.IsDragging = false;
 			await this.RenderAsync();
@@ -326,11 +401,15 @@ namespace OOCL.Image.WebApp.Pages
 		public void ApplyPickedColor(string? input)
 		{
 			if (string.IsNullOrWhiteSpace(input))
+			{
 				return;
+			}
 
 			int r, g, b, a;
 			if (!TryParseColorFlexible(input, out r, out g, out b, out a))
+			{
 				return;
+			}
 
 			// Werte setzen
 			this.BaseRed = r;
@@ -347,27 +426,54 @@ namespace OOCL.Image.WebApp.Pages
 			this.BaseColorHex = $"#{a:X2}{r:X2}{g:X2}{b:X2}";
 		}
 
-		// Nutzung der bereits vorhandenen Farb-Parsing Logik aus HomeViewModel.
-		// Diese Wrapper-Methode ergänzt nur Alpha (falls vorhanden), ansonsten a=255.
+		public async Task OnRecordToClientCollectionChanged(bool value)
+		{
+			this.RecordToClientCollection = value;
+			if (!value)
+			{
+				var response = await this.Api.DownloadAsGif(null, this.ClientImageCollection.ToArray(), this.GifFrameRate, this.GifScalingFactor, this.GifDoLoop);
+				this.ClientImageCollection = [];
+				if (response == null || response.Stream == null)
+				{
+					this.Notifications.Notify(new NotificationMessage
+					{
+						Severity = NotificationSeverity.Error,
+						Summary = "GIF-creation failed.",
+						Duration = 4000
+					});
+					return;
+				}
+
+				await this.DownloadFileResponseAsync(response, $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_client.gif", "image/gif");
+			}
+		}
+
 		private static bool TryParseColorFlexible(string raw, out int r, out int g, out int b, out int a)
 		{
 			a = 255;
 			r = g = b = 0;
 			if (string.IsNullOrWhiteSpace(raw))
+			{
 				return false;
+			}
 
 			// Erst Standard-RGB via HomeViewModel
 			if (!HomeViewModel.TryParseColor(raw, out r, out g, out b))
+			{
 				return false;
+			}
 
 			// Alpha extrahieren wenn 8-stelliges Hex vorhanden ist (#AARRGGBB oder #RRGGBBAA)
 			var s = raw.Trim();
 			if (!s.StartsWith("#"))
+			{
 				s = "#" + s;
+			}
+
 			if (s.Length == 9)
 			{
 				var body = s.Substring(1); // 8 Zeichen
-				// Versuch 1: CSS #RRGGBBAA (Alpha am Ende)
+										   // Versuch 1: CSS #RRGGBBAA (Alpha am Ende)
 				if (int.TryParse(body.Substring(6, 2), NumberStyles.HexNumber, null, out var aCss))
 				{
 					a = aCss;
@@ -384,6 +490,198 @@ namespace OOCL.Image.WebApp.Pages
 				a = Math.Clamp(a, 0, 255);
 			}
 			return true;
+		}
+
+		public async Task DownloadCreateGif()
+		{
+			try
+			{
+				bool isServer = await this.Api.IsServersidedDataAsync();
+
+				Guid[]? ids = null;
+				ImageObjDto[]? dtos = null;
+
+				if (isServer)
+				{
+					// Alle vorhandenen Bilder (oder optional nur eine Auswahl) in zeitlicher Reihenfolge
+					ids = (await this.Api.GetImageListAsync())
+						.OrderBy(i => i.CreatedAt)
+						.Select(i => i.Id)
+						.ToArray();
+				}
+				else
+				{
+					// Nur DTOs mit gültigen Bilddaten
+					dtos = this.ClientImageCollection
+						.Where(d => d?.Data != null && !string.IsNullOrEmpty(d.Data.Base64Data))
+						.OrderBy(d => d.Info.CreatedAt)
+						.ToArray();
+				}
+
+				if ((ids == null || ids.Length == 0) && (dtos == null || dtos.Length == 0))
+				{
+					this.Notifications.Notify(new NotificationMessage
+					{
+						Severity = NotificationSeverity.Warning,
+						Summary = "No frames giveon for GIF-creation",
+						Detail = "No images have been found for creating a gif animation.",
+						Duration = 3000
+					});
+					return;
+				}
+
+				var file = await this.Api.DownloadAsGif(ids, dtos, this.GifFrameRate, this.GifScalingFactor, this.GifDoLoop);
+
+				if (isServer)
+				{
+					if (file == null || file.Stream == null)
+					{
+						this.Notifications.Notify(new NotificationMessage
+						{
+							Severity = NotificationSeverity.Error,
+							Summary = "GIF-creation failed.",
+							Duration = 4000
+						});
+						return;
+					}
+					string fname = $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_srv.gif";
+					await this.DownloadFileResponseAsync(file, fname, "image/gif");
+				}
+				else
+				{
+					// WICHTIG: Bei nicht serverseitigen Daten ist der HTTP-Response-Stream (FileResponse.Stream)
+					// oft NICHT seekbar. Auf Length zuzugreifen wirft dann eine NotSupportedException.
+					// Daher: Kein Zugriff auf file.Stream.Length mehr – wir puffern zuerst komplett.
+					if (file == null || file.Stream == null)
+					{
+						this.Notifications.Notify(new NotificationMessage
+						{
+							Severity = NotificationSeverity.Error,
+							Summary = "GIF-creation failed.",
+							Detail = "No stream returned.",
+							Duration = 4000
+						});
+						return;
+					}
+
+					using var ms = new MemoryStream();
+					await file.Stream.CopyToAsync(ms);
+					var bytes = ms.ToArray();
+
+					if (bytes.Length == 0)
+					{
+						this.Notifications.Notify(new NotificationMessage
+						{
+							Severity = NotificationSeverity.Error,
+							Summary = "GIF-creation failed.",
+							Detail = "Empty GIF stream.",
+							Duration = 4000
+						});
+						file.Dispose();
+						return;
+					}
+
+					var base64 = Convert.ToBase64String(bytes);
+					string mime = "image/gif";
+					string filename = $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_client.gif";
+					await this.JS.InvokeVoidAsync("downloadFileFromDataUri", filename, $"data:{mime};base64,{base64}");
+					file.Dispose();
+				}
+
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Success,
+					Summary = "GIF created",
+					Detail = $"{(ids?.Length ?? dtos?.Length ?? 0)} Frames, Rate {this.GifFrameRate} fps, Scale {this.GifScalingFactor:F2}",
+					Duration = 3500
+				});
+			}
+			catch (Exception ex)
+			{
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Error,
+					Summary = "GIF Error",
+					Detail = ex.Message,
+					Duration = 5000
+				});
+			}
+		}
+
+		public async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
+		{
+			try
+			{
+				if (file.Stream == null)
+				{
+					return;
+				}
+				byte[] bytes;
+				if (file.Stream.CanSeek)
+				{
+					file.Stream.Position = 0;
+					using var ms = new MemoryStream();
+					await file.Stream.CopyToAsync(ms);
+					bytes = ms.ToArray();
+				}
+				else
+				{
+					// Nicht-seekbar -> direkt komplett lesen
+					using var ms = new MemoryStream();
+					await file.Stream.CopyToAsync(ms);
+					bytes = ms.ToArray();
+				}
+
+				if (bytes.Length == 0)
+				{
+					return;
+				}
+
+				string mime = HomeViewModel.DetectMimeFromHeaders(file) ?? fallbackMime;
+				string base64 = Convert.ToBase64String(bytes);
+				string dataUri = $"data:{mime};base64,{base64}";
+				await this.JS.InvokeVoidAsync("downloadFileFromDataUri", suggestedFileName, dataUri);
+			}
+			catch (Exception ex)
+			{
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Error,
+					Summary = "Download fehlgeschlagen",
+					Detail = ex.Message,
+					Duration = 4000
+				});
+			}
+			finally
+			{
+				file.Dispose();
+			}
+		}
+	}
+
+	public partial class ExplorerViewModel
+	{
+		// Liefert nur Kernel, die kein Eingangs-Image benötigen (Create-Kernels)
+		public IEnumerable<string> AvailableCreateKernelNames =>
+			this.KernelInfos == null
+				? Enumerable.Empty<string>()
+				: this.KernelInfos
+					.Where(k => k != null && (k.NeedsImage == false)) // false oder (implizit) nicht gesetzt
+					.Select(k => k.FunctionName)
+					.Distinct()
+					.OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+
+		// Auswahl setzen + Color Triplet Erkennung
+		public void SetSelectedKernel(string kernelName)
+		{
+			if (string.IsNullOrWhiteSpace(kernelName) || this.KernelInfos == null) return;
+			var k = this.KernelInfos.FirstOrDefault(x =>
+				string.Equals(x.FunctionName, kernelName, StringComparison.OrdinalIgnoreCase));
+			if (k == null) return;
+
+			this.SelectedKernel = k;
+			this.SelectedKernelName = k.FunctionName;
+			// Optional: sofortige Re-Render-Steuerung extern
 		}
 	}
 }

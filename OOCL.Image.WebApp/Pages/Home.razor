@@ -234,7 +234,7 @@
                 <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
                 <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
                 <label style="font-size:0.9em;margin-right:4px;">FrameRate:</label>
-                <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min=1 Max=60 Style="width:80px;" />
+                <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min=1 Max=144 Style="width:80px;" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Rescale:</label>
                 <RadzenNumeric TValue="double" @bind-Value="VM.GifRescaleFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
@@ -361,7 +361,18 @@
     private List<string> formats { get => VM.formats; set => VM.formats = value; }
     private List<OpenClKernelInfo> kernelInfos { get => VM.kernelInfos; set => VM.kernelInfos = value; }
     private List<string> kernelNames { get => VM.kernelNames; set => VM.kernelNames = value; }
-    private string selectedKernelName { get => VM.selectedKernelName; set => VM.selectedKernelName = value; }
+    private string selectedKernelName
+    {
+        get => VM.selectedKernelName;
+        set
+        {
+            if (VM.selectedKernelName != value)
+            {
+                VM.OnKernelChanged(value);
+                StateHasChanged();
+            }
+        }
+    }
     private OpenClKernelInfo? selectedKernelInfo { get => VM.selectedKernelInfo; set => VM.selectedKernelInfo = value; }
     private List<HomeViewModel.KernelArgViewModel> kernelArgViewModels { get => VM.kernelArgViewModels; set => VM.kernelArgViewModels = value; }
     private double lastKernelProcessingTimeMs { get => VM.images.FirstOrDefault(i => i.Id == VM.selectedImageId)?.LastProcessingTimeMs ?? 0; set { } }
