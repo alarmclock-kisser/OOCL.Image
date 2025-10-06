@@ -260,7 +260,7 @@ namespace OOCL.Image.WebApp.Pages
 			double dy = clientY - this.dragStartY;
 			// Inverted pan directions (x & y)
 			double scale = 1.0 / this.Zoom; // coarse factor
-			this.OffsetX = this.dragOriginOffsetX + (dx / this.Width) * 3.0 * scale; // previously '-'
+			this.OffsetX = this.dragOriginOffsetX - (dx / this.Width) * 3.0 * scale; // previously '-'
 			this.OffsetY = this.dragOriginOffsetY - (dy / this.Height) * 2.0 * scale; // previously '+'
 			await this.RenderAsync();
 		}
@@ -292,29 +292,60 @@ namespace OOCL.Image.WebApp.Pages
 		// Color picker integration
 		public void OnColorChanged(string? hex)
 		{
-			if (string.IsNullOrWhiteSpace(hex) || !this.HasColorGroup)
+			if (string.IsNullOrWhiteSpace(hex))
 			{
 				return;
 			}
-			// Normalize
-			if (!hex.StartsWith('#')) hex = "#" + hex;
-			if (hex.Length == 9) // ARGB -> strip alpha
+
+			// Normalisieren: sicherstellen dass ein führendes '#'
+			if (!hex.StartsWith('#'))
 			{
-				hex = "#" + hex.Substring(3);
+				hex = "#" + hex.Trim();
 			}
-			if (hex.Length != 7)
+
+			// Erlaubte Längen: #RRGGBB (7) oder #AARRGGBB (9)
+			if (hex.Length != 7 && hex.Length != 9)
 			{
 				return;
 			}
-			this.ColorHex = hex;
+
+			string argb = hex;
+
+			// Wenn Alpha vorhanden (#AARRGGBB), BaseColorHex mit Alpha behalten,
+			// ColorHex ohne Alpha (für UI) bereitstellen.
+			if (hex.Length == 9)
+			{
+				// BaseColorHex inkl. Alpha (ARGB → wir halten es so für den Aufruf)
+				this.BaseColorHex = argb;
+				// ColorHex nur RGB-Anteil
+				this.ColorHex = "#" + argb.Substring(3);
+			}
+			else
+			{
+				// Kein Alpha angegeben → BaseColorHex mit voller Deckkraft ergänzen (#FF + RRGGBB)
+				this.ColorHex = hex;
+				this.BaseColorHex = "#FF" + hex.Substring(1);
+			}
+
 			try
 			{
-				int r = int.Parse(hex.Substring(1, 2), NumberStyles.HexNumber);
-				int g = int.Parse(hex.Substring(3, 2), NumberStyles.HexNumber);
-				int b = int.Parse(hex.Substring(5, 2), NumberStyles.HexNumber);
-				this.Red = r; this.Green = g; this.Blue = b;
+				// Für UI und Argumentübergabe R,G,B extrahieren (aus ColorHex ohne Alpha)
+				string rgbPart = this.ColorHex.Substring(1); // RRGGBB
+				int r = int.Parse(rgbPart.Substring(0, 2), NumberStyles.HexNumber);
+				int g = int.Parse(rgbPart.Substring(2, 2), NumberStyles.HexNumber);
+				int b = int.Parse(rgbPart.Substring(4, 2), NumberStyles.HexNumber);
+				this.Red = r;
+				this.Green = g;
+				this.Blue = b;
 			}
-			catch { }
+			catch
+			{
+				// Parsing-Fehler ignorieren
+				return;
+			}
+
+			// Sofort ein Re-Render anstoßen (fire & forget, Throttle greift in RenderAsync)
+			_ = this.RenderAsync();
 		}
 	}
 }
