@@ -37,14 +37,17 @@ namespace OOCL.Image.WebApp.Pages
 		public double Zoom { get; set; } = 1.0;              // Scale factor
 		public double OffsetX { get; set; } = 0.0;            // Pan offset X (complex plane shift)
 		public double OffsetY { get; set; } = 0.0;            // Pan offset Y
-		public int Iterations { get; set; } = 250;            // Max iterations
-		public string BaseColorHex { get; set; } = "#000000"; // Provided base color (unused for mandelbrot, reserved)
-		public int Red { get; set; } = 255;                   // Optional color args
-		public int Green { get; set; } = 255;
-		public int Blue { get; set; } = 255;
+		public int Iterations { get; set; } = 4;              // Max iterations
+		public string BaseColorHex { get; set; } = "#00000000"; // Provided base color (unused for mandelbrot, reserved)
+		public int Red { get; set; } = 0;                     // Optional color args
+		public int Green { get; set; } = 0;
+		public int Blue { get; set; } = 0;
+		public string ColorHex { get; private set; } = "#000000"; // UI color picker hex (RGB)
+
+		public bool HasColorGroup => this.SelectedKernel?.ColorInputArgNames != null && this.SelectedKernel.ColorInputArgNames.Length == 3;
 
 		// Execution state
-		private bool isServerSideData = true;
+		private bool isServerSideData = false;
 		private bool isRendering = false;
 		private DateTime lastRender = DateTime.MinValue;
 		private readonly TimeSpan minRenderInterval = TimeSpan.FromMilliseconds(90); // simple throttle
@@ -222,15 +225,15 @@ namespace OOCL.Image.WebApp.Pages
 			{
 				return;
 			}
-			// Ctrl + wheel -> iterations adjust, else zoom
-			if (e.CtrlKey)
+			// Ctrl/Shift + wheel -> iterations adjust, else zoom (Shift already used previously, allow both)
+			if (e.ShiftKey || e.CtrlKey)
 			{
 				int delta = e.DeltaY < 0 ? 10 : -10;
 				this.Iterations = Math.Max(1, this.Iterations + delta);
 			}
 			else
 			{
-				double factor = e.DeltaY < 0 ? 0.9 : 1.1; // zoom in/out
+				double factor = e.DeltaY < 0 ? 1.1 : 0.9; // zoom in/out (invert earlier logic to keep intuitive feel if needed)
 				this.Zoom *= factor;
 				this.Zoom = Math.Clamp(this.Zoom, 0.0000001, 1_000_000);
 			}
@@ -255,10 +258,10 @@ namespace OOCL.Image.WebApp.Pages
 
 			double dx = clientX - this.dragStartX;
 			double dy = clientY - this.dragStartY;
-			// Scale translation relative to current zoom & resolution
+			// Inverted pan directions (x & y)
 			double scale = 1.0 / this.Zoom; // coarse factor
-			this.OffsetX = this.dragOriginOffsetX - (dx / this.Width) * 3.0 * scale; // 3.0 is view span heuristic
-			this.OffsetY = this.dragOriginOffsetY + (dy / this.Height) * 2.0 * scale; // 2.0 vertical aspect
+			this.OffsetX = this.dragOriginOffsetX + (dx / this.Width) * 3.0 * scale; // previously '-'
+			this.OffsetY = this.dragOriginOffsetY - (dy / this.Height) * 2.0 * scale; // previously '+'
 			await this.RenderAsync();
 		}
 
@@ -284,6 +287,34 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			this.Zoom = 1.0; this.OffsetX = 0; this.OffsetY = 0; this.Iterations = 2;
 			await this.RenderAsync(true);
+		}
+
+		// Color picker integration
+		public void OnColorChanged(string? hex)
+		{
+			if (string.IsNullOrWhiteSpace(hex) || !this.HasColorGroup)
+			{
+				return;
+			}
+			// Normalize
+			if (!hex.StartsWith('#')) hex = "#" + hex;
+			if (hex.Length == 9) // ARGB -> strip alpha
+			{
+				hex = "#" + hex.Substring(3);
+			}
+			if (hex.Length != 7)
+			{
+				return;
+			}
+			this.ColorHex = hex;
+			try
+			{
+				int r = int.Parse(hex.Substring(1, 2), NumberStyles.HexNumber);
+				int g = int.Parse(hex.Substring(3, 2), NumberStyles.HexNumber);
+				int b = int.Parse(hex.Substring(5, 2), NumberStyles.HexNumber);
+				this.Red = r; this.Green = g; this.Blue = b;
+			}
+			catch { }
 		}
 	}
 }
