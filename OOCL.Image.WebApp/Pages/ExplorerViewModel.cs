@@ -3,6 +3,7 @@ using Microsoft.JSInterop;
 using Newtonsoft.Json.Linq;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
+using OpenTK.Graphics.ES11;
 using Radzen;
 using System.Globalization;
 using System.Linq;
@@ -64,10 +65,13 @@ namespace OOCL.Image.WebApp.Pages
 		public Dictionary<Guid, string> ImageCache { get; } = [];
 		public List<ImageObjDto> ClientImageCollection { get; private set; }
 		public string RecordedStatus => this.RecordToClientCollection
-			? $"{this.ClientImageCollection.Count} frame(s)"
+			? $"{this.ClientImageCollection.Count} frame(s) " + $"[{(this.clientCacheSizeKb < 2048.0 ? this.clientCacheSizeKb : this.clientCacheSizeMb).ToString("F2")} " + $"{(this.clientCacheSizeKb > 2048.0 ? "MB" : "KB")}]"
 			: "-";
+		private double clientCacheSizeKb => this.CalculateClientImageCollectionSizeKb(2);
+		private double clientCacheSizeMb => this.CalculateClientImageCollectionSizeKb() / 1024.0;
 
 		public bool IsDragging { get; private set; }
+		public bool RefreshEveryMove { get; set; } = true;
 		private double dragStartX;
 		private double dragStartY;
 		private double dragOriginOffsetX;
@@ -80,7 +84,7 @@ namespace OOCL.Image.WebApp.Pages
 		public bool RecordToClientCollection { get; set; } = false;
 		public int GifFrameRate { get; set; } = 10;
 		public double GifScalingFactor { get; set; } = 1.0;
-		public bool GifDoLoop { get; set; } = false;
+		public bool GifDoLoop { get; set; } = true;
 
 		public void InjectPreloadedMeta(OpenClServiceInfo? info, List<OpenClKernelInfo>? kernels)
 		{
@@ -90,7 +94,7 @@ namespace OOCL.Image.WebApp.Pages
 			}
 			if (kernels != null && kernels.Count > 0)
 			{
-				this.KernelInfos = kernels;
+				this.KernelInfos = kernels.Where(k => k.NeedsImage == false).ToList();
 				this.SelectedKernelName = this.Config?.DefaultKernel ??
 					this.KernelInfos.FirstOrDefault(k => k.FunctionName.ToLower().Contains("mandelbrot"))?.FunctionName ??
 					this.KernelInfos.FirstOrDefault()?.FunctionName ??
@@ -371,7 +375,11 @@ namespace OOCL.Image.WebApp.Pages
 			double scale = 1.0 / this.Zoom;
 			this.OffsetX = this.dragOriginOffsetX - (dx / this.Width) * 3.0 * scale;
 			this.OffsetY = this.dragOriginOffsetY - (dy / this.Height) * 2.0 * scale;
-			await this.RenderAsync();
+
+			if (this.RefreshEveryMove)
+			{
+				await this.RenderAsync();
+			}
 		}
 
 		public async Task OnMouseUpAsync()
@@ -431,20 +439,7 @@ namespace OOCL.Image.WebApp.Pages
 			this.RecordToClientCollection = value;
 			if (!value)
 			{
-				var response = await this.Api.DownloadAsGif(null, this.ClientImageCollection.ToArray(), this.GifFrameRate, this.GifScalingFactor, this.GifDoLoop);
-				this.ClientImageCollection = [];
-				if (response == null || response.Stream == null)
-				{
-					this.Notifications.Notify(new NotificationMessage
-					{
-						Severity = NotificationSeverity.Error,
-						Summary = "GIF-creation failed.",
-						Duration = 4000
-					});
-					return;
-				}
-
-				await this.DownloadFileResponseAsync(response, $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_client.gif", "image/gif");
+				await this.DownloadCreateGif(true);
 			}
 		}
 
@@ -492,7 +487,7 @@ namespace OOCL.Image.WebApp.Pages
 			return true;
 		}
 
-		public async Task DownloadCreateGif()
+		public async Task DownloadCreateGif(bool clearClientImages = false)
 		{
 			try
 			{
@@ -516,6 +511,11 @@ namespace OOCL.Image.WebApp.Pages
 						.Where(d => d?.Data != null && !string.IsNullOrEmpty(d.Data.Base64Data))
 						.OrderBy(d => d.Info.CreatedAt)
 						.ToArray();
+
+					if (clearClientImages)
+					{
+						this.ClientImageCollection = [];
+					}
 				}
 
 				if ((ids == null || ids.Length == 0) && (dtos == null || dtos.Length == 0))
@@ -657,6 +657,32 @@ namespace OOCL.Image.WebApp.Pages
 				file.Dispose();
 			}
 		}
+
+		public double CalculateClientImageCollectionSizeKb(int decimalsRound = -1)
+		{
+			double total = 0.0;
+			if (this.ClientImageCollection != null && this.ClientImageCollection.Count > 0)
+			{
+				foreach (var dto in this.ClientImageCollection)
+				{
+					if (dto?.Data != null && !string.IsNullOrEmpty(dto.Data.Base64Data))
+					{
+						int padding = dto.Data.Base64Data.EndsWith("==") ? 2 : dto.Data.Base64Data.EndsWith("=") ? 1 : 0;
+						double bytes = (dto.Data.Base64Data.Length * 3 / 4.0) - padding;
+						total += bytes / 1024.0;
+					}
+				}
+			}
+
+			if (decimalsRound >= 0)
+			{
+				total = Math.Round(total, decimalsRound);
+			}
+
+			return total;
+		}
+
+
 	}
 
 	public partial class ExplorerViewModel

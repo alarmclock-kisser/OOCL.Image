@@ -51,7 +51,7 @@
                                         ValueProperty="DeviceId"
                                         Style="width:100%;"
                                         Change="@OnDeviceChanged"
-                                        Placeholder="Gerät wählen..." >
+                                        Placeholder="Select OpenCL-Device..." >
                             <Template Context="device">
                                 @device.DeviceName (@device.DeviceType)
                             </Template>
@@ -230,6 +230,10 @@
                 <RadzenButton Icon="download" Text="Download" Click="@DownloadImage" Disabled="@(!CanDownload)" />
                 <RadzenDropDown Data="@formats" @bind-Value="selectedFormat" Style="width:80px;" />
             </div>
+            <div class="d-flex gap-2 mt-2" style="flex-wrap:wrap;">
+                <RadzenButton Icon="delete" Text="Remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveImage" Disabled="@(!CanRemove)" />
+                <RadzenButton Icon="clear" Text="Clear All" ButtonStyle="ButtonStyle.Secondary" Click="@ClearImages" />
+            </div>
             <div>
                 <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
                 <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
@@ -239,10 +243,6 @@
                 <RadzenNumeric TValue="double" @bind-Value="VM.GifRescaleFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
                 <RadzenCheckBox @bind-Value="VM.GifDoLoop" TValue="bool" Style="margin-top:8px;" />
-            </div>
-            <div class="d-flex gap-2 mt-2" style="flex-wrap:wrap;">
-                <RadzenButton Icon="delete" Text="Remove" ButtonStyle="ButtonStyle.Danger" Click="@RemoveImage" Disabled="@(!CanRemove)" />
-                <RadzenButton Icon="clear" Text="Clear All" ButtonStyle="ButtonStyle.Secondary" Click="@ClearImages" />
             </div>
             <InputFile @ref="fileInput" id="fileInputHidden" style="display:none" OnChange="@OnInputFileChange" />
         </RadzenCard>

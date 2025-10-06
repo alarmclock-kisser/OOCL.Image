@@ -64,6 +64,8 @@ else
             <div style="flex:1 1 auto;"></div>
             <div>
                 <RadzenButton Text="Render" Icon="play_arrow" Click="async ()=> await VM.RenderAsync(true)" Disabled="@(VM == null)" />
+                <label style="font-size:0.75rem;margin-left:0.5rem;">Auto-Refresh</label>
+                <RadzenCheckBox @bind-Value="VM.RefreshEveryMove" TValue="bool" Style="margin-left:0.5rem;vertical-align:middle;" />
             </div>
         </div>
 
@@ -100,16 +102,18 @@ else
         </div>
         <div>
             <!-- Label with VM.RecordedStatus + CheckBox for recording -->
+            <RadzenCheckBox @bind-Value="VM.RecordToClientCollection" TValue="bool" Style="margin-top:8px" Change="@VM.OnRecordToClientCollectionChanged"></RadzenCheckBox>
             <label style="font-size:0.9em;margin-right:4px;">Recording: @(VM.RecordedStatus)</label>
-            <RadzenCheckBox @bind-Value="VM.RecordToClientCollection" TValue="bool" Style="margin-top:8px;"></RadzenCheckBox>
-            <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
-            <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
-            <label style="font-size:0.9em;margin-right:4px;">FrameRate:</label>
-            <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min="1" Max="144" Style="width:80px;" Disabled="@(VM == null)" />
-            <label style="font-size:0.9em;margin:0 8px 0 16px;">Rescale:</label>
-            <RadzenNumeric TValue="double" @bind-Value="VM.GifScalingFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
-            <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
-            <RadzenCheckBox @bind-Value="VM.GifDoLoop" TValue="bool" Style="margin-top:8px;" />
+            <div>
+                <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
+                <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
+                <label style="font-size:0.9em;margin-right:4px;">FrameRate:</label>
+                <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min="1" Max="144" Style="width:80px;" Disabled="@(VM == null)" />
+                <label style="font-size:0.9em;margin:0 8px 0 16px;">Rescale:</label>
+                <RadzenNumeric TValue="double" @bind-Value="VM.GifScalingFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
+                <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
+                <RadzenCheckBox @bind-Value="VM.GifDoLoop" TValue="bool" Style="margin-top:8px;" />
+            </div>
         </div>
     </div>
 }
@@ -185,13 +189,17 @@ else
     {
         if (VM == null) return;
         VM.ApplyPickedColor(hex);
-        await VM.RenderAsync(true);
+        if (VM.RefreshEveryMove)
+        {
+            await VM.RenderAsync(true);
+        }
         StateHasChanged();
     }
 
     private async Task DownloadGif()
     {
         if (VM == null) return;
-        await VM.DownloadCreateGif();
+        await VM.DownloadCreateGif(false);
+        StateHasChanged();
     }
 }
