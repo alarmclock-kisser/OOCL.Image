@@ -603,6 +603,32 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
+        public int MaxLogLines { get; set; } = 100;
+        private string[] apiLogLines = [];
+        private string[] appLogLines = [];
+        public string ApiLogText
+        {
+            get => string.Join(Environment.NewLine, this.apiLogLines);
+            set => value = string.Empty;
+		}
+        public string AppLogText
+        {
+            get => string.Join(Environment.NewLine, this.appLogLines);
+            set => value = string.Empty;
+		}
+		public async Task UpdateApiLog()
+        {
+			// Take last n lines from log
+			this.apiLogLines = (await this.Api.GetApiLogsAsync()).TakeLast(this.MaxLogLines).ToArray();
+        }
+
+        public async Task UpdateAppLog()
+		{
+            this.MaxLogLines = Math.Max(0, this.MaxLogLines);
+
+			this.appLogLines = (await this.Api.GetWebAppLogs(this.MaxLogLines)).ToArray();
+		}
+
 
 		public void OnKernelChanged(object value)
         {

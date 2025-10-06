@@ -18,6 +18,8 @@ namespace OOCL.Image.Shared
 		public bool? LoadResources { get; set; }
 		public bool? ServerSidedData { get; set; }
 		public bool? UsePathBase { get; set; }
+		public int? MaxLogLines { get; set; }
+		public bool? CleanupPreviousLogFiles { get; set; }
 
 		public WebApiConfig()
 		{
@@ -25,7 +27,7 @@ namespace OOCL.Image.Shared
 		}
 
 		[JsonConstructor]
-		public WebApiConfig(string environment, string applicationName, bool? swaggerEnabled, int? maxUploadSizeMb, int? imagesLimit, string? preferredDevice, bool? loadResources, bool? serverSidedData, bool? usePathBase)
+		public WebApiConfig(string environment, string applicationName, bool? swaggerEnabled, int? maxUploadSizeMb, int? imagesLimit, string? preferredDevice, bool? loadResources, bool? serverSidedData, bool? usePathBase, int? maxLogLines, bool? cleanupPrevLogs)
 		{
 			this.Environment = environment;
 			this.ApplicationName = applicationName;
@@ -36,6 +38,8 @@ namespace OOCL.Image.Shared
 			this.LoadResources = loadResources;
 			this.ServerSidedData = serverSidedData;
 			this.UsePathBase = usePathBase;
+			this.MaxLogLines = maxLogLines;
+			this.CleanupPreviousLogFiles = cleanupPrevLogs;
 		}
 	}
 }

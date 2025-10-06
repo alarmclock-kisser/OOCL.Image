@@ -23,6 +23,9 @@ namespace OOCL.Image.Shared
 		public string? DefaultFormat { get; set; } = null;
 		public string? DefaultUnit { get; set; } = null;
 
+		public int? MaxLogLines { get; set; } = null;
+		public bool? CleanupPreviousLogFiles { get; set; } = null;
+
 		public WebAppConfig()
 		{
 
@@ -31,7 +34,7 @@ namespace OOCL.Image.Shared
 		[JsonConstructor]
 		public WebAppConfig(string environment, string applicationName = "Blazor WebApp using dotnet8",
 			bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null,
-			string? defaultKernel = null, string? defaultFormat = null, string? defaultUnit = null)
+			string? defaultKernel = null, string? defaultFormat = null, string? defaultUnit = null, int? maxLogLines = null, bool? cleanupPrevLogs = null)
 		{
 			this.Environment = environment;
 			this.ApplicationName = applicationName;
@@ -44,6 +47,8 @@ namespace OOCL.Image.Shared
 			this.DefaultKernel = defaultKernel;
 			this.DefaultFormat = defaultFormat;
 			this.DefaultUnit = defaultUnit;
+			this.MaxLogLines = maxLogLines;
+			this.CleanupPreviousLogFiles = cleanupPrevLogs;
 		}
 	}
 }

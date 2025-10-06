@@ -20,7 +20,9 @@ namespace OOCL.Image.Api
 			string preferredDevice  = builder.Configuration.GetValue<string>("PreferredDevice") ?? "CPU";
 			bool   loadResources    = builder.Configuration.GetValue("LoadResources", false);
 			bool   serverSidedData  = builder.Configuration.GetValue<bool>("ServerSidedData", false);
-			bool   usePathBase      = builder.Configuration.GetValue("UsePathBase", false); // jetzt false
+			bool   usePathBase      = builder.Configuration.GetValue("UsePathBase", false);
+			int maxLogLines = builder.Configuration.GetValue("MaxLogLines", 1024);
+			bool cleanupPreviousLogs = builder.Configuration.GetValue("CleanupPreviousLogs", true);
 
 			if (!serverSidedData)
 			{
@@ -30,7 +32,7 @@ namespace OOCL.Image.Api
 			string appName = typeof(Program).Assembly.GetName().Name ?? "ASP.NET WebAPI (.NET8)";
 
 			WebApiConfig config = new(environment, appName, swaggerEnabled, maxUploadSize / 1_000_000,
-				imagesLimit, preferredDevice, loadResources, serverSidedData, usePathBase);
+				imagesLimit, preferredDevice, loadResources, serverSidedData, usePathBase, maxLogLines, cleanupPreviousLogs);
 			builder.Services.AddSingleton(config);
 
 			if (serverSidedData)
@@ -41,6 +43,8 @@ namespace OOCL.Image.Api
 			{
 				builder.Services.AddScoped(sp => new ImageCollection(false, 720, 480, imagesLimit, loadResources, serverSidedData));
 			}
+
+			builder.Services.AddSingleton(sp => new RollingFileLogger(maxLogLines, cleanupPreviousLogs, null, "log_" + environment + "_api_"));
 
 			builder.Services.AddSingleton(sp => new OpenClService(preferredDevice));
 

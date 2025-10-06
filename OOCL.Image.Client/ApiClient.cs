@@ -16,14 +16,16 @@ namespace OOCL.Image.Client
 	{
 		private readonly InternalClient internalClient;
 		private readonly HttpClient httpClient;
+		private readonly RollingFileLogger logger;
 		private readonly string baseUrl;
 		private JsonSerializerOptions jsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
 
 		public string BaseUrl => this.baseUrl;
 
 
-		public ApiClient(HttpClient httpClient)
+		public ApiClient(RollingFileLogger? logger, HttpClient httpClient)
 		{
+			this.logger = logger ?? new RollingFileLogger(1024, false, null, "log_client_");
 			this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 			this.baseUrl = httpClient.BaseAddress?.ToString().TrimEnd('/') ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.");
 			this.internalClient = new InternalClient(this.baseUrl, this.httpClient);
@@ -364,5 +366,44 @@ namespace OOCL.Image.Client
 		}
 
 
+		public async Task<IEnumerable<string>> GetApiLogsAsync()
+		{
+			try
+			{
+				return await this.internalClient.LogAsync();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return [];
+			}
+		}
+
+		public async Task<FileResponse?> DownloadApiLogAsync()
+		{
+			try
+			{
+				return await this.internalClient.DownloadLogAsync();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return null;
+			}
+		}
+
+		public async Task<IEnumerable<string>> GetWebAppLogs(int maxLines = 0)
+		{
+			try
+			{
+				var lines = await this.logger.GetRecentLogsAsync(maxLines);
+				return lines ?? [];
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return [];
+			}
+		}
 	}
 }

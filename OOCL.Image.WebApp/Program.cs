@@ -40,6 +40,8 @@ namespace OOCL.Image.WebApp
 			var defaultKernel   = defaults.GetValue<string>("Kernel");
 			var defaultFormat   = defaults.GetValue<string>("Format");
 			var defaultUnit     = defaults.GetValue<string>("Unit");
+			var maxLogLines    = builder.Configuration.GetValue("MaxLogLines", 1024);
+			var cleanupPreviousLogs = builder.Configuration.GetValue("CleanupPreviousLogs", false);
 
 			builder.Services.AddSingleton(new ApiUrlConfig(effectiveBase));
 
@@ -54,9 +56,13 @@ namespace OOCL.Image.WebApp
 				httpsKestrel,
 				defaultKernel,
 				defaultFormat,
-				defaultUnit
+				defaultUnit,
+				maxLogLines,
+				cleanupPreviousLogs
 			);
 			builder.Services.AddSingleton(config);
+
+			builder.Services.AddSingleton(sp => new RollingFileLogger(maxLogLines, cleanupPreviousLogs, null, "log_" + environment + "_webapp_"));
 
 			builder.Services.AddRazorPages();
 			builder.Services.AddServerSideBlazor();

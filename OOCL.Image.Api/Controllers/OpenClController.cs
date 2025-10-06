@@ -9,12 +9,14 @@ namespace OOCL.Image.Api.Controllers
     [Route("api/[controller]")]
     public class OpenClController : ControllerBase
     {
-        private readonly OpenClService openClService;
+		private readonly RollingFileLogger logger;
+		private readonly OpenClService openClService;
         private readonly ImageCollection imageCollection;
 
-        public OpenClController(OpenClService openClService, ImageCollection imageCollection)
+        public OpenClController(RollingFileLogger logger, OpenClService openClService, ImageCollection imageCollection)
         {
-            this.openClService = openClService;
+			this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+			this.openClService = openClService;
             this.imageCollection = imageCollection;
         }
 
@@ -28,6 +30,7 @@ namespace OOCL.Image.Api.Controllers
 				var info = await Task.Run(() => new OpenClServiceInfo(this.openClService));
 				if (info == null)
 				{
+					await this.logger.LogAsync("OpenClServiceInfo is null", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails
 					{
 						Status = 500,
@@ -36,10 +39,12 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
+				await this.logger.LogAsync("[200] api/opencl/status: " + (info.Initialized ? "Initialized!" : "OpenCL is currently NOT initialized."), nameof(OpenClController));
 				return this.Ok(info);
 			}
 			catch (Exception ex)
 			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Status = 500,
@@ -62,10 +67,12 @@ namespace OOCL.Image.Api.Controllers
 					devices.Add(await Task.Run(() => new OpenClDeviceInfo(this.openClService, i)));
 				}
 
+				await this.logger.LogAsync($"[200] api/opencl/devices: Found {devices.Count} devices", nameof(OpenClController));
 				return this.Ok(devices);
 			}
 			catch (Exception ex)
 			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Status = 500,
@@ -85,6 +92,7 @@ namespace OOCL.Image.Api.Controllers
 			{
 				if (deviceId < 0 || deviceId >= this.openClService.DeviceCount)
 				{
+					await this.logger.LogAsync($"[400] api/opencl/initialize-id: Invalid Device ID {deviceId}", nameof(OpenClController));
 					return this.BadRequest(new ProblemDetails
 					{
 						Status = 400,
@@ -97,6 +105,7 @@ namespace OOCL.Image.Api.Controllers
 				var info = new OpenClServiceInfo(this.openClService);
 				if (!info.Initialized)
 				{
+					await this.logger.LogAsync($"[500] api/opencl/initialize-id: Failed to initialize OpenCL with Device ID {deviceId}", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails
 					{
 						Status = 500,
@@ -105,10 +114,12 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
+				await this.logger.LogAsync($"[200] api/opencl/initialize-id: Successfully initialized OpenCL with Device ID {deviceId}", nameof(OpenClController));
 				return this.Ok(info);
 			}
 			catch (Exception ex)
 			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Status = 500,
@@ -128,6 +139,7 @@ namespace OOCL.Image.Api.Controllers
 			{
 				if (string.IsNullOrWhiteSpace(deviceName))
 				{
+					await this.logger.LogAsync("[400] api/opencl/initialize-name: Invalid Device Name (null or empty)", nameof(OpenClController));
 					return this.BadRequest(new ProblemDetails
 					{
 						Status = 400,
@@ -140,6 +152,7 @@ namespace OOCL.Image.Api.Controllers
 				var info = new OpenClServiceInfo(this.openClService);
 				if (!info.Initialized)
 				{
+					await this.logger.LogAsync($"[500] api/opencl/initialize-name: Failed to initialize OpenCL with Device Name '{deviceName}'", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails
 					{
 						Status = 500,
@@ -148,10 +161,12 @@ namespace OOCL.Image.Api.Controllers
 					});
 				}
 
+				await this.logger.LogAsync($"[200] api/opencl/initialize-name: Successfully initialized OpenCL with Device Name '{deviceName}'", nameof(OpenClController));
 				return this.Ok(info);
 			}
 			catch (Exception ex)
 			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Status = 500,
@@ -170,10 +185,12 @@ namespace OOCL.Image.Api.Controllers
 			{
 				await Task.Run(this.openClService.Dispose);
 				var info = new OpenClServiceInfo(this.openClService);
+				await this.logger.LogAsync("[200] api/opencl/release: Successfully released OpenCL resources", nameof(OpenClController));
 				return this.Ok(info);
 			}
 			catch (Exception ex)
 			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Status = 500,
@@ -192,6 +209,7 @@ namespace OOCL.Image.Api.Controllers
 			{
 				if (!this.openClService.Initialized)
 				{
+					await this.logger.LogAsync("[400] api/opencl/kernel-infos: OpenCL Not Initialized", nameof(OpenClController));
 					return this.BadRequest(new ProblemDetails
 					{
 						Status = 400,
@@ -202,6 +220,7 @@ namespace OOCL.Image.Api.Controllers
 				var kernelInfos = await Task.Run(() => this.openClService.Compiler?.KernelFiles.Select(kf => new OpenClKernelInfo(this.openClService.Compiler, this.openClService.Compiler.KernelFiles.ToList().IndexOf(kf))));
 				if (kernelInfos == null)
 				{
+					await this.logger.LogAsync("[500] api/opencl/kernel-infos: Failed to retrieve kernel information", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails
 					{
 						Status = 500,
@@ -215,10 +234,12 @@ namespace OOCL.Image.Api.Controllers
 					kernelInfos = kernelInfos.Where(ki => (Boolean) (ki.CompiledSuccessfully ?? false));
 				}
 
+				await this.logger.LogAsync($"[200] api/opencl/kernel-infos: Retrieved {kernelInfos.Count()} kernel infos (onlyCompiled={onlyCompiled})", nameof(OpenClController));
 				return this.Ok(kernelInfos);
 			}
 			catch (Exception ex)
 			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Status = 500,
@@ -237,11 +258,13 @@ namespace OOCL.Image.Api.Controllers
 		{
 			if (!this.openClService.Initialized)
 			{
+				await this.logger.LogAsync("[400] api/opencl/execute-on-image: OpenCL Not Initialized", nameof(OpenClController));
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
 			}
 
 			if (request.ImageId == Guid.Empty && request.OptionalImage == null)
 			{
+				await this.logger.LogAsync("[400] api/opencl/execute-on-image: Either ImageId or OptionalImage required", nameof(OpenClController));
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Either ImageId or OptionalImage required" });
 			}
 
@@ -250,18 +273,21 @@ namespace OOCL.Image.Api.Controllers
 			{
 				if (request.OptionalImage == null)
 				{
+					await this.logger.LogAsync($"[404] api/opencl/execute-on-image: Image {request.ImageId} not found", nameof(OpenClController));
 					return this.NotFound(new ProblemDetails { Status = 404, Title = $"Image {request.ImageId} not found" });
 				}
 
 				// Optionales Nachladen aus Base64
 				if (string.IsNullOrWhiteSpace(request.OptionalImage.Data?.Base64Data))
 				{
+					await this.logger.LogAsync("[400] api/opencl/execute-on-image: OptionalImage missing Base64Data", nameof(OpenClController));
 					return this.BadRequest(new ProblemDetails { Status = 400, Title = "OptionalImage missing Base64Data" });
 				}
 
 				var created = await ImageCollection.CreateFromBase64(request.OptionalImage.Data.Base64Data, request.Rescale, request.OptionalImage.Info?.Name);
 				if (created == null)
 				{
+					await this.logger.LogAsync("[500] api/opencl/execute-on-image: Failed to create temp image from OptionalImage", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp image" });
 				}
 
@@ -275,14 +301,20 @@ namespace OOCL.Image.Api.Controllers
 			var result = await this.openClService.ExecuteEditImage(img, request.KernelName, args);
 			if (result == null)
 			{
+				await this.logger.LogAsync("[500] api/opencl/execute-on-image: OpenCL returned null image", nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
 			}
 
-			if (!this.imageCollection.Add(result))
+			if (this.imageCollection.ServerSidedData)
 			{
-				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+				if (!this.imageCollection.Add(result))
+				{
+					await this.logger.LogAsync("[500] api/opencl/execute-on-image: Failed to add result to collection, still returning result DTO", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+				}
 			}
 
+			await this.logger.LogAsync($"[200] api/opencl/execute-on-image: Successfully executed kernel '{request.KernelName}' on image {img.Id}, new image {result.Id}", nameof(OpenClController));
 			return this.Ok(new ImageObjDto(result));
 		}
 
@@ -294,11 +326,13 @@ namespace OOCL.Image.Api.Controllers
 		{
 			if (!this.openClService.Initialized)
 			{
+				await this.logger.LogAsync("[400] api/opencl/execute-create-image: OpenCL Not Initialized", nameof(OpenClController));
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
 			}
 
 			if (request.Width <= 0 || request.Height <= 0)
 			{
+				await this.logger.LogAsync($"[400] api/opencl/execute-create-image: Invalid dimensions {request.Width}x{request.Height}", nameof(OpenClController));
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Invalid dimensions" });
 			}
 
@@ -309,17 +343,15 @@ namespace OOCL.Image.Api.Controllers
 			var result = await this.openClService.ExecuteCreateImage(request.Width, request.Height, request.KernelName, request.BaseColorHex, args);
 			if (result == null)
 			{
-				Console.WriteLine("OpenCL returned null image!");
+				await this.logger.LogAsync("[500] api/opencl/execute-create-image: OpenCL returned null image", nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
 			}
 
 			if (this.imageCollection.ServerSidedData)
 			{
-
 				if (!this.imageCollection.Add(result))
 				{
-					Console.WriteLine("Failed to add result to collection, still returning result DTO");
-					// return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Add result to collection failed" });
+					await this.logger.LogAsync("[500] api/opencl/execute-create-image: Failed to add result to collection, still returning result DTO", nameof(OpenClController));
 					return this.Ok(new ImageObjDto(result));
 				}
 			}
