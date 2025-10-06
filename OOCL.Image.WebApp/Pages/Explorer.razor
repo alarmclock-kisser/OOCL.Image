@@ -1,4 +1,5 @@
 ﻿@page "/explorer"
+@using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
 @using Radzen
 @using Radzen.Blazor
@@ -19,7 +20,6 @@
 else
 {
     <div class="explorer-root" style="max-width:1400px;margin:0 auto;padding:0.75rem;display:flex;flex-direction:column;gap:0.75rem;">
-        <!-- Status & Controls Row -->
         <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem;">
             <div style="min-width:240px;">
                 <label style="font-weight:600;font-size:0.8rem;">OpenCL Status</label>
@@ -39,7 +39,11 @@ else
                 <div>OffY: @VM.OffsetY.ToString("F3")</div>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;">
-                <RadzenColorPicker Value="@VM.ColorHex" Disabled="@(!VM.HasColorGroup)" Style="width:140px;" ShowRGBA="false" ValueChanged="OnColorChanged" />
+                <RadzenColorPicker @bind-Value="VM.ColorHex"
+                                   Disabled="@(!VM.HasColorGroup)"
+                                   Style="width:140px;"
+                                   ShowRGBA="false"
+                                   Change="@(async (string v) => await OnColorPicked(v))" />
                 <span style="font-size:.65rem;opacity:.8;">Color @(VM.HasColorGroup ? "(R,G,B)" : "n/a")</span>
             </div>
             <div style="flex:1 1 auto;"></div>
@@ -48,12 +52,11 @@ else
             </div>
         </div>
 
-        <!-- Image Area -->
         <div class="explorer-image-wrapper" style="position:relative;border:1px solid var(--rz-border-color,#444);background:#111;min-height:320px;display:flex;align-items:center;justify-content:center;">
-            @if (VM.CurrentImageData != null && !string.IsNullOrEmpty(VM.CurrentImageData.Base64Data))
+            @if (VM != null && VM?.CurrentImageData != null && !string.IsNullOrEmpty(VM.CurrentImageData.Base64Data))
             {
                 <img @ref="imageRef"
-                     src="data:@(VM.CurrentImageData.MimeType ?? "image/png");base64,@VM.CurrentImageData.Base64Data"
+                     src="data:@(VM.CurrentImageData?.MimeType ?? "image/png");base64,@VM.CurrentImageData?.Base64Data"
                      style="max-width:100%;max-height:80vh;object-fit:contain;cursor:@(VM.IsDragging?"grabbing":"grab");user-select:none;"
                      @onmousedown="OnMouseDown"
                      @onmouseup="OnMouseUp"
@@ -72,14 +75,24 @@ else
 }
 
 @code {
+    // Cascading Parameters müssen im @code Block stehen
+    [CascadingParameter] public OpenClServiceInfo? LayoutOpenClInfo { get; set; }
+    [CascadingParameter] public List<OpenClKernelInfo>? LayoutKernelInfos { get; set; }
+
     private ExplorerViewModel? VM;
     private ElementReference imageRef;
 
     protected override async Task OnInitializedAsync()
     {
         VM = new ExplorerViewModel(Api, Config, Notifications, JS, DialogService);
+
+        // Vorab-Meta übernehmen falls vorhanden
+        if (LayoutKernelInfos != null && LayoutKernelInfos.Count > 0)
+        {
+            VM.InjectPreloadedMeta(LayoutOpenClInfo, LayoutKernelInfos);
+        }
+
         await VM.InitializeAsync();
-        StateHasChanged();
     }
 
     private async Task OnResolutionChanged()
@@ -116,9 +129,11 @@ else
         StateHasChanged();
     }
 
-    private void OnColorChanged(string? hex)
+    private async Task OnColorPicked(string? hex)
     {
         if (VM == null) return;
-        VM.OnColorChanged(hex);
+        VM.ApplyPickedColor(hex);
+        await VM.RenderAsync(true);
+        StateHasChanged();
     }
 }

@@ -1,11 +1,12 @@
 ﻿@page "/"
 @using System.Linq
+@using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Web
 @using OOCL.Image.Client
 @using OOCL.Image.Shared
-@using Radzen
 @using Radzen.Blazor
+@using Radzen
 @using Microsoft.JSInterop
 @using System.Globalization
 @inject ApiClient Api
@@ -297,6 +298,10 @@
 </RadzenCard>
 
 @code {
+    // NEU: Übernahme gecachter Werte aus MainLayout
+    [CascadingParameter] public OpenClServiceInfo? LayoutOpenClInfo { get; set; }
+    [CascadingParameter] public List<OpenClKernelInfo>? LayoutKernelInfos { get; set; }
+
     private HomeViewModel VM = null!;
     private InputFile? fileInput;
 
@@ -308,29 +313,19 @@
     private decimal GifRescaleMax => 5.0m;
     private decimal GifRescaleStep => 0.1m;
 
-    private void ToggleKernelInfo() => isKernelInfoExpanded = !isKernelInfoExpanded;
-    private void ToggleDeviceSection() => isDeviceSectionExpanded = !isDeviceSectionExpanded;
-    private async Task ToggleConfigInfoSection()
-    {
-        isConfigInfoSectionExpanded = !isConfigInfoSectionExpanded;
-        await VM.UpdateAppLog();
-        await VM.UpdateApiLog();
-    }
-
-    private string GetDeviceSummary()
-        => openClServiceInfo?.Initialized == true
-            ? $"{openClServiceInfo.DeviceName} [{openClServiceInfo.DeviceId}]"
-            : "No OpenCL-Device initialized.";
-
-    private string GetConfigSummary()
-        => $"API: {Config.ApiBaseUrl}, PreferredDevice: '{Config.PreferredDevice}', ImageLimit: {Config.ImagesLimit}";
-
     protected override async Task OnInitializedAsync()
     {
         VM = new HomeViewModel(Api, Config, Notifications, JS, DialogService);
-        await VM.InitializeAsync();
 
-        // (Optional) Automatische Vorauswahl wie gehabt
+        // Falls Meta aus Layout vorhanden → injizieren (verhindert doppelte Calls)
+        if (LayoutKernelInfos != null && LayoutKernelInfos.Count > 0)
+        {
+            VM.InjectPreloadedMeta(LayoutOpenClInfo, LayoutKernelInfos);
+        }
+
+        await VM.InitializeAsync(); // Lädt nur noch das, was fehlt
+
+        // Device-Default Wahl wie gehabt
         if (VM.devices.Count > 0 && !string.IsNullOrWhiteSpace(Config.PreferredDevice))
         {
             var preferred = VM.devices.FirstOrDefault(d => d.DeviceName != null && d.DeviceName.ToLower().Contains(Config.PreferredDevice.ToLower()));
@@ -341,13 +336,14 @@
             VM.selectedDeviceIndex = VM.devices[0].DeviceId;
         }
 
-        // Falls du initial NICHT automatisch initialisieren willst, kommentiere die nächste Zeile aus.
-        await VM.InitializeDevice();
+        // Nur initialisieren, wenn noch nicht erfolgt
+        if (!(VM.openClServiceInfo?.Initialized ?? false))
+        {
+            await VM.InitializeDevice();
+            await VM.LoadOpenClStatus();
+        }
 
-        await VM.LoadOpenClStatus();
-
-        // Panel-Startzustand gemäß Anforderung:
-        isDeviceSectionExpanded = !(openClServiceInfo?.Initialized ?? false);
+        isDeviceSectionExpanded = !(VM.openClServiceInfo?.Initialized ?? false);
 
         await VM.UpdateImageData();
         StateHasChanged();
@@ -557,6 +553,5 @@
     }
     private async Task OnImageChanged(object value) { await VM.OnImageChanged(value); await VM.UpdateImageData(); StateHasChanged(); }
     private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
-
 
 }

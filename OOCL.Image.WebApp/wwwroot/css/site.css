@@ -301,6 +301,38 @@ body.rz-dark .panel-sub {
     background:var(--link-hover-bg);
 }
 
+/* Modernisierte Toggle Buttons */
+.nav-toggle-modern.rz-button,
+.theme-toggle-modern.rz-button {
+    border-radius:8px;
+    backdrop-filter:blur(4px);
+    transition:background .18s ease, transform .15s ease;
+}
+
+body.theme-light .nav-toggle-modern.rz-button,
+body.theme-light .theme-toggle-modern.rz-button {
+    background:linear-gradient(135deg,#ffffff,#f1f4f8);
+    border:1px solid #cfd5dc;
+    color:#222;
+}
+
+body.theme-dark .nav-toggle-modern.rz-button,
+body.theme-dark .theme-toggle-modern.rz-button {
+    background:linear-gradient(135deg,#2f2f33,#242426);
+    border:1px solid #4a4f55;
+    color:#eee;
+}
+
+.nav-toggle-modern.rz-button:hover,
+.theme-toggle-modern.rz-button:hover {
+    transform:translateY(-2px);
+}
+
+.nav-toggle-modern.rz-button:active,
+.theme-toggle-modern.rz-button:active {
+    transform:translateY(0);
+}
+
 /* Ensure Radzen panels adapt text */
 body.theme-light .rz-panel, body.theme-light .rz-card {
     background:#fff;
@@ -310,4 +342,24 @@ body.theme-light .rz-panel, body.theme-light .rz-card {
 body.theme-dark .rz-panel, body.theme-dark .rz-card {
     background:#222;
     color:#ddd;
+}
+
+/* Zusatz: leichte Anpassung für Theme-Toggle (RadzenButton) */
+body.theme-light .rz-button.rz-secondary {
+    background:#ffffff;
+    color:#222;
+    border-color:#c9ced6;
+}
+body.theme-light .rz-button.rz-secondary:hover {
+    background:#e7edf6;
+    border-color:#b7bcc4;
+}
+
+body.theme-dark .rz-button.rz-secondary {
+    background:#2f2f2f;
+    color:#eee;
+    border-color:#555;
+}
+body.theme-dark .rz-button.rz-secondary:hover {
+    background:#3a3a3a;
 }

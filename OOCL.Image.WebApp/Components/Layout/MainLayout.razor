@@ -1,46 +1,73 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JS
 @inject OOCL.Image.Shared.WebAppConfig Config
+@inject NavigationManager NavigationManager
+@inject ApiClient Api
+@using Radzen
+@using Radzen.Blazor
 
 <div class="main-layout" style="display:flex;min-height:100vh;">
-    <!-- Collapsible Sidebar -->
-    <nav class="app-nav" style="background:var(--nav-bg);color:var(--nav-fg);width:@(navOpen?"200px":"54px");transition:width .18s ease, background .25s ease,color .25s ease;overflow:hidden;box-shadow:0 0 4px var(--shadow-color);display:flex;flex-direction:column;">
-        <div style="display:flex;align-items:center;gap:.4rem;padding:.6rem .6rem .4rem .6rem;">
-            <button @onclick="ToggleNav" class="nav-toggle-btn">@(navOpen?"✖":"☰")</button>
+    <nav class="app-nav" style="background:var(--nav-bg);color:var(--nav-fg);width:@(navOpen? "210px":"60px");transition:width .18s ease;overflow:hidden;box-shadow:0 0 4px var(--shadow-color);display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;gap:.5rem;padding:.55rem .65rem .4rem .65rem;">
+            <RadzenButton Size="ButtonSize.Small"
+                          Icon="@(navOpen ? "close" : "menu")"
+                          ButtonStyle="ButtonStyle.Secondary"
+                          Class="nav-toggle-modern"
+                          Click="@ToggleNav" />
             @if (navOpen)
             {
                 <span style="font-weight:600;font-size:.9rem;">Navigation</span>
             }
         </div>
-        <div style="flex:1 1 auto;display:flex;flex-direction:column;padding:.3rem;gap:.2rem;">
-            <NavLink href="/" Match="NavLinkMatch.All" class="nav-entry" style="text-decoration:none;color:inherit;">
+        <div style="flex:1 1 auto;display:flex;flex-direction:column;padding:.35rem;gap:.25rem;">
+            <NavLink href="/" Match="NavLinkMatch.All" class="nav-entry">
                 <div class="nav-link-inner @(IsActive("/") ? "active" : null)">
                     <span class="icon">🏠</span>
                     @if (navOpen) { <span>Home</span> }
                 </div>
             </NavLink>
-            <NavLink href="/explorer" class="nav-entry" style="text-decoration:none;color:inherit;">
+            <NavLink href="/explorer" class="nav-entry">
                 <div class="nav-link-inner @(IsActive("/explorer") ? "active" : null)">
                     <span class="icon">🛰️</span>
                     @if (navOpen) { <span>Explorer</span> }
                 </div>
             </NavLink>
         </div>
-        <div style="padding:.5rem .6rem;font-size:.65rem;opacity:.6;">@DateTime.Now:HH:mm</div>
+        <div style="padding:.5rem .7rem;font-size:.65rem;opacity:.55;">@DateTime.Now:HH:mm</div>
     </nav>
 
     <div style="flex:1 1 auto;display:flex;flex-direction:column;min-width:0;background:var(--content-bg);color:var(--content-fg);">
-        <header class="topbar" style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;background:var(--topbar-bg);color:var(--topbar-fg);box-shadow:0 1px 4px var(--shadow-color);transition:background .25s ease,color .25s ease;">
-            <div class="brand" style="font-weight:700;font-size:1rem;letter-spacing:.5px;">OOCL.Image</div>
+        <header class="topbar" style="display:flex;align-items:center;gap:1rem;padding:.55rem 1rem;background:var(--topbar-bg);color:var(--topbar-fg);box-shadow:0 1px 4px var(--shadow-color);">
+            <div class="brand" style="font-weight:700;font-size:1rem;">OOCL.Image</div>
             <div style="flex:1 1 auto;"></div>
-            <div class="actions" style="display:flex;align-items:center;gap:.6rem;">
-                <button class="theme-toggle-btn" @onclick="ToggleTheme">@toggleText</button>
+            <div style="display:flex;align-items:center;gap:.4rem;">
+                <RadzenButton Size="ButtonSize.Small"
+                              Icon="refresh"
+                              Disabled="@isMetaLoading"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Click="@RefreshMeta"
+                              Text="Meta" />
+                <RadzenButton Size="ButtonSize.Small"
+                              Icon="@(isDark ? "light_mode" : "dark_mode")"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Class="theme-toggle-modern"
+                              Click="@ToggleTheme"
+                              Text="@toggleText" />
             </div>
         </header>
 
-        <main class="content" style="flex:1 1 auto;min-width:0;padding:0;">
-            @Body
-        </main>
+        @* Caching via CascadingValue: Seiten (Explorer/Home) können OpenCL Infos ohne erneute API-Calls konsumieren *@
+        <CascadingValue Value="cachedOpenClServiceInfo">
+            <CascadingValue Value="cachedKernelInfos">
+                <main style="flex:1 1 auto;min-width:0;">
+                    @if (isMetaLoading && (cachedKernelInfos == null || cachedKernelInfos.Count == 0))
+                    {
+                        <div style="padding:.75rem;font-size:.8rem;opacity:.8;">Loading OpenCL meta...</div>
+                    }
+                    @Body
+                </main>
+            </CascadingValue>
+        </CascadingValue>
     </div>
 </div>
 
@@ -49,9 +76,18 @@
     private bool navOpen = true;
     private string toggleText => isDark ? "Light" : "Dark";
 
+    // --- Static Cache (prozessweit für alle Layout-Instanzen) ---
+    private static OpenClServiceInfo? cachedOpenClServiceInfo;
+    private static List<OpenClKernelInfo>? cachedKernelInfos;
+    private static DateTime lastMetaFetchUtc = DateTime.MinValue;
+    private static readonly TimeSpan metaTtl = TimeSpan.FromMinutes(10);
+    private static readonly SemaphoreSlim metaLock = new(1, 1);
+
+    private bool isMetaLoading;
+
     protected override void OnInitialized()
     {
-        isDark = Config.DefaultDarkMode.HasValue ? Config.DefaultDarkMode.Value : false;
+        isDark = Config.DefaultDarkMode ?? false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -59,7 +95,63 @@
         if (firstRender)
         {
             await JS.InvokeVoidAsync("theme.set", isDark);
+            _ = EnsureMetaAsync(); // Fire & forget
         }
+    }
+
+    private async Task EnsureMetaAsync(bool force = false)
+    {
+        if (!force &&
+            cachedKernelInfos != null &&
+            cachedKernelInfos.Count > 0 &&
+            DateTime.UtcNow - lastMetaFetchUtc < metaTtl)
+        {
+            return;
+        }
+
+        await metaLock.WaitAsync();
+        try
+        {
+            if (!force &&
+                cachedKernelInfos != null &&
+                cachedKernelInfos.Count > 0 &&
+                DateTime.UtcNow - lastMetaFetchUtc < metaTtl)
+            {
+                return;
+            }
+
+            isMetaLoading = true;
+            StateHasChanged();
+
+            // OpenCL Status
+            cachedOpenClServiceInfo = await Api.GetOpenClServiceInfoAsync();
+
+            // Wenn nicht initialisiert, optional Default-Device anstoßen
+            if (cachedOpenClServiceInfo != null && !cachedOpenClServiceInfo.Initialized)
+            {
+                try
+                {
+                    await Api.InitializeOpenClIndexAsync(0);
+                    cachedOpenClServiceInfo = await Api.GetOpenClServiceInfoAsync();
+                }
+                catch { }
+            }
+
+            // Kernel Infos
+            cachedKernelInfos = (await Api.GetOpenClKernelsAsync()).ToList();
+            lastMetaFetchUtc = DateTime.UtcNow;
+        }
+        finally
+        {
+            isMetaLoading = false;
+            metaLock.Release();
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshMeta()
+    {
+        await EnsureMetaAsync(true);
     }
 
     private async Task ToggleTheme()
@@ -67,6 +159,7 @@
         isDark = !isDark;
         Config.DefaultDarkMode = isDark;
         await JS.InvokeVoidAsync("theme.set", isDark);
+        StateHasChanged();
     }
 
     private void ToggleNav() => navOpen = !navOpen;
@@ -77,7 +170,5 @@
         if (string.IsNullOrEmpty(uri) && href == "/") return true;
         return href.Trim('/').Equals(uri, StringComparison.OrdinalIgnoreCase);
     }
-
-    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
 }
 

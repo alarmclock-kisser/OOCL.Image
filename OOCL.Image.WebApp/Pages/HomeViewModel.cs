@@ -139,27 +139,28 @@ namespace OOCL.Image.WebApp.Pages
 		// --- Initialization / loading ---
 		public async Task InitializeAsync()
         {
-			// Update api config (webapp config is alread injected)
 			this.ApiConfig = await this.Api.GetApiConfigAsync();
 
-			await this.LoadDevices();
+            await this.LoadDevices();
             await this.LoadImages();
-            await this.LoadOpenClStatus();
-            await this.LoadKernels();
-            // initialize max images numeric from config
+
+            if (this.openClServiceInfo == null || string.IsNullOrEmpty(this.openClServiceInfo.DeviceName))
+            {
+                await this.LoadOpenClStatus();
+            }
+
+            if (this.kernelInfos == null || this.kernelInfos.Count == 0)
+            {
+                await this.LoadKernels();
+            }
+
             this.MaxImagesToKeepNumeric = this.Config?.ImagesLimit ?? 0;
-            // ensure magnitude factor
+
             if (string.IsNullOrEmpty(this.SelectedMagnitude))
 			{
 				this.SelectedMagnitude = "kB";
 			}
-
 			this.UpdateMagnitudeFactor();
-
-            // Not working.
-            /*this.selectedKernelName = this.Config?.DefaultKernel ?? string.Empty;
-            this.SelectedMagnitude = this.Config?.DefaultUnit ?? "KB";
-            this.selectedFormat = this.Config?.DefaultFormat ?? "png";*/
 
             await this.FirstApplyDefaultSelections();
 		}
@@ -1870,6 +1871,10 @@ namespace OOCL.Image.WebApp.Pages
 
 	}
 }
+
+
+
+
 
 
 
