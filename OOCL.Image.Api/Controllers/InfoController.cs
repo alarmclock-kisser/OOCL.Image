@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using OOCL.Image.Core;
 using OOCL.Image.Shared;
 
 namespace OOCL.Image.Api.Controllers

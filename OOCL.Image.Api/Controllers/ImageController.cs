@@ -6,8 +6,6 @@ using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using System.Threading.Tasks;
 
 namespace OOCL.Image.Api.Controllers
 {
@@ -275,7 +273,7 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 
-		[HttpGet("list")]
+		[HttpGet("images")]
 		[ProducesResponseType(typeof(IEnumerable<ImageObjInfo>), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
 		public async Task<ActionResult<IEnumerable<ImageInfo>>> ImageListAsync()
@@ -299,7 +297,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpPost("load")]
+		[HttpPost("load-image")]
 		[Consumes("multipart/form-data")]
 		[ProducesResponseType(typeof(ImageObjInfo), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
@@ -387,7 +385,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpPost("create")]
+		[HttpPost("create-image")]
 		[ProducesResponseType(typeof(ImageObjInfo), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
@@ -430,7 +428,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpDelete("remove")]
+		[HttpDelete("remove-image")]
 		[ProducesResponseType(200)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
@@ -465,7 +463,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpDelete("clearAll")]
+		[HttpDelete("clearAll-image")]
 		[ProducesResponseType(200)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
 		public async Task<IActionResult> ImageClearAllAsync()
@@ -489,7 +487,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpGet("data")]
+		[HttpGet("data-image")]
 		public async Task<ActionResult<ImageObjData>> ImageDataAsync([FromQuery] Guid id, [FromQuery] string format = "png")
 		{
 			try
@@ -551,7 +549,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpGet("download")]
+		[HttpGet("download-image")]
 		[ProducesResponseType(typeof(FileContentResult), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
@@ -635,7 +633,7 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpDelete("cleanup-only-keep-latest")]
+		[HttpDelete("cleanup-only-keep-latest-image")]
 		[ProducesResponseType(typeof(int), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]

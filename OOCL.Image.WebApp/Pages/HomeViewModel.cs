@@ -4,13 +4,8 @@ using Microsoft.JSInterop;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
 using Radzen;
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace OOCL.Image.WebApp.Pages
 {

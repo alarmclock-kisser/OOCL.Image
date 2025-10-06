@@ -1,6 +1,4 @@
 ﻿using OOCL.Image.OpenCl;
-using System;
-using System.Text.Json.Serialization;
 
 namespace OOCL.Image.Shared
 {

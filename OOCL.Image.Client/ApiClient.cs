@@ -1,14 +1,7 @@
 ﻿using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.AspNetCore.Mvc;
 using OOCL.Image.Shared;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace OOCL.Image.Client
 {
@@ -66,7 +59,7 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called GetImageListAsync()", nameof(ApiClient));
 			try
 			{
-				return (await this.internalClient.ListAsync()).ToList();
+				return (await this.internalClient.ImagesAsync()).ToList();
 			}
 			catch (Exception ex)
 			{
@@ -87,7 +80,7 @@ namespace OOCL.Image.Client
 			{
 				try
 				{
-					return new ImageObjDto(await this.internalClient.LoadAsync(file), new ImageObjData());
+					return new ImageObjDto(await this.internalClient.LoadImageAsync(file), new ImageObjData());
 				}
 				catch (Exception ex)
 				{
@@ -131,6 +124,50 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task<AudioObjDto> UploadAudioAsync(FileParameter file, bool includeData = false)
+		{
+			await this.logger.LogAsync($"Called UploadAudioAsync()", nameof(ApiClient));
+			if (file == null || file.Data == null || string.IsNullOrWhiteSpace(file.FileName))
+			{
+				return new AudioObjDto();
+			}
+			try
+			{
+				return await this.internalClient.LoadAudioAsync(includeData, file);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return new AudioObjDto();
+			}
+		}
+
+		public async Task<AudioObjDto> UploadAudioAsync(IBrowserFile browserFile, bool includeData = false)
+		{
+			await this.logger.LogAsync($"Called UploadAudioAsync()", nameof(ApiClient));
+			try
+			{
+				using var content = new MultipartFormDataContent();
+				await using var stream = browserFile.OpenReadStream(long.MaxValue);
+				var sc = new StreamContent(stream);
+				sc.Headers.ContentType = new MediaTypeHeaderValue(browserFile.ContentType ?? "application/octet-stream");
+				content.Add(sc, "file", browserFile.Name);
+				var response = await this.httpClient.PostAsync("api/audio/load?includeData=" + (includeData ? "true" : "false"), content);
+				if (!response.IsSuccessStatusCode)
+				{
+					Console.WriteLine(await response.Content.ReadAsStringAsync());
+					return new AudioObjDto();
+				}
+				var json = await response.Content.ReadAsStringAsync();
+				return JsonSerializer.Deserialize<AudioObjDto>(json, this.jsonSerializerOptions) ?? new AudioObjDto();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine("Upload exception: " + ex);
+				return new AudioObjDto();
+			}
+		}
+
 
 		public async Task RemoveImageAsync(Guid id)
 		{
@@ -138,7 +175,21 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called RemoveImageAsync({id})", nameof(ApiClient));
 			try
 			{
-				await this.internalClient.RemoveAsync(id);
+				await this.internalClient.RemoveImageAsync(id);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+			}
+		}
+
+		public async Task RemoveAudioAsync(Guid id)
+		{
+			// Logging
+			await this.logger.LogAsync($"Called RemoveAudioAsync({id})", nameof(ApiClient));
+			try
+			{
+				await this.internalClient.RemoveAudioAsync(id);
 			}
 			catch (Exception ex)
 			{
@@ -152,7 +203,21 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called ClearImagesAsync()", nameof(ApiClient));
 			try
 			{
-				await this.internalClient.ClearAllAsync();
+				await this.internalClient.ClearAllImageAsync();
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+			}
+		}
+
+		public async Task ClearAudiosAsync()
+		{
+			// Logging
+			await this.logger.LogAsync($"Called ClearAudiosAsync()", nameof(ApiClient));
+			try
+			{
+				await this.internalClient.ClearAllAudioAsync();
 			}
 			catch (Exception ex)
 			{
@@ -166,12 +231,26 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called GetImageDataAsync({id}, {format})", nameof(ApiClient));
 			try
 			{
-				return await this.internalClient.DataAsync(id, format);
+				return await this.internalClient.DataImageAsync(id, format);
 			}
 			catch (Exception ex)
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return new ImageObjData();
+			}
+		}
+
+		public async Task<AudioObjData> GetAudioDataAsync(Guid id)
+		{
+			await this.logger.LogAsync($"Called GetAudioDataAsync({id})", nameof(ApiClient));
+			try
+			{
+				return await this.internalClient.DataAudioAsync(id);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return new AudioObjData();
 			}
 		}
 
@@ -183,7 +262,7 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called DownloadImageAsync({id}, {format})", nameof(ApiClient));
 			try
 			{
-				return await this.internalClient.DownloadAsync(id, format);
+				return await this.internalClient.DownloadImageAsync(id, format);
 			}
 			catch (Exception ex)
 			{
@@ -191,6 +270,42 @@ namespace OOCL.Image.Client
 				return null;
 			}
 		}
+
+		public async Task<FileResponse?> DownloadAudioAsync(Guid id, string format = "wav", int bits = 24)
+		{
+			await this.logger.LogAsync($"Called DownloadAudioAsync({id})", nameof(ApiClient));
+			try
+			{
+				return await this.internalClient.DownloadAudioAsync(id, format, bits);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return null;
+			}
+		}
+
+		public async Task<FileResponse?> DownloadAudioDataAsync(AudioObjDto dto, string format = "wav", int bits = 24)
+		{
+			await this.logger.LogAsync($"Called DownloadAudioDataAsync(dto: {(dto != null ? dto.Info.Id.ToString() : "null")}, {format}, {bits})", nameof(ApiClient));
+			try
+			{
+				if (dto == null || dto.Info == null || dto.Data == null)
+				{
+					await this.logger.LogAsync("No valid dto provided for audio download.", nameof(ApiClient));
+					return null;
+				}
+
+				return await this.internalClient.DownloadAudioDataAsync(format, bits, dto);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return null;
+			}
+		}
+
+
 
 		public async Task<FileResponse?> DownloadAsGif(Guid[]? ids = null, ImageObjDto[]? dtos = null, int frameRate = 10, double rescaleFactor = 1.0, bool doLoop = true)
 		{
@@ -258,7 +373,21 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called CleanupOldImages({maxImages})", nameof(ApiClient));
 			try
 			{
-				return await this.internalClient.CleanupOnlyKeepLatestAsync(maxImages);
+				return await this.internalClient.CleanupOnlyKeepLatestImageAsync(maxImages);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return 0;
+			}
+		}
+
+		public async Task<int> CleanupOldAudios(int maxAudios = 0)
+		{
+			await this.logger.LogAsync($"Called CleanupOldAudios({maxAudios})", nameof(ApiClient));
+			try
+			{
+				return await this.internalClient.CleanupOnlyKeepLatestAudioAsync(maxAudios);
 			}
 			catch (Exception ex)
 			{

@@ -5,7 +5,6 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Drawing;
 using Color = SixLabors.ImageSharp.Color;
 using Size = SixLabors.ImageSharp.Size;
 
@@ -16,7 +15,7 @@ namespace OOCL.Image.Core
         private readonly ConcurrentDictionary<Guid, ImageObj> images = [];
         private readonly object lockObj = new();
 
-        public IReadOnlyCollection<ImageObj> Images => this.images.Values.ToList();
+		public IReadOnlyCollection<ImageObj> Images => this.images.Values.ToList();
 
         public ImageObj? this[Guid guid]
         {

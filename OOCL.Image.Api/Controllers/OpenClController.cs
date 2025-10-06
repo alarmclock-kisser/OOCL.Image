@@ -5,20 +5,22 @@ using OOCL.Image.Shared;
 
 namespace OOCL.Image.Api.Controllers
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class OpenClController : ControllerBase
-    {
+	[ApiController]
+	[Route("api/[controller]")]
+	public class OpenClController : ControllerBase
+	{
 		private readonly RollingFileLogger logger;
 		private readonly OpenClService openClService;
-        private readonly ImageCollection imageCollection;
+		private readonly ImageCollection imageCollection;
+		private readonly AudioCollection audioCollection;
 
-        public OpenClController(RollingFileLogger logger, OpenClService openClService, ImageCollection imageCollection)
-        {
+		public OpenClController(RollingFileLogger logger, OpenClService openClService, ImageCollection imageCollection, AudioCollection audioCollection)
+		{
 			this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
 			this.openClService = openClService;
-            this.imageCollection = imageCollection;
-        }
+			this.imageCollection = imageCollection;
+			this.audioCollection = audioCollection;
+		}
 
 		[HttpGet("status")]
 		[ProducesResponseType(typeof(OpenClServiceInfo), 200)]
@@ -294,7 +296,7 @@ namespace OOCL.Image.Api.Controllers
 				img = created;
 			}
 
-			var args = request.Arguments ?? new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+			var args = request.Arguments ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 			args["width"] = img.Width.ToString();
 			args["height"] = img.Height.ToString();
 
@@ -357,6 +359,175 @@ namespace OOCL.Image.Api.Controllers
 			}
 
 			return this.Ok(new ImageObjDto(result));
+		}
+
+		[HttpPost("execute-audio-timestretch")]
+		[ProducesResponseType(typeof(AudioObjDto), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<AudioObjDto>> ExecuteAudioTimestretchAsync([FromBody] AudioTimestretchRequest request)
+		{
+			if (!this.openClService.Initialized)
+			{
+				await this.logger.LogAsync("[400] api/opencl/execute-audio-timestretch: OpenCL Not Initialized", nameof(OpenClController));
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
+			}
+			if (request.AudioId == Guid.Empty && request.OptionalAudio == null)
+			{
+				await this.logger.LogAsync("[400] api/opencl/execute-audio-timestretch: Either AudioId or OptionalAudio required", nameof(OpenClController));
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Either AudioId or OptionalAudio required" });
+			}
+
+			try
+			{
+				AudioObj? audio = this.audioCollection[request.AudioId];
+				if (audio == null && request.OptionalAudio != null)
+				{
+					audio = await AudioCollection.CreateFromDataAsync(request.OptionalAudio.Data.Samples, request.OptionalAudio.Info.SampleRate, request.OptionalAudio.Info.Channels, request.OptionalAudio.Info.BitDepth);
+				}
+				if (audio == null)
+				{
+					await this.logger.LogAsync("[500] api/opencl/execute-audio-timestretch: Failed to create temp audio from OptionalAudio", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp audio" });
+				}
+
+				var result = await this.openClService.TimeStretch(audio, request.KernelName, "", request.SpeedFactor, request.ChunkSize, request.Overlap);
+				if (result == null)
+				{
+					await this.logger.LogAsync("[500] api/opencl/execute-audio-timestretch: OpenCL returned null audio", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
+				}
+
+				var dto = new AudioObjDto(result, request.OptionalAudio != null);
+				return this.Ok(dto);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp audio", Detail = ex.Message });
+			}
+		}
+
+		[HttpPost("execute-on-audio")]
+		[ProducesResponseType(typeof(AudioObjDto), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<AudioObjDto>> ExecuteOnAudioAsync([FromBody] ExecuteOnAudioRequest request)
+		{
+			if (!this.openClService.Initialized)
+			{
+				await this.logger.LogAsync("[400] api/opencl/execute-on-audio: OpenCL Not Initialized", nameof(OpenClController));
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
+			}
+			if (request.AudioId == Guid.Empty && request.OptionalAudio == null)
+			{
+				await this.logger.LogAsync("[400] api/opencl/execute-on-audio: Either AudioId or OptionalAudio required", nameof(OpenClController));
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Either AudioId or OptionalAudio required" });
+			}
+
+			try
+			{
+				AudioObj? audio = this.audioCollection[request.AudioId];
+				if (audio == null && request.OptionalAudio != null)
+				{
+					audio = await AudioCollection.CreateFromDataAsync(request.OptionalAudio.Data.Samples, request.OptionalAudio.Info.SampleRate, request.OptionalAudio.Info.Channels, request.OptionalAudio.Info.BitDepth);
+				}
+				if (audio == null)
+				{
+					await this.logger.LogAsync("[500] api/opencl/execute-on-audio: Failed to create temp audio from OptionalAudio", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp audio" });
+				}
+
+				var args = request.Arguments ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				args["rate"] = audio.SampleRate.ToString();
+				args["chan"] = audio.Channels.ToString();
+				args["bit"] = audio.BitDepth.ToString();
+				args["length"] = audio.Data.LongLength.ToString();
+				
+				var result = await this.openClService.ExecuteAudioKernel(audio, request.KernelName, "", request.ChunkSize, request.Overlap, args);
+				if (result == null)
+				{
+					await this.logger.LogAsync("[500] api/opencl/execute-on-audio: OpenCL returned null audio", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
+				}
+
+				var dto = new AudioObjDto(result);
+
+				return this.Ok(dto);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp audio", Detail = ex.Message });
+			}
+		}
+
+
+
+		[HttpGet("test-execute-audio-timestretch-default")]
+		[ProducesResponseType(typeof(IEnumerable<AudioObjInfo>), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<IEnumerable<AudioObjInfo>>> TestExecuteAudioTimestretchResourcesDefaultAsync([FromQuery] int? forceInitializeOpenClDeviceIndex = 2, [FromQuery] bool? onlyTestFirstResourceFile = true, [FromQuery] double? overwriteStretchFactor = null)
+		{
+			try
+			{
+				if (!this.openClService.Initialized)
+				{
+					if (forceInitializeOpenClDeviceIndex.HasValue)
+					{
+						await Task.Run(() => this.openClService.Initialize(forceInitializeOpenClDeviceIndex.Value));
+						await this.logger.LogAsync($"[200] api/opencl/test-execute-audio-timestretch-default: Forced OpenCL initialization with device index {forceInitializeOpenClDeviceIndex.Value}", nameof(OpenClController));
+						if (!this.openClService.Initialized)
+						{
+							await this.logger.LogAsync("[400] api/opencl/test-execute-audio-timestretch-default: OpenCL Not Initialized after forced initialization", nameof(OpenClController));
+							return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized after forced initialization" });
+						}
+					}
+				}
+
+				if (!this.openClService.Initialized)
+				{
+					await this.logger.LogAsync("[400] api/opencl/test-execute-audio-timestretch-default: OpenCL Not Initialized", nameof(OpenClController));
+					return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
+				}
+
+				// Build params for timestretch call in OpenClService
+				string kernelName = "timestretch_double03";
+				double speedFactor = (overwriteStretchFactor.HasValue && overwriteStretchFactor.Value > 0 ? overwriteStretchFactor.Value : 0.80);
+				int chunkSize = 8192;
+				float overlap = 0.5f;
+
+				var loaded = await this.audioCollection.LoadFromResources();
+				if (loaded == null || !loaded.Any())
+				{
+					await this.logger.LogAsync("[404] api/opencl/test-execute-audio-timestretch-default: No audio files found in resources", nameof(OpenClController));
+					return this.NotFound(new ProblemDetails { Status = 404, Title = "No audio files found in resources" });
+				}
+
+				loaded = (onlyTestFirstResourceFile == true ? loaded.Take(1).ToList() : loaded.ToList()) ?? [];
+				var results = new List<AudioObj>();
+				foreach (var obj in loaded)
+				{
+					await this.logger.LogAsync($"Processing audio {obj.Id} ({obj.Name}, {obj.Length.ToString()} samples, {obj.SampleRate} Hz, {obj.Channels} channels, {obj.BitDepth} bit)", nameof(OpenClController));
+					results.Add(await this.openClService.TimeStretch(obj, kernelName, "", speedFactor, chunkSize, overlap) ?? obj);
+				}
+
+				var infos = await Task.Run(() => results.Select(r => new AudioObjInfo(r)));
+
+				return this.Ok(infos);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Internal Server Error",
+					Detail = ex.Message
+				});
+			}
 		}
 	}
 }

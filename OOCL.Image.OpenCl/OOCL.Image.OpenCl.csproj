@@ -16,6 +16,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Kernels\Audio\fft01.cl">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Kernels\Audio\ifft01.cl">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Kernels\Audio\timestretch_double03.cl">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Kernels\Image\edgeDetection00.cl">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

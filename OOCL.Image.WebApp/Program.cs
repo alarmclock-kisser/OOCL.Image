@@ -1,7 +1,5 @@
-using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using OOCL.Image.Client;
-using OOCL.Image.WebApp.Components;
 using OOCL.Image.Shared;
 
 namespace OOCL.Image.WebApp

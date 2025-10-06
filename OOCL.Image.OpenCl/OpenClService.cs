@@ -1,13 +1,7 @@
 ﻿using OOCL.Image.Core;
 using OpenTK.Compute.OpenCL;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
-using System.Linq;
-using System.Numerics;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace OOCL.Image.OpenCl
 {
@@ -346,6 +340,294 @@ namespace OOCL.Image.OpenCl
 			this.Register.FreeBuffer(result);
 
 			return imgObj;
+		}
+
+
+
+		// Audio accessors
+		public async Task<AudioObj> MoveAudio(AudioObj obj, int chunkSize = 16384, float overlap = 0.5f, bool keep = false)
+		{
+			if (this.Register == null)
+			{
+				Console.WriteLine("Memory Register is not initialized.");
+				return obj;
+			}
+
+			Stopwatch sw = Stopwatch.StartNew();
+
+			try
+			{
+				List<float[]> chunks = [];
+
+				// -> Device
+				if (obj.OnHost)
+				{
+					chunks = (await obj.GetChunks(chunkSize, overlap, keep)).ToList();
+					if (chunks.Count <= 0)
+					{
+						Console.WriteLine("Failed to get audio chunks from AudioObj.");
+						return obj;
+					}
+
+					var mem = this.Register.PushChunks<float>(chunks);
+					if (mem == null)
+					{
+						Console.WriteLine("Failed to push audio chunks to OpenCL memory.");
+						return obj;
+					}
+
+					obj["push"] = sw.Elapsed.TotalMilliseconds;
+
+					long memIndexHandle = mem[0].Handle;
+					if (memIndexHandle == 0)
+					{
+						Console.WriteLine("Failed to parse memory index handle.");
+						return obj;
+					}
+
+					obj.Pointer = (nint) memIndexHandle;
+				}
+				else if (obj.OnDevice)
+				{
+					if (obj.Form == "c")
+					{
+						// obj.ComplexChunks = this.Register.PullChunks<Complex>(obj.Pointer);
+					}
+					else if (obj.Form == "f")
+					{
+						chunks = this.Register.PullChunks<float>(obj.Pointer);
+						obj["pull"] = sw.Elapsed.TotalMilliseconds;
+
+						await obj.AggregateStretchedChunks(chunks);
+					}
+				}
+				else
+				{
+					Console.WriteLine("Error: AudioObj is neither on Host nor on Device.");
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				return obj;
+			}
+			finally
+			{
+				sw.Stop();
+				await Task.Yield();
+			}
+
+			return obj;
+		}
+
+		public async Task<AudioObj> ExecuteAudioKernel(AudioObj obj, string kernelName = "normalize", string version = "00", int chunkSize = 0, float overlap = 0.0f, Dictionary<string, string>? providedArguments = null, bool log = false, IProgress<int>? progress = null)
+		{
+			// Check executioner
+			if (this.Executioner == null)
+			{
+				Console.WriteLine("Kernel executioner not initialized (Cannot execute audio kernel)");
+				return obj;
+			}
+
+			// Optionally move audio to device
+			bool moved = false;
+			if (obj.OnHost)
+			{
+				await this.MoveAudio(obj, chunkSize, overlap);
+				moved = true;
+			}
+			if (!obj.OnDevice)
+			{
+				return obj;
+			}
+
+			// Take time
+			Stopwatch sw = Stopwatch.StartNew();
+
+			// Execute kernel on device
+			double factor = 1.0d;
+
+			// Aggregate arguments
+			Dictionary<string, string> optionalArgs = new()
+			{
+				{ "rate", obj.SampleRate.ToString() },
+				{ "bit", obj.BitDepth.ToString() },
+				{ "chan", obj.Channels.ToString() },
+				{ "len", obj.Length.ToString()   }
+			};
+
+			if (progress == null)
+			{
+				obj.Pointer = this.Executioner.ExecuteAudioKernel(
+					(nint) obj.Pointer,
+					out factor, // Hier wird der 'out' Parameter für die synchrone Methode verwendet
+					obj.Length,
+					kernelName,
+					version,
+					chunkSize,
+					overlap,
+					obj.SampleRate,
+					obj.BitDepth,
+					obj.Channels,
+					providedArguments
+				);
+			}
+			else
+			{
+				// Die asynchrone Methode gibt ein Tupel zurück, das wir direkt entpacken.
+				// Das 'out' Keyword wird hier entfernt.
+				(obj.Pointer, factor) = await this.Executioner.ExecuteAudioKernelAsync(
+					(nint) obj.Pointer,
+					obj.Length,
+					kernelName,
+					version,
+					chunkSize,
+					overlap,
+					obj.SampleRate,
+					obj.BitDepth,
+					obj.Channels,
+					providedArguments,
+					progress
+				);
+			}
+
+			sw.Stop();
+			obj["stretch"] = sw.Elapsed.TotalMilliseconds;
+
+			if (obj.Pointer == IntPtr.Zero && log)
+			{
+				// Console.WriteLine("Failed to execute audio kernel", "Pointer=" + obj.Pointer.ToString("X16"), 1);
+			}
+
+			// Reload kernel
+			this.Compiler?.LoadKernel(kernelName + version, "");
+
+			// Log factor & set new bpm
+			if (factor != 1.00f)
+			{
+				// IMPORTANT: Set obj Factor
+				obj.StretchFactor = factor;
+				await obj.UpdateBpm((float) (obj.Bpm / factor));
+				// Console.WriteLine("Factor for audio kernel: " + factor + " Pointer=" + obj.Pointer.ToString("X16") + " BPM: " + obj.Bpm);
+			}
+
+			// Move back optionally
+			if (moved && obj.OnDevice && obj.Form.StartsWith("f"))
+			{
+				await this.MoveAudio(obj, chunkSize, overlap);
+			}
+
+			return obj;
+		}
+
+		public async Task<AudioObj> PerformFFT(AudioObj obj, string version = "01", int chunkSize = 0, float overlap = 0.0f, bool keep = false)
+		{
+			// Optionally move audio to device
+			bool moved = false;
+			if (obj.OnHost)
+			{
+				await this.MoveAudio(obj, chunkSize, overlap, keep);
+				moved = true;
+			}
+			if (!obj.OnDevice)
+			{
+				return obj;
+			}
+
+			Stopwatch sw = Stopwatch.StartNew();
+
+			// Perform FFT on device
+			obj.Pointer = this.Executioner?.ExecuteFFT((nint) obj.Pointer, version, obj.Form.FirstOrDefault(), chunkSize, overlap, true) ?? obj.Pointer;
+			obj["fft"] = sw.Elapsed.TotalMilliseconds;
+
+			if (obj.Pointer == IntPtr.Zero)
+			{
+				Console.WriteLine("Failed to perform FFT", "Pointer=" + obj.Pointer.ToString("X16"), 1);
+			}
+			else
+			{
+				obj.Form = obj.Form.StartsWith("f") ? "c" : "f";
+			}
+
+			if (moved)
+			{
+				// await this.MoveAudio(obj);
+			}
+
+			sw.Stop();
+
+			return obj;
+		}
+
+		public async Task<AudioObj> TimeStretch(AudioObj obj, string kernelName = "timestretch_double", string version = "03", double factor = 1.000d, int chunkSize = 16384, float overlap = 0.5f, IProgress<int>? progress = null)
+		{
+			if (this.Executioner == null)
+			{
+				Console.WriteLine("Kernel executioner is not initialized.");
+				return obj;
+			}
+
+			kernelName = kernelName + version;
+
+			try
+			{
+				// Optionally move obj to device
+				bool moved = false;
+				if (obj.OnHost)
+				{
+					IntPtr pointer = (await this.MoveAudio(obj, chunkSize, overlap, false)).Pointer;
+					if (pointer == IntPtr.Zero)
+					{
+						return obj;
+					}
+					moved = true;
+				}
+
+				// Get optional args
+				Dictionary<string, string> optionalArgs;
+				if (kernelName.ToLower().Contains("double"))
+				{
+					// Double kernel
+					optionalArgs = new()
+						{
+							{ "factor", ((double) factor).ToString("F15")  },
+						};
+				}
+				else
+				{
+					optionalArgs = new()
+						{
+							{ "factor", ((float) factor).ToString("F6")  },
+						};
+				}
+
+				// Execute time stretch kernel
+				var ptr = (await this.ExecuteAudioKernel(obj, kernelName, "", chunkSize, overlap, optionalArgs, true, progress)).Pointer;
+				if (ptr == IntPtr.Zero)
+				{
+					return obj;
+				}
+
+				// Optionally move obj back to host
+				if (moved && obj.OnDevice)
+				{
+					IntPtr resultPointer = (await this.MoveAudio(obj, chunkSize, overlap)).Pointer;
+					if (resultPointer != IntPtr.Zero)
+					{
+						return obj;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+			}
+			finally
+			{
+				await Task.Yield();
+			}
+
+			return obj;
 		}
 
 

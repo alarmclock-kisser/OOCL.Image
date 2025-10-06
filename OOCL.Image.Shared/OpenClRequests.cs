@@ -18,4 +18,24 @@ namespace OOCL.Image.Shared
         public Dictionary<string,string>? Arguments { get; set; }
         public float? Rescale { get; set; }
     }
+
+    public class AudioTimestretchRequest
+    {
+        public Guid AudioId { get; set; }
+        public string KernelName { get; set; } = "timestretch_double03";
+        public int ChunkSize { get; set; } = 16384;
+        public float Overlap { get; set; } = 0.5f;
+		public double SpeedFactor { get; set; } = 1.0f;
+        public AudioObjDto? OptionalAudio { get; set; }
+	}
+
+	public class ExecuteOnAudioRequest
+    {
+        public Guid AudioId { get; set; }
+        public string KernelName { get; set; } = string.Empty;
+		public int ChunkSize { get; set; } = 0;
+		public float Overlap { get; set; } = 0.0f;
+		public Dictionary<string,string>? Arguments { get; set; }
+        public AudioObjDto? OptionalAudio { get; set; }
+	}
 }

@@ -38,10 +38,12 @@ namespace OOCL.Image.Api
 			if (serverSidedData)
 			{
 				builder.Services.AddSingleton(sp => new ImageCollection(false, 720, 480, imagesLimit, loadResources, serverSidedData));
+				builder.Services.AddSingleton(sp => new AudioCollection(4));
 			}
 			else
 			{
 				builder.Services.AddScoped(sp => new ImageCollection(false, 720, 480, imagesLimit, loadResources, serverSidedData));
+				builder.Services.AddScoped(sp => new AudioCollection(1));
 			}
 
 			builder.Services.AddSingleton(sp => new RollingFileLogger(maxLogLines, cleanupPreviousLogs, null, "log_" + environment + "_api_"));

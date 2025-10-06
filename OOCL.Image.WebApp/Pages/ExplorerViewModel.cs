@@ -1,12 +1,9 @@
 ﻿using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
-using Newtonsoft.Json.Linq;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
-using OpenTK.Graphics.ES11;
 using Radzen;
 using System.Globalization;
-using System.Linq;
 
 namespace OOCL.Image.WebApp.Pages
 {

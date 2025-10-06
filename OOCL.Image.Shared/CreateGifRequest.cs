@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace OOCL.Image.Shared
+﻿namespace OOCL.Image.Shared
 {
 	public class CreateGifRequest
 	{
