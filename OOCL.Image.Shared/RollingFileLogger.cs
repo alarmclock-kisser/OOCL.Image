@@ -34,7 +34,8 @@ namespace OOCL.Image.Shared
 			}
 			if (!Directory.Exists(this.ResourcesPath))
 			{
-				Directory.CreateDirectory(this.ResourcesPath);
+				// take temp path
+				this.ResourcesPath = Path.GetTempPath();
 			}
 
 			// Set log file name
@@ -91,7 +92,7 @@ namespace OOCL.Image.Shared
 			string logDir = Path.Combine(this.ResourcesPath, this.LogDirName);
 			if (!Directory.Exists(logDir))
 			{
-				Directory.CreateDirectory(logDir);
+				logDir = Path.GetTempPath();
 			}
 
 			return logDir;

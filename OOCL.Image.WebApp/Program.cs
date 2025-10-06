@@ -82,7 +82,7 @@ namespace OOCL.Image.WebApp
 			{
 				// Zeigt detaillierte Fehler in der Konsole/im Browser an
 				options.DetailedErrors = true;
-			});
+			}).AddHubOptions(o => { o.MaximumReceiveMessageSize = 64 * 1024 * 1024; });
 
 			var app = builder.Build();
 

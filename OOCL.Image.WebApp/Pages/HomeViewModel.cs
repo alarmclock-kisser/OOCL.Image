@@ -6,7 +6,6 @@ using OOCL.Image.Shared;
 using Radzen;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -30,7 +29,6 @@ namespace OOCL.Image.WebApp.Pages
             this.Notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
             this.JS = js ?? throw new ArgumentNullException(nameof(js));
             this.DialogService = dialog;
-
             this.devices = [];
             this.images = [];
             this.kernelInfos = [];
@@ -365,6 +363,78 @@ namespace OOCL.Image.WebApp.Pages
             }
         }
 
+        // NEU: Hilfsmethode für Server-Downloads (FileResponse -> Browser Download)
+        private async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
+        {
+            try
+            {
+                if (file.Stream == null)
+                {
+                    return;
+                }
+                byte[] bytes;
+                if (file.Stream.CanSeek)
+                {
+                    file.Stream.Position = 0;
+                    using var ms = new MemoryStream();
+                    await file.Stream.CopyToAsync(ms);
+                    bytes = ms.ToArray();
+                }
+                else
+                {
+                    // Nicht-seekbar -> direkt komplett lesen
+                    using var ms = new MemoryStream();
+                    await file.Stream.CopyToAsync(ms);
+                    bytes = ms.ToArray();
+                }
+
+                if (bytes.Length == 0)
+                {
+                    return;
+                }
+
+                string mime = DetectMimeFromHeaders(file) ?? fallbackMime;
+                string base64 = Convert.ToBase64String(bytes);
+                string dataUri = $"data:{mime};base64,{base64}";
+                await this.JS.InvokeVoidAsync("downloadFileFromDataUri", suggestedFileName, dataUri);
+            }
+            catch (Exception ex)
+            {
+                this.Notifications.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Download fehlgeschlagen",
+                    Detail = ex.Message,
+                    Duration = 4000
+                });
+            }
+            finally
+            {
+                file.Dispose();
+            }
+        }
+
+        // NEU: heuristische MIME-Erkennung aus Response-Headern
+        private static string? DetectMimeFromHeaders(FileResponse file)
+        {
+            try
+            {
+                if (file.Headers == null)
+                {
+                    return null;
+                }
+                if (file.Headers.TryGetValue("Content-Type", out var values))
+                {
+                    var ct = values?.FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(ct))
+                    {
+                        return ct.Split(';')[0].Trim();
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
 
 		public async Task DownloadImage(Guid id, string format)
         {
@@ -376,6 +446,27 @@ namespace OOCL.Image.WebApp.Pages
             {
                 // Server sided data
                 var file = await this.Api.DownloadImageAsync(id, format);
+                if (file == null)
+                {
+                    this.Notifications.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "Download fehlgeschlagen",
+                        Detail = "Server lieferte keine Datei.",
+                        Duration = 3000
+                    });
+                    return;
+                }
+                string safeFormat = (format ?? "png").Trim('.').ToLowerInvariant();
+                string filename = $"image_{id.ToString()[..8]}.{safeFormat}";
+                string fallbackMime = safeFormat switch
+                {
+                    "png" => "image/png",
+                    "jpg" or "jpeg" => "image/jpeg",
+                    "bmp" => "image/bmp",
+                    _ => "application/octet-stream"
+                };
+                await this.DownloadFileResponseAsync(file, filename, fallbackMime);
             }
             else
             {
@@ -388,11 +479,8 @@ namespace OOCL.Image.WebApp.Pages
 				}
 
 				var base64Data = dto.Data.Base64Data;
-				var mimeType = dto.Data.MimeType;
-				var fileName = $"image_{id.ToString().Substring(0, 8)}.{format}";
-
-				// **KORREKTUR: Erstellen des vollständigen Data-URI-Strings**
-				// Struktur: data:[MIME-Type];base64,[Base64-Daten]
+				var mimeType = dto.Data.MimeType ?? "application/octet-stream";
+				var fileName = $"image_{id.ToString()[..8]}.{format}";
 				string dataUri = $"data:{mimeType};base64,{base64Data}";
 
 				// Übergeben Sie den Data-URI-String an die JS-Funktion
@@ -445,28 +533,61 @@ namespace OOCL.Image.WebApp.Pages
 
 				var file = await this.Api.DownloadAsGif(ids, dtos, this.GifFrameRate, this.GifRescaleFactor, this.GifDoLoop);
 
-				if (file == null || file.Stream == null || file.Stream.Length == 0)
+				if (isServer)
 				{
-					this.Notifications.Notify(new NotificationMessage
-					{
-						Severity = NotificationSeverity.Error,
-						Summary = "GIF-creation failed.",
-						Duration = 4000
-					});
-					return;
-				}
+                    if (file == null || file.Stream == null)
+                    {
+                        this.Notifications.Notify(new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Error,
+                            Summary = "GIF-creation failed.",
+                            Duration = 4000
+                        });
+                        return;
+                    }
+                    string fname = $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_srv.gif";
+                    await this.DownloadFileResponseAsync(file, fname, "image/gif");
+                }
+                else
+                {
+                    // WICHTIG: Bei nicht serverseitigen Daten ist der HTTP-Response-Stream (FileResponse.Stream)
+                    // oft NICHT seekbar. Auf Length zuzugreifen wirft dann eine NotSupportedException.
+                    // Daher: Kein Zugriff auf file.Stream.Length mehr – wir puffern zuerst komplett.
+                    if (file == null || file.Stream == null)
+                    {
+                        this.Notifications.Notify(new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Error,
+                            Summary = "GIF-creation failed.",
+                            Detail = "No stream returned.",
+                            Duration = 4000
+                        });
+                        return;
+                    }
 
-				// Stream in Base64 konvertieren und Download triggern
-				using var ms = new MemoryStream();
-				await file.Stream.CopyToAsync(ms);
-				var bytes = ms.ToArray();
-				var base64 = Convert.ToBase64String(bytes);
+                    using var ms = new MemoryStream();
+                    await file.Stream.CopyToAsync(ms);
+                    var bytes = ms.ToArray();
 
-				string mime = "image/gif";
-				string filename = $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{(isServer ? "srv" : "client")}.gif";
+                    if (bytes.Length == 0)
+                    {
+                        this.Notifications.Notify(new NotificationMessage
+                        {
+                            Severity = NotificationSeverity.Error,
+                            Summary = "GIF-creation failed.",
+                            Detail = "Empty GIF stream.",
+                            Duration = 4000
+                        });
+                        file.Dispose();
+                        return;
+                    }
 
-				await this.JS.InvokeVoidAsync("eval",
-					$"(function(){{var a=document.createElement('a');a.href='data:{mime};base64,{base64}';a.download='{filename}';document.body.appendChild(a);a.click();document.body.removeChild(a);}})();");
+                    var base64 = Convert.ToBase64String(bytes);
+                    string mime = "image/gif";
+                    string filename = $"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}_client.gif";
+                    await this.JS.InvokeVoidAsync("downloadFileFromDataUri", filename, $"data:{mime};base64,{base64}");
+                    file.Dispose();
+                }
 
 				this.Notifications.Notify(new NotificationMessage
 				{
@@ -482,6 +603,78 @@ namespace OOCL.Image.WebApp.Pages
 				{
 					Severity = NotificationSeverity.Error,
 					Summary = "GIF Error",
+					Detail = ex.Message,
+					Duration = 5000
+				});
+			}
+		}
+
+		public async Task DownloadCreateGifDirect()
+		{
+			try
+			{
+				bool isServer = await this.Api.IsServersidedDataAsync();
+
+				Guid[]? ids = null;
+				ImageObjDto[]? dtos = null;
+
+				if (isServer)
+				{
+					ids = this.images
+						.OrderBy(i => i.CreatedAt)
+						.Select(i => i.Id)
+						.ToArray();
+				}
+				else
+				{
+					dtos = this.ClientImageCollection
+						.Where(d => d?.Data != null && !string.IsNullOrEmpty(d.Data.Base64Data))
+						.OrderBy(d => d.Info.CreatedAt)
+						.ToArray();
+				}
+
+				if ((ids == null || ids.Length == 0) && (dtos == null || dtos.Length == 0))
+				{
+					this.Notifications.Notify(new NotificationMessage
+					{
+						Severity = NotificationSeverity.Warning,
+						Summary = "Keine Frames",
+						Detail = "Kein Bildmaterial für GIF.",
+						Duration = 2500
+					});
+					return;
+				}
+
+				var payload = new
+				{
+					Ids = ids,
+					Dtos = dtos,
+					FrameRate = this.GifFrameRate,
+					Rescale = this.GifRescaleFactor,
+					DoLoop = this.GifDoLoop
+				};
+				string json = System.Text.Json.JsonSerializer.Serialize(payload);
+
+				// Direkt im Browser fetchen (umgeht SignalR Limit)
+				var result = await this.JS.InvokeAsync<object>("downloadGifViaPost",
+					$"{this.Config.ApiBaseUrl?.TrimEnd('/')}/api/image/create-gif",
+					json,
+					$"animation_{DateTime.UtcNow:yyyyMMdd_HHmmss}.gif");
+
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Info,
+					Summary = "GIF angefordert",
+					Detail = $"{(ids?.Length ?? dtos?.Length ?? 0)} Frames, {this.GifFrameRate} fps",
+					Duration = 3000
+				});
+			}
+			catch (Exception ex)
+			{
+				this.Notifications.Notify(new NotificationMessage
+				{
+					Severity = NotificationSeverity.Error,
+					Summary = "GIF Download Fehler",
 					Detail = ex.Message,
 					Duration = 5000
 				});
@@ -1677,6 +1870,8 @@ namespace OOCL.Image.WebApp.Pages
 
 	}
 }
+
+
 
 
 

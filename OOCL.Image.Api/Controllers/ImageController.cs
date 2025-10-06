@@ -667,94 +667,101 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
-		[HttpGet("create-gif")]
+		[HttpPost("create-gif")]
 		[ProducesResponseType(typeof(FileContentResult), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
-		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<IActionResult> CreateGifAsync([FromQuery] IEnumerable<Guid>? ids = null, [FromQuery] IEnumerable<ImageObjDto>? dtos = null, [FromQuery] int frameRate = 10, [FromQuery] double rescale = 1.0, [FromQuery] bool doLoop = false)
+		public async Task<IActionResult> CreateGifFromBodyAsync([FromBody] CreateGifRequest request)
 		{
+			if (request == null)
+			{
+				return this.BadRequest(new ProblemDetails
+				{
+					Title = "Invalid request",
+					Detail = "Request body is null.",
+					Status = 400
+				});
+			}
+
+			var ids = request.Ids?.ToArray();
+			var dtos = request.Dtos?.ToArray();
+			int frameRate = request.FrameRate;
+			double rescale = request.Rescale;
+			bool doLoop = request.DoLoop;
+
 			List<ImageObj> objs = [];
 			string fileName = $"animation_{DateTime.Now:yyyyMMdd_HHmmss}.gif";
 
 			try
 			{
-				// If Guids are provided, load those images from the collection
-				if (ids != null && ids.Count() > 0)
+				if (ids != null && ids.Length > 0)
 				{
-					await this.logger.LogAsync($"[000] api/image/create-gif: Creating GIF from {ids.Count()} image IDs with frame rate {frameRate}, rescale {rescale}, loop {(doLoop ? "enabled" : "disabled")}.", nameof(ImageController));
-
-					await Task.Run(async () =>
+					await this.logger.LogAsync($"[000] api/image/create-gif(POST): Creating GIF from {ids.Length} IDs @ {frameRate}fps scale={rescale} loop={(doLoop ? "on" : "off")}.", nameof(ImageController));
+					foreach (var id in ids)
 					{
-						foreach (var id in ids)
+						var img = this.imageCollection[id];
+						if (img != null)
 						{
-							var img = this.imageCollection[id];
-							if (img != null)
+							if (Math.Abs(rescale - 1.0) > 0.01f)
 							{
-								if (Math.Abs(rescale - 1.0) > 0.01f)
-								{
-									await img.ResizeAsync((int) (img.Width * rescale), (int) (img.Height * rescale), true, false);
-								}
-								objs.Add(img);
+								await img.ResizeAsync((int) (img.Width * rescale), (int) (img.Height * rescale), true, false);
 							}
+							objs.Add(img);
 						}
-					});
+					}
 				}
-				else if (dtos != null && dtos.Count() > 0)
+				else if (dtos != null && dtos.Length > 0)
 				{
-					await this.logger.LogAsync($"[000] api/image/create-gif: Creating GIF from {dtos.Count()} image DTOs with frame rate {frameRate}, rescale {rescale}, loop {(doLoop ? "enabled" : "disabled")}.", nameof(ImageController));
-
-					List<string> base64s = dtos.Select(d => d.Data.Base64Data).Where(b64 => !string.IsNullOrEmpty(b64)).ToList();
-					foreach (var b64 in base64s)
+					await this.logger.LogAsync($"[000] api/image/create-gif(POST): Creating GIF from {dtos.Length} DTOs @ {frameRate}fps scale={rescale} loop={(doLoop ? "on" : "off")}.", nameof(ImageController));
+					foreach (var dto in dtos.Where(d => d?.Data != null && !string.IsNullOrEmpty(d.Data.Base64Data)))
 					{
-						var img = await ImageCollection.CreateFromBase64(b64, (float)rescale);
+						var img = await ImageCollection.CreateFromBase64(dto.Data.Base64Data, (float) rescale);
 						if (img != null)
 						{
 							objs.Add(img);
 						}
 					}
 				}
-
-				if ((dtos == null || dtos.Count() <= 0) && (ids == null || ids.Count() <= 0))
+				else
 				{
-					await this.logger.LogAsync($"[000] api/image/create-gif: No IDs or DTOs provided, creating GIF from all {this.imageCollection.Images.Count} images in the collection with frame rate {frameRate}, rescale {rescale}, loop {(doLoop ? "enabled" : "disabled")}.", nameof(ImageController));
+					await this.logger.LogAsync($"[000] api/image/create-gif(POST): No Ids/DTOs provided → using all {this.imageCollection.Images.Count} images.", nameof(ImageController));
 					objs = this.imageCollection.Images.ToList();
 				}
 
-				if (objs.Count <= 0)
+				if (objs.Count == 0)
 				{
-					await this.logger.LogAsync("[400] api/image/create-gif: No valid images provided to create GIF.", nameof(ImageController));
 					return this.BadRequest(new ProblemDetails
 					{
-						Title = "No images provided",
-						Detail = "You must provide at least one valid image ID or DTO to create a GIF.",
+						Title = "No images",
+						Detail = "No valid images to create GIF.",
 						Status = 400
 					});
 				}
 
-				fileName = objs.FirstOrDefault()?.Name ?? fileName;
-				Image<Rgba32>[] arr = objs.Select(o => o.Img).OfType<Image<Rgba32>>().ToArray();
+				// Clone every obj
+				objs = (await Task.WhenAll(objs.Select(o => o.CloneAsync()))).Where(o => o != null).Cast<ImageObj>().ToList();
 
-				string? gifPath = await ImageCollection.CreateGifAsync(arr, null, fileName, frameRate, doLoop);
+				fileName = objs.FirstOrDefault()?.Name ?? fileName;
+				var arr = objs.Select(o => o.Img).OfType<Image<Rgba32>>().ToArray();
+				var gifPath = await ImageCollection.CreateGifAsync(arr, null, fileName, frameRate, doLoop);
 				if (string.IsNullOrEmpty(gifPath) || !System.IO.File.Exists(gifPath))
 				{
-					await this.logger.LogAsync("[500] api/image/create-gif: GIF file was not created successfully.", nameof(ImageController));
 					return this.StatusCode(500, new ProblemDetails
 					{
-						Title = "Error creating GIF",
-						Detail = "GIF file was not created successfully.",
+						Title = "GIF creation failed",
+						Detail = "No file produced.",
 						Status = 500
 					});
 				}
 
 				var gifBytes = await System.IO.File.ReadAllBytesAsync(gifPath);
-
-				await this.logger.LogAsync($"[200] api/image/create-gif: Successfully created GIF '{fileName}' with {arr.Length} frames at {frameRate} FPS.", nameof(ImageController));
+				await this.logger.LogAsync($"[200] api/image/create-gif(POST): GIF created ({arr.Length} frames, [{(gifBytes.LongLength / 1024):F3} KB]).", nameof(ImageController));
+				
 				return this.File(gifBytes, "image/gif", Path.GetFileName(gifPath));
 			}
 			catch (Exception ex)
 			{
-				await this.logger.LogAsync($"[500] api/image/create-gif: Exception occurred while creating GIF: {ex.Message}", nameof(ImageController));
+				await this.logger.LogAsync($"[500] api/image/create-gif(POST): Exception: {ex.Message}", nameof(ImageController));
 				return this.StatusCode(500, new ProblemDetails
 				{
 					Title = "Error creating GIF",
@@ -764,5 +771,13 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
+
+
+
+
 	}
+
+
+
+	
 }

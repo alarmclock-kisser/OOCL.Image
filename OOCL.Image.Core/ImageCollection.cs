@@ -638,7 +638,7 @@ namespace OOCL.Image.Core
 		public static async Task<string?> CreateGifAsync(
 				Image<Rgba32>[] images,
 				string? outPath = null,
-				string name = "animated_BMZ_",
+				string name = "animated_OOCL_",
 				int frameRate = 5,
 				bool doLoop = false,
 				int? maxDegreeOfParallelism = null,

@@ -264,19 +264,6 @@
         <!-- Body (only if expanded) -->
         @if (isConfigInfoSectionExpanded)
         {
-            <!-- numeric 0 - 1024 for max api log lines to show -->
-            <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
-                <div style="flex:1 1 260px;min-width:250px;">
-                    <h4 style="margin:0 0 6px;font-size:0.95rem;">Max API Log Lines to Show</h4>
-                    <RadzenNumeric TValue="int"
-                                   @bind-Value="VM.MaxLogLines"
-                                   Min="0"
-                                   Max="1024"
-                                   Style="width:100px;"
-                                   Change="@((_) => ToggleConfigInfoSection())" />
-                </div>
-            </div>
-
             <!-- TextBox with all values from DI WebAppConfig left and right with dividing view slider to see more of each side -->
             <div class="panel-body">
                 <RadzenTextArea @bind-Value="VM.WebAppConfigText"
@@ -293,7 +280,7 @@
             </div>
             <!-- TextBox with all values from DI WebApiConfig left and right with dividing view slider to see more of each side -->
             <div class="panel-body">
-                <RadzenTextArea @bind-Value="VM.AppLogText"
+                <RadzenTextArea @bind-Value="VM.WebApiConfigText"
                                 Rows="12"
                                 ReadOnly="true"
                                 Style="width:100%;height:320px;font-family:monospace;font-size:0.75rem;white-space:pre;" />
