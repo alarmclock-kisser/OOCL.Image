@@ -33,7 +33,7 @@ else
                 <RadzenButton Text="Reset" Size="ButtonSize.Small" Click="async ()=> await VM.ResetViewAsync()" Style="margin-left:0.5rem;" />
             </div>
             <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.7rem;">
-                <div>Zoom: @VM.Zoom.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)</div>
+                <div>Zoom: @VM.Zoom.ToString("F9", System.Globalization.CultureInfo.InvariantCulture)</div>
                 <div>Iter: @VM.Iterations</div>
                 <div>OffX: @VM.OffsetX.ToString("F3")</div>
                 <div>OffY: @VM.OffsetY.ToString("F3")</div>
@@ -42,9 +42,12 @@ else
                 <RadzenColorPicker @bind-Value="VM.ColorHex"
                                    Disabled="@(!VM.HasColorGroup)"
                                    Style="width:140px;"
-                                   ShowRGBA="false"
+                                   ShowRGBA="true"
                                    Change="@(async (string v) => await OnColorPicked(v))" />
-                <span style="font-size:.65rem;opacity:.8;">Color @(VM.HasColorGroup ? "(R,G,B)" : "n/a")</span>
+                <!-- Angepasst: tatsächliche RGB-Werte anzeigen -->
+                <span style="font-size:.65rem;opacity:.8;">
+                    Color @(VM.HasColorGroup ? $"R:{VM.Red} G:{VM.Green} B:{VM.Blue}" : "n/a")
+                </span>
             </div>
             <div style="flex:1 1 auto;"></div>
             <div>

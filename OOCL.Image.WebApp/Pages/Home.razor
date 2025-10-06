@@ -298,7 +298,7 @@
 </RadzenCard>
 
 @code {
-    // NEU: Übernahme gecachter Werte aus MainLayout
+    // NEU: Übernahme gecatcher Werte aus MainLayout
     [CascadingParameter] public OpenClServiceInfo? LayoutOpenClInfo { get; set; }
     [CascadingParameter] public List<OpenClKernelInfo>? LayoutKernelInfos { get; set; }
 
@@ -374,10 +374,29 @@
     private bool CanRemove => VM.selectedImageId != Guid.Empty;
 
     // --- Methoden (unverändert außer Position) ---
+    private void ToggleConfigInfoSection()
+    {
+        isConfigInfoSectionExpanded = !isConfigInfoSectionExpanded;
+    }
+    private string GetConfigSummary()
+    {
+        if (Config == null)
+            return "Keine Konfiguration geladen";
+        return $"App: {Config.ApplicationName ?? "?"}, API: {Config.ApiBaseUrl ?? "?"}";
+    }
+
+    private void ToggleDeviceSection()
+    {
+        isDeviceSectionExpanded = !isDeviceSectionExpanded;
+    }
     private async Task OnDeviceChanged(object value) { await VM.OnDeviceChanged(value); await VM.LoadOpenClStatus(); StateHasChanged(); }
     private async Task InitializeDevice() { await VM.InitializeDevice(); await VM.LoadOpenClStatus(); StateHasChanged(); }
     private async Task ReloadDevices() { await VM.ReloadDevices(); await VM.LoadOpenClStatus(); StateHasChanged(); }
     private async Task ReleaseDevice() { await VM.ReleaseDevice(); await VM.LoadOpenClStatus(); StateHasChanged(); }
+    private void ToggleKernelInfo()
+    {
+        isKernelInfoExpanded = !isKernelInfoExpanded;
+    }
 
     private async Task DownloadImage()
     {
@@ -554,4 +573,11 @@
     private async Task OnImageChanged(object value) { await VM.OnImageChanged(value); await VM.UpdateImageData(); StateHasChanged(); }
     private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
 
+    // Hilfsmethode für die Anzeige der Device-Zusammenfassung
+    private string GetDeviceSummary()
+    {
+        if (openClServiceInfo == null || openClServiceInfo.CurrentDevice == null)
+            return "Kein Gerät ausgewählt";
+        return $"{openClServiceInfo.DeviceName} ({openClServiceInfo.CurrentDevice.DeviceType})";
+    }
 }

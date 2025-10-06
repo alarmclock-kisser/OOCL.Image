@@ -137,6 +137,17 @@ namespace OOCL.Image.WebApp.Pages
 			};
 
 		// --- Initialization / loading ---
+		public void InjectPreloadedMeta(OpenClServiceInfo? openClInfo, List<OpenClKernelInfo>? kernelInfos)
+		{
+			if (openClInfo != null)
+				this.openClServiceInfo = openClInfo;
+			if (kernelInfos != null && kernelInfos.Count > 0)
+			{
+				this.kernelInfos = kernelInfos;
+				this.kernelNames = kernelInfos.Select(k => k.FunctionName).ToList();
+			}
+		}
+
 		public async Task InitializeAsync()
         {
 			this.ApiConfig = await this.Api.GetApiConfigAsync();
