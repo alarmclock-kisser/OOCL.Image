@@ -2,21 +2,51 @@
 @inject IJSRuntime JS
 @inject OOCL.Image.Shared.WebAppConfig Config
 
-<div class="main-layout">
-    <header class="topbar">
-        <div class="brand">OOCL.Image</div>
-        <div class="actions">
-            <button class="theme-toggle" @onclick="ToggleTheme">@toggleText</button>
+<div class="main-layout" style="display:flex;min-height:100vh;">
+    <!-- Collapsible Sidebar -->
+    <nav class="app-nav" style="background:var(--rz-base-bg,#1e1e1e);color:var(--rz-text-color,#ddd);width:@(navOpen?"200px":"54px");transition:width .18s ease;overflow:hidden;box-shadow:0 0 4px rgba(0,0,0,.4);display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;gap:.4rem;padding:.6rem .6rem .4rem .6rem;">
+            <button @onclick="ToggleNav" style="background:none;border:none;color:inherit;cursor:pointer;font-size:1.2rem;line-height:1;">@(navOpen?"✖":"☰")</button>
+            @if (navOpen)
+            {
+                <span style="font-weight:600;font-size:.9rem;">Navigation</span>
+            }
         </div>
-    </header>
+        <div style="flex:1 1 auto;display:flex;flex-direction:column;padding:.3rem;gap:.2rem;">
+            <NavLink href="/" Match="NavLinkMatch.All" class="nav-entry" style="text-decoration:none;color:inherit;">
+                <div style="padding:.55rem .6rem;border-radius:4px;display:flex;align-items:center;gap:.6rem;white-space:nowrap;">
+                    <span style="font-size:1rem;">🏠</span>
+                    @if (navOpen) { <span>Home</span> }
+                </div>
+            </NavLink>
+            <NavLink href="/explorer" class="nav-entry" style="text-decoration:none;color:inherit;">
+                <div style="padding:.55rem .6rem;border-radius:4px;display:flex;align-items:center;gap:.6rem;white-space:nowrap;">
+                    <span style="font-size:1rem;">🛰️</span>
+                    @if (navOpen) { <span>Explorer</span> }
+                </div>
+            </NavLink>
+        </div>
+        <div style="padding:.5rem .6rem;font-size:.65rem;opacity:.6;">@DateTime.Now:HH:mm</div>
+    </nav>
 
-    <main class="content">
-        @Body
-    </main>
+    <div style="flex:1 1 auto;display:flex;flex-direction:column;min-width:0;">
+        <header class="topbar" style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;background:var(--rz-header-bg,#2a2a2a);color:var(--rz-text-color,#eee);box-shadow:0 1px 4px rgba(0,0,0,.4);">
+            <div class="brand" style="font-weight:700;font-size:1rem;letter-spacing:.5px;">OOCL.Image</div>
+            <div style="flex:1 1 auto;"></div>
+            <div class="actions" style="display:flex;align-items:center;gap:.6rem;">
+                <button class="theme-toggle" @onclick="ToggleTheme" style="background:#444;border:1px solid #555;color:#eee;padding:.35rem .8rem;border-radius:4px;cursor:pointer;font-size:.75rem;">@toggleText</button>
+            </div>
+        </header>
+
+        <main class="content" style="flex:1 1 auto;min-width:0;padding:0;">
+            @Body
+        </main>
+    </div>
 </div>
 
 @code {
     private bool isDark;
+    private bool navOpen = true;
     private string toggleText => isDark ? "Light" : "Dark";
 
     protected override void OnInitialized()
@@ -38,5 +68,7 @@
         Config.DefaultDarkMode = isDark;
         await JS.InvokeVoidAsync("theme.set", isDark);
     }
+
+    private void ToggleNav() => navOpen = !navOpen;
 }
 

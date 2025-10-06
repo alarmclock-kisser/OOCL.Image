@@ -1,0 +1,115 @@
+﻿@page "/explorer"
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using Radzen
+@using Radzen.Blazor
+@using OOCL.Image.Shared
+@using OOCL.Image.Client
+@inject ApiClient Api
+@inject WebAppConfig Config
+@inject NotificationService Notifications
+@inject IJSRuntime JS
+@inject DialogService DialogService
+
+<PageTitle>OOCL: Fractals Explorer</PageTitle>
+
+@if (VM == null)
+{
+    <div style="padding:1rem;">Loading...</div>
+}
+else
+{
+    <div class="explorer-root" style="max-width:1400px;margin:0 auto;padding:0.75rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <!-- Status & Controls Row -->
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem;">
+            <div style="min-width:240px;">
+                <label style="font-weight:600;font-size:0.8rem;">OpenCL Status</label>
+                <div style="font-size:0.8rem;line-height:1.2;">@VM.StatusSummary</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+                <label style="font-size:0.75rem;">Width</label>
+                <RadzenNumeric TValue="int" Value="@VM.Width" ValueChanged="async (int v)=> { VM.Width = v; await OnResolutionChanged(); }" Min="4" Max="16384" Style="width:100px;" />
+                <label style="font-size:0.75rem;">Height</label>
+                <RadzenNumeric TValue="int" Value="@VM.Height" ValueChanged="async (int v)=> { VM.Height = v; await OnResolutionChanged(); }" Min="4" Max="16384" Style="width:100px;" />
+                <RadzenButton Text="Reset" Size="ButtonSize.Small" Click="async ()=> await VM.ResetViewAsync()" Style="margin-left:0.5rem;" />
+            </div>
+            <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.7rem;">
+                <div>Zoom: @VM.Zoom.ToString("F4", System.Globalization.CultureInfo.InvariantCulture)</div>
+                <div>Iter: @VM.Iterations</div>
+                <div>OffX: @VM.OffsetX.ToString("F3")</div>
+                <div>OffY: @VM.OffsetY.ToString("F3")</div>
+            </div>
+            <div style="flex:1 1 auto;"></div>
+            <div>
+                <RadzenButton Text="Render" Icon="play_arrow" Click="async ()=> await VM.RenderAsync(true)" Disabled="@(VM == null)" />
+            </div>
+        </div>
+
+        <!-- Image Area -->
+        <div class="explorer-image-wrapper" style="position:relative;border:1px solid var(--rz-border-color,#444);background:#111;min-height:320px;display:flex;align-items:center;justify-content:center;">
+            @if (VM.CurrentImageData != null && !string.IsNullOrEmpty(VM.CurrentImageData.Base64Data))
+            {
+                <img @ref="imageRef"
+                     src="data:@(VM.CurrentImageData.MimeType ?? "image/png");base64,@VM.CurrentImageData.Base64Data"
+                     style="max-width:100%;max-height:80vh;object-fit:contain;cursor:@(VM.IsDragging?"grabbing":"grab");user-select:none;"
+                     @onmousedown="OnMouseDown"
+                     @onmouseup="OnMouseUp"
+                     @onmouseleave="OnMouseUp"
+                     @onmousemove="OnMouseMove"
+                     @onwheel="OnWheel"
+                     draggable="false" />
+            }
+            else
+            {
+                <span style="color:#777;font-size:0.85rem;">No image yet</span>
+            }
+            <div style="position:absolute;bottom:6px;right:8px;font-size:0.65rem;color:#ccc;background:rgba(0,0,0,.45);padding:2px 6px;border-radius:4px;">Drag = Pan | Wheel = Zoom | Ctrl+Wheel = Iter</div>
+        </div>
+    </div>
+}
+
+@code {
+    private ExplorerViewModel? VM;
+    private ElementReference imageRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        VM = new ExplorerViewModel(Api, Config, Notifications, JS, DialogService);
+        await VM.InitializeAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnResolutionChanged()
+    {
+        if (VM == null) return;
+        await VM.OnResolutionChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnWheel(WheelEventArgs e)
+    {
+        if (VM == null) return;
+        await VM.OnWheelAsync(e);
+        StateHasChanged();
+    }
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        if (VM == null) return;
+        VM.OnMouseDown(e.ClientX, e.ClientY);
+    }
+
+    private async Task OnMouseMove(MouseEventArgs e)
+    {
+        if (VM == null) return;
+        await VM.OnMouseMoveAsync(e.ClientX, e.ClientY);
+        StateHasChanged();
+    }
+
+    private async Task OnMouseUp(MouseEventArgs e)
+    {
+        if (VM == null) return;
+        await VM.OnMouseUpAsync();
+        StateHasChanged();
+    }
+}

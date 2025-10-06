@@ -1736,7 +1736,7 @@ namespace OOCL.Image.WebApp.Pages
 		
 		public decimal SnapDimensionNearest(string name, decimal requested)
 		{
-			var steps = GetDimensionSteps(name);
+			var steps = this.GetDimensionSteps(name);
 			if (steps == null || steps.Length == 0)
 			{
 				return requested;

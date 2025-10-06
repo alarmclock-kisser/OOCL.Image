@@ -132,6 +132,6 @@ namespace OOCL.Image.WebApp
 	public class ApiUrlConfig
 	{
 		public string BaseUrl { get; set; }
-		public ApiUrlConfig(string baseUrl) => BaseUrl = baseUrl;
+		public ApiUrlConfig(string baseUrl) => this.BaseUrl = baseUrl;
 	}
 }
