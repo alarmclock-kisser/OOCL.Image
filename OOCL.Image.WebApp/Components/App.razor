@@ -1,5 +1,15 @@
-﻿@using Microsoft.AspNetCore.Components.Web
+﻿@using Microsoft.AspNetCore.Components.Routing
+@using OOCL.Image.WebApp.Components.Layout
 
 <HeadOutlet />
 
-<Routes />
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(MainLayout)">
+            <div style="padding:1rem;font-size:.85rem;">Seite nicht gefunden.</div>
+        </LayoutView>
+    </NotFound>
+</Router>

@@ -1,5 +1,4 @@
 ﻿@page "/audio"
-@layout MainLayout
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Forms
@@ -52,7 +51,7 @@ else
                   Max="@(VM.CurrentAudioTotalSamples > 0 ? (decimal)VM.CurrentAudioTotalSamples : 1m)"
                   Step="@(VM.CurrentAudioScrollStep.ToString())"
                   Change="@(async (decimal _) => await SeekWaveformAsync())"
-                  Style="width:100%;"
+                  Style="width:100%"
                   Disabled="@(VM.CurrentAudioTotalSamples <= 0)" />
 
     <!-- Optional direkte Dimensionseingabe -->
