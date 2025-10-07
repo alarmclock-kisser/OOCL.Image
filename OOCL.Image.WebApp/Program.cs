@@ -32,6 +32,7 @@ namespace OOCL.Image.WebApp
 			var defaultDark     = builder.Configuration.GetValue<bool?>("DefaultDarkMode") ?? false;
 			var preferredDevice = builder.Configuration.GetValue<string>("PreferredDevice") ?? "cpu";
 			var maxImages       = builder.Configuration.GetValue("ImagesLimit", 0);
+			var maxTracks       = builder.Configuration.GetValue("TracksLimit", 0);
 			var appName         = typeof(Program).Assembly.GetName().Name ?? "Blazor WebApp (.NET8)";
 			var httpsKestrel    = builder.Configuration.GetValue<string?>("Kestrel:Endpoints:Https:Url");
 			var defaults        = builder.Configuration.GetSection("DefaultSelections");
@@ -49,6 +50,7 @@ namespace OOCL.Image.WebApp
 				defaultDark,
 				preferredDevice,
 				maxImages,
+				maxTracks,
 				effectiveBase,
 				null,
 				httpsKestrel,

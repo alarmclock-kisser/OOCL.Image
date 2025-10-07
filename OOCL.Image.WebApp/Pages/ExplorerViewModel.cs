@@ -91,7 +91,7 @@ namespace OOCL.Image.WebApp.Pages
 			}
 			if (kernels != null && kernels.Count > 0)
 			{
-				this.KernelInfos = kernels.Where(k => k.NeedsImage == false).ToList();
+				this.KernelInfos = kernels.Where(k => k.NeedsImage == false && k.MediaType == "Image").ToList();
 				this.SelectedKernelName = this.Config?.DefaultKernel ??
 					this.KernelInfos.FirstOrDefault(k => k.FunctionName.ToLower().Contains("mandelbrot"))?.FunctionName ??
 					this.KernelInfos.FirstOrDefault()?.FunctionName ??
@@ -104,7 +104,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			if (this.KernelInfos.Count == 0)
 			{
-				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync()).ToList(); } catch { }
+				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "Image")).ToList(); } catch { }
 			}
 
 			if (this.openClServiceInfo?.Initialized != true)
@@ -694,14 +694,14 @@ namespace OOCL.Image.WebApp.Pages
 			// dxSign/dySign: -1,0,1
 			double scale = 1.0 / this.Zoom;
 			// Faktor 3.0 / 2.0 entspricht der bisherigen Mandelbrot-Skalierung im Drag
-			this.OffsetX += (dxSign * panStepFraction) * 3.0 * scale;
-			this.OffsetY += (dySign * panStepFraction) * 2.0 * scale;
+			this.OffsetX += (dxSign * this.panStepFraction) * 3.0 * scale;
+			this.OffsetY += (dySign * this.panStepFraction) * 2.0 * scale;
 			await this.RenderAsync(true);
 		}
 
 		public async Task AdjustZoomAsync(bool zoomIn)
 		{
-			this.Zoom *= zoomIn ? zoomStepFactor : (1.0 / zoomStepFactor);
+			this.Zoom *= zoomIn ? this.zoomStepFactor : (1.0 / this.zoomStepFactor);
 			this.Zoom = Math.Clamp(this.Zoom, 0.0000001, 1_000_000);
 			await this.RenderAsync(true);
 		}
@@ -709,7 +709,7 @@ namespace OOCL.Image.WebApp.Pages
 		public async Task AdjustIterationsAsync(int direction)
 		{
 			// direction: +1 oder -1
-			int delta = direction * iterationStep;
+			int delta = direction * this.iterationStep;
 			this.Iterations = Math.Max(1, this.Iterations + delta);
 			await this.RenderAsync(true);
 		}

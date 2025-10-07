@@ -254,6 +254,26 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task<string> GetWaveformBase64Async(Guid? id = null, AudioObjDto? dto = null, int width = 800, int height = 200, long offset = 0, int samplesPerFixel = 128, string? graphColor = "#FFFFFF", string? backColor = "#000000", string format = "jpg")
+		{
+			try
+			{
+				if (dto == null)
+				{
+					dto = new();
+				}
+
+				var base64 = await this.internalClient.WaveformBase64Async(id, width, height, samplesPerFixel, offset.ToString(), graphColor, backColor, format, dto);
+
+				return base64 ?? string.Empty;
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return string.Empty;
+			}
+		}
+
 
 
 
@@ -453,12 +473,18 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<IEnumerable<OpenClKernelInfo>> GetOpenClKernelsAsync(bool onlyCompiled = true)
+		public async Task<IEnumerable<OpenClKernelInfo>> GetOpenClKernelsAsync(bool onlyCompiled = true, string? mediaType = null)
 		{
 			await this.logger.LogAsync($"Called GetOpenClKernelsAsync({onlyCompiled})", nameof(ApiClient));
 			try
 			{
-				return await this.internalClient.KernelInfosAsync(onlyCompiled);
+				var kernels = await this.internalClient.KernelInfosAsync(onlyCompiled);
+				if (!string.IsNullOrWhiteSpace(mediaType))
+				{
+					kernels = kernels.Where(k => string.Equals(k.MediaType, mediaType, StringComparison.OrdinalIgnoreCase)).ToList();
+				}
+
+				return kernels; 
 			}
 			catch (Exception ex)
 			{

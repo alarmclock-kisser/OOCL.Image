@@ -15,8 +15,4 @@
     <ProjectReference Include="..\OOCL.Image.OpenCl\OOCL.Image.OpenCl.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Dto\" />
-  </ItemGroup>
-
 </Project>

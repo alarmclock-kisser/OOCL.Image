@@ -33,5 +33,18 @@ namespace OOCL.Image.Shared
 			}
 		}
 
+		public AudioObjDto(AudioObj? obj, int chunkSize, float overlap)
+		{
+			if (obj == null)
+			{
+				return;
+			}
+
+			this.Id = obj.Id;
+			this.Info = new AudioObjInfo(obj);
+
+			this.Data = AudioObjData.FromObjectWithChunksAsync(obj, chunkSize, overlap).Result;
+		}
+
 	}
 }

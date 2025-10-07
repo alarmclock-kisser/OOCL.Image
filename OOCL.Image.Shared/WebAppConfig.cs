@@ -10,6 +10,7 @@ namespace OOCL.Image.Shared
 		public bool? DefaultDarkMode { get; set; } = null;
 		public string? PreferredDevice { get; set; } = null;
 		public int? ImagesLimit { get; set; } = null;
+		public int? TracksLimit { get; set; } = null;
 
 		public string? KestelEndpointHttp { get; set; } = null;
 		public string? KestelEndpointHttps { get; set; } = null;
@@ -28,7 +29,7 @@ namespace OOCL.Image.Shared
 
 		[JsonConstructor]
 		public WebAppConfig(string environment, string applicationName = "Blazor WebApp using dotnet8",
-			bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null,
+			bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, int? tracksLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null,
 			string? defaultKernel = null, string? defaultFormat = null, string? defaultUnit = null, int? maxLogLines = null, bool? cleanupPrevLogs = null)
 		{
 			this.Environment = environment;
@@ -36,6 +37,7 @@ namespace OOCL.Image.Shared
 			this.DefaultDarkMode = defaultDarkMode;
 			this.PreferredDevice = preferredDevice;
 			this.ImagesLimit = imagesLimit;
+			this.TracksLimit = tracksLimit;
 			this.ApiBaseUrl = apiBaseUrl;
 			this.KestelEndpointHttp = kestelEndpointHttp;
 			this.KestelEndpointHttps = kestelEndpointHttps;

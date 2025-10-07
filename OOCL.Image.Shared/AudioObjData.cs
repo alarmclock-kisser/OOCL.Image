@@ -6,9 +6,13 @@ namespace OOCL.Image.Shared
 	{
 		public Guid Id { get; set; } = Guid.Empty;
 
-		public float[] Samples { get; set; } = [];
+		public byte[] Samples { get; set; } = [];
+		public string Length { get; set; } = "0";
 
-		public IEnumerable<float[]> Chunks { get; set; } = [];
+		public IEnumerable<byte[]> Chunks { get; set; } = [];
+		public int ChunkSize { get; set; } = 0;
+		public float Overlap { get; set; } = 0.0f;
+
 		public double SizeInMb { get; set; }
 
 		public AudioObjData()
@@ -24,9 +28,51 @@ namespace OOCL.Image.Shared
 			}
 
 			this.Id = obj.Id;
-			this.Samples = obj.Data;
+			this.Samples = [];
 
 			this.SizeInMb = obj.SizeInMb;
+		}
+
+
+
+
+		public static async Task<AudioObjData> FromObjectWithDataAsync(AudioObj? obj, bool keepData = true)
+		{
+			if (obj == null)
+			{
+				return new AudioObjData();
+			}
+
+			var data = new AudioObjData(obj)
+			{
+				Samples = await obj.GetBytesAsync(),
+				Chunks = []
+			};
+
+			if (!keepData)
+			{
+				obj.SetData([]);
+			}
+
+			return data;
+		}
+
+		public static async Task<AudioObjData> FromObjectWithChunksAsync(AudioObj? obj, int chunkSize = 2048, float overlap = 0.5f, bool keepData = true)
+		{
+			if (obj == null)
+			{
+				return new AudioObjData();
+			}
+
+			var data = new AudioObjData(obj)
+			{
+				Samples = [],
+				Chunks = await obj.GetChunksBytes(chunkSize, overlap),
+				ChunkSize = chunkSize,
+				Overlap = overlap
+			};
+
+			return data;
 		}
 	}
 }

@@ -310,11 +310,19 @@ namespace OOCL.Image.WebApp.Pages
         {
 			try
             {
-				this.kernelInfos = (await this.Api.GetOpenClKernelsAsync()).ToList();
+				this.kernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "Image")).ToList();
 				this.kernelNames = this.kernelInfos.Select(k => k.FunctionName).ToList();
 				if (this.kernelNames.Count > 0)
 				{
-					this.selectedKernelName = this.kernelNames[0];
+                    // Try Select default kernel from config
+                    if (!string.IsNullOrEmpty(this.Config?.DefaultKernel) && this.kernelNames.Contains(this.Config.DefaultKernel))
+                    {
+                        this.selectedKernelName = this.Config.DefaultKernel;
+                    }
+                    else
+                    {
+                        this.selectedKernelName = this.kernelNames[0];
+					}
 					this.OnKernelChanged(this.selectedKernelName);
 				}
 			}

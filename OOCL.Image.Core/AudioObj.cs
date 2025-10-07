@@ -98,13 +98,15 @@ namespace OOCL.Image.Core
 			}
 		}
 
-		public Dictionary<string, double> Metrics { get; private set; } = new Dictionary<string, double>
+		public Dictionary<string, double> Metrics { get; private set; } = [];
+			
+		/*new Dictionary<string, double>
 		{
 			{ "Import", 0.0 },{ "Export", 0.0 },{ "Chunk", 0.0 },{ "Aggregate", 0.0 },
 			{ "Normalize", 0.0 },{ "Level", 0.0 },{ "Push", 0.0 },{ "Pull", 0.0 },
 			{ "FFT", 0.0 },{ "IFFT", 0.0 },{ "Stretch", 0.0 },
 			{ "BeatScan", 0.0 },{ "TimingScan", 0.0 }
-		};
+		};*/
 
 		public double this[string metric]
 		{
@@ -632,6 +634,107 @@ namespace OOCL.Image.Core
 			});
 
 			// Cleanup if requested
+			if (!keepData)
+			{
+				this.Data = [];
+			}
+
+			return chunks;
+		}
+
+		public async Task<IEnumerable<byte[]>> GetChunksBytes(int size = 2048, float overlap = 0.5f, bool keepData = false)
+		{
+			// Same as GetChunks but returns byte arrays as chunks
+
+			int maxWorkers = Environment.ProcessorCount;
+
+			// Validierung
+			if (this.Data == null || this.Data.Length == 0)
+			{
+				return [];
+			}
+			if (size <= 0 || overlap < 0 || overlap >= 1)
+			{
+				return [];
+			}
+			if (this.BitDepth != 8 && this.BitDepth != 16 && this.BitDepth != 24 && this.BitDepth != 32)
+			{
+				// Fallback: interpretiere als 32-bit float
+				this.BitDepth = 32;
+			}
+
+			this.ChunkSize = size;
+			this.OverlapSize = (int) (size * overlap);
+			int step = size - this.OverlapSize;
+			if (step <= 0 || this.Data.Length < size)
+			{
+				return [];
+			}
+
+			int numChunks = (this.Data.Length - size) / step + 1;
+			int bytesPerSample = this.BitDepth / 8;
+
+			byte[][] chunks = new byte[numChunks][];
+
+			await Task.Run(() =>
+			{
+				var options = new ParallelOptions
+				{
+					MaxDegreeOfParallelism = maxWorkers
+				};
+
+				Parallel.For(0, numChunks, options, chunkIndex =>
+				{
+					int sourceOffset = chunkIndex * step;
+					byte[] chunkBytes = new byte[size * bytesPerSample];
+
+					switch (this.BitDepth)
+					{
+						case 8:
+							for (int j = 0; j < size; j++)
+							{
+								float sample = this.Data[sourceOffset + j];
+								chunkBytes[j] = (byte) (Math.Clamp(sample, -1f, 1f) * 127f);
+							}
+							break;
+
+						case 16:
+							for (int j = 0; j < size; j++)
+							{
+								float sample = this.Data[sourceOffset + j];
+								short s16 = (short) (Math.Clamp(sample, -1f, 1f) * short.MaxValue);
+								int o = j * 2;
+								chunkBytes[o] = (byte) s16;
+								chunkBytes[o + 1] = (byte) (s16 >> 8);
+							}
+							break;
+
+						case 24:
+							for (int j = 0; j < size; j++)
+							{
+								float sample = this.Data[sourceOffset + j];
+								int s24 = (int) (Math.Clamp(sample, -1f, 1f) * 8_388_607f); // 2^23 - 1
+								int o = j * 3;
+								chunkBytes[o] = (byte) s24;
+								chunkBytes[o + 1] = (byte) (s24 >> 8);
+								chunkBytes[o + 2] = (byte) (s24 >> 16);
+							}
+							break;
+
+						case 32:
+							for (int j = 0; j < size; j++)
+							{
+								float sample = this.Data[sourceOffset + j];
+								int o = j * 4;
+								BitConverter.TryWriteBytes(new Span<byte>(chunkBytes, o, 4), sample);
+							}
+							break;
+					}
+
+					chunks[chunkIndex] = chunkBytes;
+				});
+			});
+
 			if (!keepData)
 			{
 				this.Data = [];

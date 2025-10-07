@@ -447,5 +447,108 @@ namespace OOCL.Audio.Api.Controllers
 			}
 		}
 
+		[HttpPost("waveform-base64")]
+		[ProducesResponseType(typeof(string), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<IActionResult> AudioGenerateWaveformBase64Async([FromQuery] Guid? id = null, [FromBody] AudioObjDto? dto = null, [FromQuery] int width = 800, [FromQuery] int height = 200, [FromQuery] int samplesPerPixel = 128, [FromQuery] string? offset = "0", [FromQuery] string graphColor = "#FFFFFF", [FromQuery] string backColor = "#000000", [FromQuery] string format = "jpg")
+		{
+			try
+			{
+				if (width <= 0 || height <= 0)
+				{
+					return this.StatusCode(400, new ProblemDetails
+					{
+						Title = "Invalid dimensions",
+						Detail = "Width and height must be greater than zero.",
+						Status = 400
+					});
+				}
+
+				if (samplesPerPixel <= 0)
+				{
+					samplesPerPixel = 1;
+				}
+
+				format = format.Trim().Trim('.').ToLowerInvariant();
+				if (!ImageCollection.SupportedFormats.Contains(format))
+				{
+					format = "jpg";
+				}
+
+				if (string.IsNullOrEmpty(offset))
+				{
+					offset = "0";
+				}
+
+				if (id == null || id == Guid.Empty)
+				{
+					if (dto == null || dto.Data == null || dto.Data.Samples == null || dto.Data.Samples.Length == 0)
+					{
+						return this.StatusCode(400, new ProblemDetails
+						{
+							Title = "No audio data provided",
+							Detail = "Please provide a valid audio ID or audio data in the request body.",
+							Status = 400
+						});
+					}
+				}
+				else
+				{
+					var obj = this.audioCollection[id.Value];
+					if (obj == null)
+					{
+						return this.NotFound(new ProblemDetails
+						{
+							Title = "Audio not found",
+							Detail = $"No audio found with ID {id}.",
+							Status = 404
+						});
+					}
+
+					dto = new AudioObjDto(obj, true);
+				}
+
+				if (dto == null || dto.Data == null || dto.Data.Samples == null || dto.Data.Samples.Length == 0)
+				{
+					return this.StatusCode(400, new ProblemDetails
+					{
+						Title = "No audio data available",
+						Detail = "The provided audio ID or data is invalid or empty.",
+						Status = 400
+					});
+				}
+				
+				string? b64 = await AudioCollection.GenerateWaveformFromBytesAsBase64Async(dto.Data.Samples, dto.Info.SampleRate, dto.Info.Channels, dto.Info.BitDepth, offset, width, height, samplesPerPixel, graphColor, backColor, format);
+				if (string.IsNullOrEmpty(b64))
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Error generating waveform image",
+						Detail = "The waveform image could not be generated from the provided audio data.",
+						Status = 500
+					});
+				}
+
+				return this.Ok(b64);
+			}
+			catch(Exception ex)
+			{
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Title = "Error generating waveform image",
+					Detail = ex.Message,
+					Status = 500
+				});
+			}
+		}
+			
+			
+		
+
+
+
+
 	}
 }
