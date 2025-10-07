@@ -679,6 +679,36 @@ namespace OOCL.Image.WebApp.Pages
 			return total;
 		}
 
+		// --- Mobile / Button Controls ---
+		private readonly double panStepFraction = 0.06;          // relativer Schritt (6% der virtuellen Breite/Höhe)
+		private readonly double zoomStepFactor = 1.15;          // Zoom-Verhältnis
+		private readonly int iterationStep = 10;            // Iterations-Schritt
+
+		public async Task PanAsync(int dxSign, int dySign)
+		{
+			// dxSign/dySign: -1,0,1
+			double scale = 1.0 / this.Zoom;
+			// Faktor 3.0 / 2.0 entspricht der bisherigen Mandelbrot-Skalierung im Drag
+			this.OffsetX += (dxSign * panStepFraction) * 3.0 * scale;
+			this.OffsetY += (dySign * panStepFraction) * 2.0 * scale;
+			await this.RenderAsync(true);
+		}
+
+		public async Task AdjustZoomAsync(bool zoomIn)
+		{
+			this.Zoom *= zoomIn ? zoomStepFactor : (1.0 / zoomStepFactor);
+			this.Zoom = Math.Clamp(this.Zoom, 0.0000001, 1_000_000);
+			await this.RenderAsync(true);
+		}
+
+		public async Task AdjustIterationsAsync(int direction)
+		{
+			// direction: +1 oder -1
+			int delta = direction * iterationStep;
+			this.Iterations = Math.Max(1, this.Iterations + delta);
+			await this.RenderAsync(true);
+		}
+
 
 	}
 
