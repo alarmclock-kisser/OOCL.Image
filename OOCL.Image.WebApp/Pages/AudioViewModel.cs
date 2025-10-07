@@ -84,7 +84,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (this.KernelInfos.Count == 0)
 			{
-				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "Audio")).ToList(); } catch { }
+				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "AUD")).ToList(); } catch { }
 			}
 
 			if (this.openClServiceInfo?.Initialized != true)

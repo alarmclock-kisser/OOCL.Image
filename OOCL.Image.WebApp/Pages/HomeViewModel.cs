@@ -310,7 +310,7 @@ namespace OOCL.Image.WebApp.Pages
         {
 			try
             {
-				this.kernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "Image")).ToList();
+				this.kernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "IMG")).ToList();
 				this.kernelNames = this.kernelInfos.Select(k => k.FunctionName).ToList();
 				if (this.kernelNames.Count > 0)
 				{
