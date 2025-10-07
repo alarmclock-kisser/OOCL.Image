@@ -59,6 +59,7 @@ namespace OOCL.Image.WebApp.Pages
 
 		// Fallback für Samples (für Seek / Anzeige)
 		public long CurrentAudioTotalSamples { get; private set; } = 0;
+		public int CurrentAudioScrollStep => this.CurrentAudioTotalSamples > 0 ? Math.Max(1, (int)(this.CurrentAudioTotalSamples / 1000)) : 0;
 
 		public void InjectPreloadedMeta(OpenClServiceInfo? info, List<OpenClKernelInfo>? kernels)
 		{
@@ -140,20 +141,32 @@ namespace OOCL.Image.WebApp.Pages
 			await this.GenerateWaveformAsync(800, 200, 128, 0);
 		}
 
-		public async Task UploadAudioAsync(IBrowserFile file, bool includeData = false)
+		public async Task UploadAudioAsync(IBrowserFile file)
 		{
 			try
 			{
-				var dto = await this.Api.UploadAudioAsync(file, includeData);
-				if (dto != null)
+				if (this.isServerSideData)
 				{
-					this.ClientAudioCollection.Add(dto);
-					this.CurrentAudioId = dto.Data.Id;
-					this.CurrentAudioData = dto.Data;
-					this.CurrentAudioTotalSamples = long.TryParse(dto.Data.Length.ToString(), out long len) ? len : 0;
-					await this.GenerateWaveformAsync(800, 200, 128, 0);
+					// Upload & store in ClientAudioCollection
+					var dto = await this.Api.UploadAudioAsync(file, true);
+					if (dto != null && dto.Data != null)
+					{
+						this.ClientAudioCollection.Add(dto);
+						this.TrimLimit();
+						this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Upload erfolgreich", Detail = $"{file.Name} ({file.Size / 1024} KB)", Duration = 3000 });
+					}
 				}
-				this.TrimLimit();
+				else
+				{
+					// Upload & get raw data (limited size)
+					var dto = await this.Api.UploadAudioAsync(file, false);
+					if (dto?.Info != null)
+					{
+						this.ClientAudioCollection.Add(dto);
+						this.TrimLimit();
+						this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Upload erfolgreich", Detail = $"{file.Name} ({file.Size / 1024} KB)", Duration = 3000 });
+					}
+				}
 			}
 			catch (Exception ex)
 			{
@@ -224,6 +237,10 @@ namespace OOCL.Image.WebApp.Pages
 			if (this.clientTracksLimit > 0 && this.ClientAudioCollection.Count > this.clientTracksLimit)
 			{
 				int removeCount = this.ClientAudioCollection.Count - this.clientTracksLimit;
+
+				// Sort by CreatedAt ascending to remove oldest first
+				this.ClientAudioCollection = this.ClientAudioCollection.OrderBy(c => c.Info.CreatedAt).ToList();
+
 				this.ClientAudioCollection.RemoveRange(0, removeCount);
 			}
 		}
@@ -243,8 +260,6 @@ namespace OOCL.Image.WebApp.Pages
 			try { app = (await this.Api.GetWebAppLogs(this.Config.MaxLogLines ?? 500)).ToList(); } catch { }
 			return (app, api);
 		}
-
-		public async Task UploadAudioAsync(IBrowserFile file) => await this.UploadAudioAsync(file, false);
 
 		private string PlaceholderWave(int w, int h)
 		{

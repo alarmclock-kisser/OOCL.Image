@@ -43,37 +43,39 @@ else
              @onpointerdown="BeginResize"></div>
     </div>
 
+    <!-- Full width offset slider -->
+    <RadzenSlider @bind-Value="waveformSeekDecimal"
+                  TValue="decimal"
+                  Min="0m"
+                  Max="@(VM.CurrentAudioTotalSamples > 0 ? (decimal)VM.CurrentAudioTotalSamples : 1m)"
+                  Step="@(VM.CurrentAudioScrollStep.ToString())"
+                  Change="@(async (decimal _) => await SeekWaveformAsync())"
+                  Style="width:100%;"
+                  Disabled="@(VM.CurrentAudioTotalSamples <= 0)" />
+
     <!-- Optional direkte Dimensionseingabe -->
     <div style="display:flex;gap:.75rem;align-items:flex-end;margin-top:.35rem;flex-wrap:wrap;">
         <RadzenNumeric @bind-Value="waveformWidth"
                        TValue="int"
                        Min="100" Max="4096" Step="50"
                        Change="@(async (int _) => await ApplyWaveformResizeAsync())"
-                       Style="width:140px"
+                       Style="width:100px"
                        Name="wfWidth"
                        Placeholder="Breite" />
         <RadzenNumeric @bind-Value="waveformHeight"
                        TValue="int"
                        Min="40" Max="2048" Step="20"
                        Change="@(async (int _) => await ApplyWaveformResizeAsync())"
-                       Style="width:140px"
+                       Style="width:100px"
                        Name="wfHeight"
                        Placeholder="Höhe" />
         <RadzenNumeric @bind-Value="waveformSamplesPerPixel"
                        TValue="int"
                        Min="1" Max="65536" Step="32"
                        Change="@(async (int _) => await RedrawWaveformAsync())"
-                       Style="width:170px"
+                       Style="width:100px"
                        Name="wfSPP"
                        Placeholder="Samples/Pixel" />
-        <RadzenSlider @bind-Value="waveformSeekDecimal"
-                      TValue="decimal"
-                      Min="0m"
-                      Max="@(VM.CurrentAudioTotalSamples > 0 ? (decimal)VM.CurrentAudioTotalSamples : 1m)"
-                      Step="@((Math.Max(1, VM.CurrentAudioTotalSamples / 1000)).ToString())"
-                      Change="@(async (decimal _) => await SeekWaveformAsync())"
-                      Style="min-width:300px;"
-                      Disabled="@(VM.CurrentAudioTotalSamples <= 0)" />
         <span style="font-size:.7rem;opacity:.7;">
             Offset: @waveformSeek / @VM.CurrentAudioTotalSamples
         </span>
@@ -251,7 +253,7 @@ else
         if (VM == null || e.FileCount == 0) return;
         foreach (var f in e.GetMultipleFiles())
         {
-            await VM.UploadAudioAsync(f, includeData: true);
+            await VM.UploadAudioAsync(f);
         }
         await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
         StateHasChanged();
