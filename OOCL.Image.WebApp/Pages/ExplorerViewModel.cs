@@ -392,9 +392,72 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task OnResolutionChangedAsync()
 		{
+			// Vor dem Clamp: eingehende Werte bereits auf Step runden
+			this.Width = SnapDimensionNearest("width", this.Width);
+			this.Height = SnapDimensionNearest("height", this.Height);
+
 			this.Width = Math.Clamp(this.Width, 4, 16384);
 			this.Height = Math.Clamp(this.Height, 4, 16384);
 			await this.RenderAsync(true);
+		}
+
+		public static int SnapDimensionNearest(string name, int requested)
+		{
+			var stepsDecimal = HomeViewModel.GetDimensionSteps(name) ?? [];
+			if (stepsDecimal.Length == 0)
+				return requested;
+
+			// In int konvertieren
+			var steps = stepsDecimal.Select(d => (int) d).Distinct().OrderBy(v => v).ToArray();
+			if (steps.Length == 0)
+				return requested;
+
+			int best = steps[0];
+			int bestDiff = Math.Abs(best - requested);
+			for (int i = 1; i < steps.Length; i++)
+			{
+				int diff = Math.Abs(steps[i] - requested);
+				if (diff < bestDiff)
+				{
+					bestDiff = diff;
+					best = steps[i];
+				}
+			}
+
+			// Anpassung Richtung (wie im HomeViewModel-Ansatz)
+			if (best < requested && best != steps[^1])
+			{
+				for (int i = 0; i < steps.Length - 1; i++)
+				{
+					if (steps[i] == best)
+					{
+						best = steps[i + 1];
+						break;
+					}
+				}
+			}
+			else if (best > requested && best != steps[0])
+			{
+				for (int i = 1; i < steps.Length; i++)
+				{
+					if (steps[i] == best)
+					{
+						best = steps[i - 1];
+						break;
+					}
+				}
+			}
+			return best;
+		}
+
+		public void SetSnappedWidth(int raw)
+		{
+			this.Width = SnapDimensionNearest("width", raw);
+		}
+
+		public void SetSnappedHeight(int raw)
+		{
+			this.Height = SnapDimensionNearest("height", raw);
 		}
 
 		public async Task ResetViewAsync()

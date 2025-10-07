@@ -1400,7 +1400,7 @@ namespace OOCL.Image.WebApp.Pages
             return (lname.Contains("width") || lname.Contains("height")) && (t.Contains("int") || t.Contains("decimal"));
         }
 
-        public decimal[] GetDimensionSteps(string name)
+        public static decimal[] GetDimensionSteps(string name)
         {
             var lname = name.ToLowerInvariant();
             if (lname.Contains("width"))
@@ -1757,9 +1757,59 @@ namespace OOCL.Image.WebApp.Pages
 		private decimal lastWidthValue = 720.0m; // optional falls später gebraucht
         private decimal lastHeightValue = 480.0m; // optional falls später gebraucht
 		
+        public static decimal SnapDimensionNext(string name, decimal requested)
+        {
+            var steps = GetDimensionSteps(name);
+            if (steps == null || steps.Length == 0)
+            {
+                return requested;
+			}
+
+			// Find nearest step
+			decimal best = steps[0];
+			decimal bestDiff = Math.Abs(steps[0] - requested);
+			for (int i = 1; i < steps.Length; i++)
+			{
+				var diff = Math.Abs(steps[i] - requested);
+				if (diff < bestDiff)
+				{
+					bestDiff = diff;
+					best = steps[i];
+				}
+			}
+
+			// Take next / previous step if increased or decreased
+			if (best < requested && best != steps[^1])
+			{
+				// Take next step
+				for (int i = 0; i < steps.Length - 1; i++)
+				{
+					if (steps[i] == best)
+					{
+						best = steps[i + 1];
+						break;
+					}
+				}
+			}
+			else if (best > requested && best != steps[0])
+			{
+				// Take previous step
+				for (int i = 1; i < steps.Length; i++)
+				{
+					if (steps[i] == best)
+					{
+						best = steps[i - 1];
+						break;
+					}
+				}
+			}
+
+            return best;
+		}
+
 		public decimal SnapDimensionNearest(string name, decimal requested)
 		{
-			var steps = this.GetDimensionSteps(name);
+			var steps = GetDimensionSteps(name);
 			if (steps == null || steps.Length == 0)
 			{
 				return requested;
