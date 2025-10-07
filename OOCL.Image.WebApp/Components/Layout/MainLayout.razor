@@ -45,15 +45,9 @@
 
     <div style="flex:1 1 auto;display:flex;flex-direction:column;min-width:0;background:var(--content-bg);color:var(--content-fg);position:relative;">
         <header class="topbar" style="display:flex;justify-content:center;align-items:center;gap:1rem;padding:.55rem 1rem;background:var(--topbar-bg);color:var(--topbar-fg);box-shadow:0 1px 4px var(--shadow-color);">
-            <div style="display:flex;align-items:center;gap:1rem;">
+            <div style="display:flex;align-items:flex-start;gap:1rem;">
                 <div class="brand" style="font-weight:700;font-size:1rem;">OOCL.Image</div>
                 <div style="display:flex;align-items:center;gap:.4rem;">
-                    <RadzenButton Size="ButtonSize.Small"
-                                  Icon="refresh"
-                                  Disabled="@isMetaLoading"
-                                  ButtonStyle="ButtonStyle.Secondary"
-                                  Click="@RefreshMeta"
-                                  Text="Meta" />
                     <RadzenButton Size="ButtonSize.Small"
                                   Icon="@(isDark ? "light_mode" : "dark_mode")"
                                   ButtonStyle="ButtonStyle.Secondary"
