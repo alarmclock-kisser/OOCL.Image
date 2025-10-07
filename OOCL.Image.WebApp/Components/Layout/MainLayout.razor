@@ -5,6 +5,7 @@
 @inject ApiClient Api
 @using Radzen
 @using Radzen.Blazor
+@using Microsoft.AspNetCore.Components.Routing
 
 <div class="main-layout" style="display:flex;min-height:100vh;">
     <nav class="app-nav" style="background:var(--nav-bg);color:var(--nav-fg);width:@(navOpen? "210px":"60px");transition:width .18s ease;overflow:hidden;box-shadow:0 0 4px var(--shadow-color);display:flex;flex-direction:column;">
@@ -59,11 +60,16 @@
                                   Class="theme-toggle-modern"
                                   Click="@ToggleTheme"
                                   Text="@toggleText" />
+                    <RadzenButton Size="ButtonSize.Small"
+                                  Icon="@(footerOpen ? "unfold_more" : "unfold_less")"
+                                  ButtonStyle="ButtonStyle.Secondary"
+                                  Click="@ToggleFooter"
+                                  Text="Logs" />
                 </div>
             </div>
         </header>
 
-        @* Caching via CascadingValue: Seiten (Explorer/Home) können OpenCL Infos ohne erneute API-Calls konsumieren *@
+        @* Caching via CascadingValue *@
         <CascadingValue Value="cachedOpenClServiceInfo">
             <CascadingValue Value="cachedKernelInfos">
                 <main style="flex:1 1 auto;min-width:0;">
@@ -75,26 +81,59 @@
                 </main>
             </CascadingValue>
         </CascadingValue>
+
+        <div class="log-footer" style="border-top:1px solid var(--shadow-color);background:var(--topbar-bg);color:var(--topbar-fg);transition:max-height .25s ease;max-height:@(footerOpen ? "30vh" : "0");overflow:hidden;display:flex;flex-direction:column;">
+            <div style="flex:1 1 auto;display:flex;min-height:0;">
+                <div style="flex:1 1 50%;display:flex;flex-direction:column;min-width:0;">
+                    <div style="font-size:.65rem;padding:.25rem .5rem;opacity:.7;display:flex;justify-content:space-between;">
+                        <span>App Logs (@appLogs.Count)</span>
+                        <RadzenButton Icon="refresh" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(async ()=> await RefreshAppLog())" Style="height:20px;width:20px;padding:0;font-size:.55rem;" />
+                    </div>
+                    <div style="flex:1 1 auto;overflow:auto;">
+                        <pre style="margin:0;padding:.4rem;font-size:.6rem;white-space:pre-wrap;">@string.Join("\n", appLogs)</pre>
+                    </div>
+                </div>
+                <div style="flex:1 1 50%;display:flex;flex-direction:column;min-width:0;border-left:1px solid var(--shadow-color);">
+                    <div style="font-size:.65rem;padding:.25rem .5rem;opacity:.7;display:flex;justify-content:space-between;">
+                        <span>API Logs (@apiLogs.Count)</span>
+                        <RadzenButton Icon="refresh" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(async ()=> await RefreshApiLog())" Style="height:20px;width:20px;padding:0;font-size:.55rem;" />
+                    </div>
+                    <div style="flex:1 1 auto;overflow:auto;">
+                        <pre style="margin:0;padding:.4rem;font-size:.6rem;white-space:pre-wrap;">@string.Join("\n", apiLogs)</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 @code {
     private bool isDark;
     private bool navOpen = false;
+    private bool footerOpen = false;
     private string toggleText => isDark ? "Light" : "Dark";
 
-    // --- Static Cache (prozessweit für alle Layout-Instanzen) ---
+    // --- Static Cache ---
     private static OpenClServiceInfo? cachedOpenClServiceInfo;
     private static List<OpenClKernelInfo>? cachedKernelInfos;
     private static DateTime lastMetaFetchUtc = DateTime.MinValue;
     private static readonly TimeSpan metaTtl = TimeSpan.FromMinutes(10);
     private static readonly SemaphoreSlim metaLock = new(1, 1);
+    private static List<string> appLogs = [];
+    private static List<string> apiLogs = [];
 
     private bool isMetaLoading;
 
     protected override void OnInitialized()
     {
         isDark = Config.DefaultDarkMode ?? false;
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await RefreshLogsAsync();
+        StateHasChanged();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -103,6 +142,7 @@
         {
             await JS.InvokeVoidAsync("theme.set", isDark);
             _ = EnsureMetaAsync(); // Fire & forget
+            await RefreshLogsAsync();
         }
     }
 
@@ -130,10 +170,8 @@
             isMetaLoading = true;
             StateHasChanged();
 
-            // OpenCL Status
             cachedOpenClServiceInfo = await Api.GetOpenClServiceInfoAsync();
 
-            // Wenn nicht initialisiert, optional Default-Device anstoßen
             if (cachedOpenClServiceInfo != null && !cachedOpenClServiceInfo.Initialized)
             {
                 try
@@ -144,7 +182,6 @@
                 catch { }
             }
 
-            // Kernel Infos
             cachedKernelInfos = (await Api.GetOpenClKernelsAsync()).ToList();
             lastMetaFetchUtc = DateTime.UtcNow;
         }
@@ -159,6 +196,7 @@
     private async Task RefreshMeta()
     {
         await EnsureMetaAsync(true);
+        await RefreshLogsAsync();
     }
 
     private async Task ToggleTheme()
@@ -166,16 +204,68 @@
         isDark = !isDark;
         Config.DefaultDarkMode = isDark;
         await JS.InvokeVoidAsync("theme.set", isDark);
+        await RefreshLogsAsync();
         StateHasChanged();
     }
 
+    private async Task RefreshAppLog()
+    {
+        try
+        {
+            var logs = await Api.GetWebAppLogs();
+            if (logs != null)
+            {
+                appLogs = logs.ToList();
+            }
+        }
+        catch { }
+    }
+
+    private async Task RefreshApiLog()
+    {
+        try
+        {
+            var logs = await Api.GetApiLogsAsync();
+            if (logs != null)
+            {
+                apiLogs = logs.ToList();
+            }
+        }
+        catch { }
+    }
+
+    private async Task RefreshLogsAsync()
+    {
+        await Task.WhenAll(RefreshAppLog(), RefreshApiLog());
+    }
+
+    private void ClearLogs()
+    {
+        appLogs.Clear();
+        apiLogs.Clear();
+    }
+
     private void ToggleNav() => navOpen = !navOpen;
+
+    private async Task ToggleFooter()
+    {
+        footerOpen = !footerOpen;
+        if (footerOpen)
+        {
+            await RefreshLogsAsync();
+        }
+    }
 
     private bool IsActive(string href)
     {
         var uri = NavigationManager?.ToBaseRelativePath(NavigationManager.Uri)?.TrimEnd('/');
         if (string.IsNullOrEmpty(uri) && href == "/") return true;
         return href.Trim('/').Equals(uri, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }
 

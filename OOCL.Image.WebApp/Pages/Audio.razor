@@ -148,23 +148,6 @@ else
             </ChildContent>
         </RadzenCard>
     </div>
-
-    <!-- Log Bereich (collapsible) -->
-    <RadzenPanelMenu Style="margin-top:1rem;">
-        <RadzenPanelItem Text="Logs" Icon="article">
-            <ChildContent>
-                <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;">
-                    <RadzenButton Text="Reload Logs" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small"
-                                  Click="LoadLogsAsync" Icon="sync" />
-                    <span style="font-size:.65rem;opacity:.6;">Zeilen: @appLogs.Count / @apiLogs.Count</span>
-                </div>
-                <div style="display:flex;gap:1rem;margin-top:.5rem;flex-wrap:wrap;">
-                    <textarea readonly style="flex:1 1 380px;min-height:150px;font-size:.65rem;padding:.4rem;">@string.Join(Environment.NewLine, appLogs)</textarea>
-                    <textarea readonly style="flex:1 1 380px;min-height:150px;font-size:.65rem;padding:.4rem;">@string.Join(Environment.NewLine, apiLogs)</textarea>
-                </div>
-            </ChildContent>
-        </RadzenPanelItem>
-    </RadzenPanelMenu>
 }
 
 @code {
@@ -190,9 +173,6 @@ else
 
     private string waveformWidthPx => $"{waveformWidth}px";
     private string waveformHeightPx => $"{waveformHeight}px";
-
-    private List<string> appLogs = new();
-    private List<string> apiLogs = new();
 
     // Bridge Property für Slider (RadzenSlider unterstützt long nicht direkt)
     private decimal waveformSeekDecimal
@@ -286,13 +266,6 @@ else
     {
         if (VM == null) return;
         await VM.ApplyTracksLimitAsync(tracksLimitLocal);
-        StateHasChanged();
-    }
-
-    private async Task LoadLogsAsync()
-    {
-        if (VM == null) return;
-        (appLogs, apiLogs) = await VM.LoadLogsAsync();
         StateHasChanged();
     }
 
