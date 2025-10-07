@@ -40,13 +40,22 @@ namespace OOCL.Image.WebApp.Pages
 		public Dictionary<Guid, string> AudioCache { get; } = [];
 
 		public List<AudioObjDto> ClientAudioCollection { get; set; } = [];
+		public string DownloadFormat { get; set; } = "wav";
+		public int DownloadBits { get; set; } = 24;
 
 		private bool isServerSideData = false;
 		private bool isRendering = false;
 		private int clientTracksLimit = 0;
 
 		// Waveform Anzeige (Base64 Data-URL)
-		public string CurrentWaveformDataUrl { get; private set; } = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4Xw8AAoMBgVwFpI0AAAAASUVORK5CYII=";
+		public string CurrentWaveformBase64 { get; private set; } = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4Xw8AAoMBgVwFpI0AAAAASUVORK5CYII=";
+		public int WaveformWidth { get; set; } = 800;
+		public int WaveformHeight { get; set; } = 200;
+		public long WaveformOffset { get; set; } = 0;
+		public int WaveformSamplesPerPixel { get; set; } = 128;
+		public string GraphColor { get; set; } = "#000000";
+		public string BackgroundColor { get; set; } = "#FFFFFF";
+		public string WaveformImageType { get; set; } = "jpg";
 
 		// Fallback für Samples (für Seek / Anzeige)
 		public long CurrentAudioTotalSamples { get; private set; } = 0;
@@ -89,6 +98,8 @@ namespace OOCL.Image.WebApp.Pages
 					}
 				}
 				catch { }
+
+				this.isServerSideData = await this.Api.IsServersidedDataAsync();
 			}
 
 			if (string.IsNullOrEmpty(this.SelectedKernelName))
@@ -155,11 +166,18 @@ namespace OOCL.Image.WebApp.Pages
 			if (this.CurrentAudioId == Guid.Empty) return;
 			try
 			{
-				var resp = await this.Api.DownloadAudioAsync(this.CurrentAudioId, "wav", 24);
-				if (resp != null && resp.Stream != null)
+				if (this.isServerSideData)
 				{
-					// Browser Download via JS (Stream->Base64) wäre hier nötig; ausgelassen für Kürze
-					this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Download gestartet", Duration = 2500 });
+					var resp = await this.Api.DownloadAudioDataAsync(this.ClientAudioCollection.FirstOrDefault(c => c.Data.Id == this.CurrentAudioId), this.DownloadFormat, this.DownloadBits);
+				}
+				else
+				{
+					var resp = await this.Api.DownloadAudioAsync(this.CurrentAudioId, "wav", 24);
+					if (resp != null && resp.Stream != null)
+					{
+						// Browser Download via JS (Stream->Base64) wäre hier nötig; ausgelassen für Kürze
+						this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Download gestartet", Duration = 2500 });
+					}
 				}
 			}
 			catch { }
@@ -174,7 +192,7 @@ namespace OOCL.Image.WebApp.Pages
 				this.ClientAudioCollection.RemoveAll(c => c.Data.Id == this.CurrentAudioId);
 				this.CurrentAudioId = Guid.Empty;
 				this.CurrentAudioData = null;
-				this.CurrentWaveformDataUrl = TransparentPixel;
+				this.CurrentWaveformBase64 = TransparentPixel;
 				this.CurrentAudioTotalSamples = 0;
 			}
 			catch { }
@@ -188,7 +206,7 @@ namespace OOCL.Image.WebApp.Pages
 				this.ClientAudioCollection.Clear();
 				this.CurrentAudioId = Guid.Empty;
 				this.CurrentAudioData = null;
-				this.CurrentWaveformDataUrl = TransparentPixel;
+				this.CurrentWaveformBase64 = TransparentPixel;
 				this.CurrentAudioTotalSamples = 0;
 			}
 			catch { }
@@ -214,8 +232,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			// Platzhalter: Ohne Rohdaten / API für Waveform wird ein Dummy-Bild verwendet.
 			// Hier könnte später eine API für /audio/{id}/waveform genutzt werden.
-			this.CurrentWaveformDataUrl = await this.Api.GetWaveformBase64Async();
-			await Task.CompletedTask;
+			this.CurrentWaveformBase64 = await this.Api.GetWaveformBase64Async(this.isServerSideData ? this.CurrentAudioId : null, this.isServerSideData ? this.ClientAudioCollection.Where(t => t.Id == this.CurrentAudioId).FirstOrDefault() : null, this.WaveformWidth, this.WaveformHeight, this.WaveformOffset, this.WaveformSamplesPerPixel, this.GraphColor, this.BackgroundColor, this.WaveformImageType);
 		}
 
 		public async Task<(List<string> app, List<string> api)> LoadLogsAsync()

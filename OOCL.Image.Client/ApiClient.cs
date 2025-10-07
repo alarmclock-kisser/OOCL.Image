@@ -305,8 +305,18 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<FileResponse?> DownloadAudioDataAsync(AudioObjDto dto, string format = "wav", int bits = 24)
+		public async Task<FileResponse?> DownloadAudioDataAsync(AudioObjDto? dto, string format = "wav", int bits = 24)
 		{
+			if (dto == null || dto.Data == null)
+			{
+				return null;
+			}
+
+			if (bits != 8 && bits != 16 && bits != 24 && bits != 32)
+			{
+				bits = 24;
+			}
+
 			await this.logger.LogAsync($"Called DownloadAudioDataAsync(dto: {(dto != null ? dto.Info.Id.ToString() : "null")}, {format}, {bits})", nameof(ApiClient));
 			try
 			{
