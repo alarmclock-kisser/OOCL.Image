@@ -436,8 +436,13 @@ namespace OOCL.Image.WebApp.Pages
 			this.RecordToClientCollection = value;
 			if (!value)
 			{
-				await this.DownloadCreateGif(true);
+				// await this.DownloadCreateGif(true);
+				this.ClientImageCollection = [];
+				this.ImageCache.Clear();
+				this.CurrentImageData = null;
 			}
+
+			await this.RenderAsync(true);
 		}
 
 		private static bool TryParseColorFlexible(string raw, out int r, out int g, out int b, out int a)
