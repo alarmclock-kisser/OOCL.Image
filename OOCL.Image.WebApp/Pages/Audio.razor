@@ -46,28 +46,32 @@ else
     <!-- Optional direkte Dimensionseingabe -->
     <div style="display:flex;gap:.75rem;align-items:flex-end;margin-top:.35rem;flex-wrap:wrap;">
         <RadzenNumeric @bind-Value="waveformWidth"
+                       TValue="int"
                        Min="100" Max="4096" Step="50"
-                       Change="@(async (_) => await ApplyWaveformResizeAsync())"
+                       Change="@(async (int _) => await ApplyWaveformResizeAsync())"
                        Style="width:140px"
                        Name="wfWidth"
                        Placeholder="Breite" />
         <RadzenNumeric @bind-Value="waveformHeight"
+                       TValue="int"
                        Min="40" Max="2048" Step="20"
-                       Change="@(async (_) => await ApplyWaveformResizeAsync())"
+                       Change="@(async (int _) => await ApplyWaveformResizeAsync())"
                        Style="width:140px"
                        Name="wfHeight"
                        Placeholder="Höhe" />
         <RadzenNumeric @bind-Value="waveformSamplesPerPixel"
+                       TValue="int"
                        Min="1" Max="65536" Step="32"
-                       Change="@(async (_) => await RedrawWaveformAsync())"
+                       Change="@(async (int _) => await RedrawWaveformAsync())"
                        Style="width:170px"
                        Name="wfSPP"
                        Placeholder="Samples/Pixel" />
-        <RadzenSlider @bind-Value="waveformSeek"
-                      Min="0"
-                      Max="@(VM.CurrentAudioTotalSamples > 0 ? VM.CurrentAudioTotalSamples : 1)"
-                      Step="@(Math.Max(1, VM.CurrentAudioTotalSamples / 1000))"
-                      Change="@(async (_) => await SeekWaveformAsync())"
+        <RadzenSlider @bind-Value="waveformSeekDecimal"
+                      TValue="decimal"
+                      Min="0m"
+                      Max="@(VM.CurrentAudioTotalSamples > 0 ? (decimal)VM.CurrentAudioTotalSamples : 1m)"
+                      Step="@((Math.Max(1, VM.CurrentAudioTotalSamples / 1000)).ToString())"
+                      Change="@(async (decimal _) => await SeekWaveformAsync())"
                       Style="min-width:300px;"
                       Disabled="@(VM.CurrentAudioTotalSamples <= 0)" />
         <span style="font-size:.7rem;opacity:.7;">
@@ -79,12 +83,10 @@ else
     <div style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;">
         <!-- I/O Panel -->
         <RadzenCard Style="width:230px;min-width:230px;">
-            <HeaderTemplate>
+            <ChildContent>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <span style="font-weight:600;">Audio I/O</span>
                 </div>
-            </HeaderTemplate>
-            <ChildContent>
                 <div style="display:flex;flex-direction:column;gap:.6rem;">
                     <InputFile OnChange="UploadAudioAsync" multiple />
                     <RadzenButton ButtonStyle="ButtonStyle.Secondary"
@@ -106,8 +108,9 @@ else
                                   Size="ButtonSize.Small"
                                   Click="ClearAllAsync" />
                     <RadzenNumeric @bind-Value="tracksLimitLocal"
+                                   TValue="int"
                                    Min="0" Max="256" Step="1"
-                                   Change="@(async (_) => await ApplyTracksLimitAsync())"
+                                   Change="@(async (int _) => await ApplyTracksLimitAsync())"
                                    Style="width:100%;"
                                    Name="tracksLimit"
                                    Placeholder="Tracks Limit (0=∞)" />
@@ -122,20 +125,17 @@ else
 
         <!-- Trackliste -->
         <RadzenCard Style="flex:1 1 350px;min-width:300px;">
-            <HeaderTemplate>
+            <ChildContent>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <span style="font-weight:600;">Tracks (@VM.ClientAudioCollection.Count)</span>
                     <span style="font-size:.65rem;opacity:.6;">Limit: @(tracksLimitLocal == 0 ? "∞" : tracksLimitLocal)</span>
                 </div>
-            </HeaderTemplate>
-            <ChildContent>
                 <RadzenDataGrid Data="@VM.ClientAudioCollection"
                                 TItem="AudioObjDto"
                                 RowSelect="@(async (item) => await SelectTrackAsync(item))"
                                 Style="width:100%;font-size:.75rem;"
                                 AllowPaging="false"
-                                AllowSorting="true"
-                                Density="Compact">
+                                AllowSorting="true">
                     <Columns>
                         <RadzenDataGridColumn TItem="AudioObjDto" Title="Name" Property="Data.MetaName" />
                         <RadzenDataGridColumn TItem="AudioObjDto" Title="Id" Property="Data.Id" Width="120px" />
@@ -191,6 +191,13 @@ else
 
     private List<string> appLogs = new();
     private List<string> apiLogs = new();
+
+    // Bridge Property für Slider (RadzenSlider unterstützt long nicht direkt)
+    private decimal waveformSeekDecimal
+    {
+        get => waveformSeek;
+        set => waveformSeek = (long)value;
+    }
 
     protected override async Task OnInitializedAsync()
     {

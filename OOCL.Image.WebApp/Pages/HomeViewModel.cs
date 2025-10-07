@@ -791,6 +791,11 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task OnImageChanged(object value)
         {
+            if (this.selectedKernelInfo?.NeedsImage == true)
+            {
+                this.useExistingImage = true;
+			}
+
 			this.selectedImageId = (Guid)value;
             await this.UpdateImageData();
         }
