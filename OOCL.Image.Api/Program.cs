@@ -85,14 +85,18 @@ namespace OOCL.Image.Api
 			{
 				options.AddPolicy("OOCLImageCors", policy =>
 				{
-					policy.WithOrigins(
+					/*policy.WithOrigins(
 						"https://api.oocl.work",
 						"http://api.oocl.work",
 						"https://localhost:7240",
 						"http://localhost:5019"
 					)
 					.AllowAnyHeader()
-					.AllowAnyMethod();
+					.AllowAnyMethod();*/
+
+					policy.AllowAnyOrigin()
+						.AllowAnyHeader()
+						.AllowAnyMethod();
 				});
 			});
 
