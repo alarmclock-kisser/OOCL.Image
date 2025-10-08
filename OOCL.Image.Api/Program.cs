@@ -46,12 +46,23 @@ namespace OOCL.Image.Api
 				builder.Services.AddScoped(sp => new AudioCollection(1));
 			}
 
+			builder.Services.AddHttpClient();
+
+			// Optional: benannter "insecure" Client (DEV ONLY) der selbstsignierte Zertifikate akzeptiert
+			builder.Services.AddHttpClient("Insecure", client =>
+			{
+				client.Timeout = TimeSpan.FromSeconds(30);
+			})
+			.ConfigurePrimaryHttpMessageHandler(() =>
+				new HttpClientHandler
+				{
+					ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+				});
+
 			builder.Services.AddSingleton(sp => new RollingFileLogger(maxLogLines, cleanupPreviousLogs, null, "log_" + environment + "_api_"));
 
 			var openClService = new OpenClService(preferredDevice);
 			builder.Services.AddSingleton(openClService);
-
-			builder.Services.AddSingleton<ExternalCudaService>();
 
 			builder.Services.AddEndpointsApiExplorer();
 			builder.Services.AddSwaggerGen(o =>
