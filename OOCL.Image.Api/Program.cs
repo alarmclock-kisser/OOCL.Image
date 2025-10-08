@@ -52,9 +52,9 @@ namespace OOCL.Image.Api
 			builder.Services.AddSingleton(openClService);
 
 			builder.Services.AddEndpointsApiExplorer();
-			builder.Services.AddSwaggerGen(c =>
+			builder.Services.AddSwaggerGen(o =>
 			{
-				c.SwaggerDoc("v1", new OpenApiInfo
+				o.SwaggerDoc("v1", new OpenApiInfo
 				{
 					Version = "v1",
 					Title = "OOCL.Image API",
@@ -62,6 +62,7 @@ namespace OOCL.Image.Api
 					TermsOfService = new Uri("https://example.com/terms"),
 					Contact = new OpenApiContact { Name = "github: alarmclock-kisser", Email = "marcel.king91299@gmail.com" }
 				});
+				o.OperationFilter<PlainTextRequestBodyFilter>();
 			});
 
 			builder.WebHost.ConfigureKestrel((context, options) =>
@@ -76,7 +77,10 @@ namespace OOCL.Image.Api
 			builder.Logging.AddConsole().AddDebug();
 			builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
-			builder.Services.AddControllers();
+			builder.Services.AddControllers().AddJsonOptions(o =>
+			{
+				o.JsonSerializerOptions.IncludeFields = true;
+			});
 			builder.Services.AddCors(options =>
 			{
 				options.AddPolicy("OOCLImageCors", policy =>

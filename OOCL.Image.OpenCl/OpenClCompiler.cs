@@ -141,17 +141,26 @@ namespace OOCL.Image.OpenCl
 			return Path.GetFullPath(filePath);
 		}
 
-		public string? GetKernelName(string filePath)
+		public string? GetKernelName(string filePathOrCode)
 		{
-			// Verify file
-			string? verifiedFilePath = this.VerifyKernelFile(filePath);
-			if (verifiedFilePath == null)
-			{
-				return null;
-			}
+			string code = "";
 
-			// Try to extract function name from kernel code text
-			string code = File.ReadAllText(filePath);
+			if (File.Exists(filePathOrCode))
+			{
+				// Verify file
+				string? verifiedFilePath = this.VerifyKernelFile(filePathOrCode);
+				if (verifiedFilePath == null)
+				{
+					return null;
+				}
+
+				// Try to extract function name from kernel code text
+				code = File.ReadAllText(filePathOrCode);
+			}
+			else
+			{
+				code = filePathOrCode;
+			}
 
 			// Find index of first "__kernel void "
 			int index = code.IndexOf("__kernel void ");
@@ -182,19 +191,24 @@ namespace OOCL.Image.OpenCl
 				return null;
 			}
 
-			// Compare to file name without ext
-			string fileName = Path.GetFileNameWithoutExtension(filePath);
-			if (string.Compare(functionName, fileName, StringComparison.OrdinalIgnoreCase) != 0)
+			if (File.Exists(filePathOrCode))
 			{
-				Console.WriteLine("Kernel function name does not match file name: " + filePath);
+				// Compare to file name without ext
+				string fileName = Path.GetFileNameWithoutExtension(filePathOrCode);
+				if (string.Compare(functionName, fileName, StringComparison.OrdinalIgnoreCase) != 0)
+				{
+					Console.WriteLine("Kernel function name does not match file name: " + filePathOrCode);
+				}
 			}
 
 			return functionName;
 		}
 
 		// Compile
-		private CLKernel? CompileFile(string filePath)
+		private CLKernel? CompileFile(string filePath, out string log)
 		{
+			log = "";
+
 			// Verify file
 			string? verifiedFilePath = this.VerifyKernelFile(filePath);
 			if (verifiedFilePath == null)
@@ -245,7 +259,7 @@ namespace OOCL.Image.OpenCl
 				}
 				else
 				{
-					string log = Encoding.UTF8.GetString(buildLog);
+					log = Encoding.UTF8.GetString(buildLog);
 					Console.WriteLine("Build log: " + log);
 				}
 
@@ -274,7 +288,7 @@ namespace OOCL.Image.OpenCl
 				}
 				else
 				{
-					string log = Encoding.UTF8.GetString(buildLog);
+					log = Encoding.UTF8.GetString(buildLog);
 					Console.WriteLine("Build log: " + log);
 				}
 
@@ -286,7 +300,7 @@ namespace OOCL.Image.OpenCl
 			return kernel;
 		}
 
-		public bool? TryCompileKernel(string kernelNameOrFile)
+		public string? TryCompileKernel(string kernelNameOrFile)
 		{
 			string file = kernelNameOrFile;
 			if (!File.Exists(file))
@@ -301,27 +315,30 @@ namespace OOCL.Image.OpenCl
 			}
 
 
-			CLKernel? result = this.CompileFile(file);
+			CLKernel? result = this.CompileFile(file, out string buildLog);
 			if (result == null)
 			{
-				return false;
+				return null;
 			}
 
-			return true;
+			return string.IsNullOrEmpty(buildLog) ? kernelNameOrFile : buildLog;
 		}
 
-		public Dictionary<string, Type> GetKernelArguments(string kernelName)
+		public Dictionary<string, Type> GetKernelArguments(string kernelName, CLKernel? kernel = null)
 		{
-			string? kernelFile = this.KernelFiles.FirstOrDefault(f => f.ToLower().Contains(kernelName.ToLower()));
-			if (string.IsNullOrEmpty(kernelFile))
+			if (kernel == null)
 			{
-				return [];
+				string? kernelFile = this.KernelFiles.FirstOrDefault(f => f.ToLower().Contains(kernelName.ToLower()));
+				if (string.IsNullOrEmpty(kernelFile))
+				{
+					return [];
+				}
 			}
 
-			return this.GetKernelArguments(null, kernelFile);
+			return this.GetKernelArguments(kernel);
 		}
 
-		public Dictionary<string, Type> GetKernelArguments(CLKernel? kernel = null, string filePath = "")
+		public Dictionary<string, Type> GetKernelArguments(CLKernel? kernel = null, string kernelFileOrCode = "")
 		{
 			Dictionary<string, Type> arguments = [];
 
@@ -329,8 +346,35 @@ namespace OOCL.Image.OpenCl
 			kernel ??= this.kernel;
 			if (kernel == null)
 			{
+				// Create as temp file if filePath not exists
+				if (string.IsNullOrEmpty(kernelFileOrCode))
+				{
+					return arguments;
+				}
+
+				if (!File.Exists(kernelFileOrCode))
+				{
+					var tempFile = Path.GetTempFileName().Replace(".tmp", ".cl");
+					File.WriteAllText(tempFile, kernelFileOrCode);
+
+					// Rename to kernel name
+					string? kernelName = this.GetKernelName(kernelFileOrCode);
+					if (kernelName != null)
+					{
+						string newFilePath = Path.Combine(Path.GetDirectoryName(tempFile) ?? "", kernelName + ".cl");
+						if (File.Exists(newFilePath))
+						{
+							File.Delete(newFilePath);
+						}
+						File.Move(tempFile, newFilePath);
+						tempFile = newFilePath;
+					}
+
+					kernelFileOrCode = tempFile;
+				}
+
 				// Try get kernel by file path
-				kernel = this.CompileFile(filePath);
+				kernel = this.CompileFile(kernelFileOrCode, out string buildLog);
 				if (kernel == null)
 				{
 					return arguments;
@@ -383,6 +427,15 @@ namespace OOCL.Image.OpenCl
 							break;
 						case "float":
 							type = typeof(float*);
+							break;
+						case "double":
+							type = typeof(double*);
+							break;
+						case "char":
+							type = typeof(char*);
+							break;
+						case "ushort":
+							type = typeof(ushort*);
 							break;
 						case "long":
 							type = typeof(long*);
@@ -658,7 +711,7 @@ namespace OOCL.Image.OpenCl
 				return this.kernel;
 			}
 
-			CLKernel? kernel = this.kernel = this.CompileFile(filePath);
+			CLKernel? kernel = this.kernel = this.CompileFile(filePath, out string buildLog);
 			this.KernelFile = filePath;
 
 			// Check if kernel is null
@@ -755,6 +808,125 @@ namespace OOCL.Image.OpenCl
 			}
 			return argValues;
 		}
+
+
+
+		// Compile string
+		public async Task<CLKernel?> CompileKernelFromStringAsync(string code, bool setAsCurrent = false)
+		{
+			// Write code to temp file
+			string tempFile = Path.GetTempFileName().Replace(".tmp", ".cl");
+			await File.WriteAllTextAsync(tempFile, code);
+
+			// Rename to kernel name
+			string? kernelName = this.GetKernelName(code);
+			if (kernelName != null)
+			{
+				string newFilePath = Path.Combine(Path.GetDirectoryName(tempFile) ?? "", kernelName + ".cl");
+				if (File.Exists(newFilePath))
+				{
+					File.Delete(newFilePath);
+				}
+				File.Move(tempFile, newFilePath);
+				tempFile = newFilePath;
+			}
+
+			// Compile kernel
+			CLKernel? kernel = this.CompileFile(tempFile, out string buildLog);
+			if (kernel == null)
+			{
+				File.Delete(tempFile);
+				return null;
+			}
+
+			// Set as current kernel
+			if (setAsCurrent)
+			{
+				this.kernel = kernel;
+				this.KernelFile = tempFile;
+			}
+
+			// Delete temp file
+			File.Delete(tempFile);
+			return kernel;
+		}
+
+		public async Task<string> TryCopileKernelFromStringAsync(string code)
+		{
+			// Write code to temp file
+			string tempFile = Path.GetTempFileName().Replace(".tmp", ".cl");
+			await File.WriteAllTextAsync(tempFile, code);
+
+			// Rename to kernel name
+			string? kernelName = this.GetKernelName(code);
+			if (kernelName != null)
+			{
+				string newFilePath = Path.Combine(Path.GetDirectoryName(tempFile) ?? "", kernelName + ".cl");
+				if (File.Exists(newFilePath))
+				{
+					File.Delete(newFilePath);
+				}
+				File.Move(tempFile, newFilePath);
+				tempFile = newFilePath;
+			}
+
+			// Compile kernel
+			CLKernel? kernel = this.CompileFile(tempFile, out string buildLog);
+
+			// Delete temp file
+			File.Delete(tempFile);
+
+			return string.IsNullOrEmpty(buildLog) ? (kernel != null ? kernelName ?? "N/A" : "Failed") : buildLog;
+		}
+
+
+
+
+
+
+		// Helpers
+		public static Type GetArgType(string argTypeName)
+		{
+			switch (argTypeName.ToLower())
+			{
+				case "int":
+					return typeof(int);
+				case "float":
+					return typeof(float);
+				case "double":
+					return typeof(double);
+				case "char":
+					return typeof(char);
+				case "uchar":
+					return typeof(byte);
+				case "short":
+					return typeof(short);
+				case "ushort":
+					return typeof(ushort);
+				case "long":
+					return typeof(long);
+				case "ulong":
+					return typeof(ulong);
+				case "vector2":
+					return typeof(Vector2);
+				case "int*":
+					return typeof(int*);
+				case "float*":
+					return typeof(float*);
+				case "long*":
+					return typeof(long*);
+				case "uchar*":
+					return typeof(byte*);
+				case "vector2*":
+					return typeof(Vector2*);
+				default:
+					return typeof(object);
+			}
+
+		}
+
+
+
 
 	}
 }

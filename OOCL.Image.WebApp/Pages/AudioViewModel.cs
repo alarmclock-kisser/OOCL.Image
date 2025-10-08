@@ -134,7 +134,11 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task SelectTrackAsync(AudioObjDto dto)
 		{
-			if (dto == null) return;
+			if (dto == null)
+			{
+				return;
+			}
+
 			this.CurrentAudioId = dto.Data.Id;
 			this.CurrentAudioData = dto.Data;
 			this.CurrentAudioTotalSamples = long.TryParse(dto.Data.Length.ToString(), out long len) ? len : 0;
@@ -176,7 +180,11 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task DownloadCurrentAsync()
 		{
-			if (this.CurrentAudioId == Guid.Empty) return;
+			if (this.CurrentAudioId == Guid.Empty)
+			{
+				return;
+			}
+
 			try
 			{
 				if (this.isServerSideData)
@@ -198,7 +206,11 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task RemoveCurrentAsync()
 		{
-			if (this.CurrentAudioId == Guid.Empty) return;
+			if (this.CurrentAudioId == Guid.Empty)
+			{
+				return;
+			}
+
 			try
 			{
 				await this.Api.RemoveAudioAsync(this.CurrentAudioId);

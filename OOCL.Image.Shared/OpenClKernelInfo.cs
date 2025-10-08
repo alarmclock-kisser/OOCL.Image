@@ -69,7 +69,7 @@ namespace OOCL.Image.Shared
 
 				if (tryCompile)
 				{
-					this.CompiledSuccessfully = compiler.TryCompileKernel(this.Filepath) ?? false;
+					this.CompiledSuccessfully = !string.IsNullOrEmpty(compiler.TryCompileKernel(this.Filepath));
 				}
 
 				this.PointersCount = this.ArgumentType.Count(t => t.EndsWith("*"));

@@ -1,6 +1,8 @@
 ﻿using OpenTK.Compute.OpenCL;
 using OpenTK.Mathematics;
+using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
 
 namespace OOCL.Image.OpenCl
 {
@@ -347,7 +349,7 @@ namespace OOCL.Image.OpenCl
 			OpenClMem? outputBuffers = null;
 			if (form == 'f')
 			{
-				outputBuffers = this.register.AllocateGroup<Vector2>(inputBuffers.GetCount(), (nint) inputBuffers.GetLengths().FirstOrDefault());
+				outputBuffers = this.register.AllocateGroup<OpenTK.Mathematics.Vector2>(inputBuffers.GetCount(), (nint) inputBuffers.GetLengths().FirstOrDefault());
 			}
 			else if (form == 'c')
 			{
@@ -464,7 +466,7 @@ namespace OOCL.Image.OpenCl
 				OpenClMem? outputBuffers = null;
 				if (form == 'f')
 				{
-					outputBuffers = this.register.AllocateGroup<Vector2>(inputBuffers.GetCount(), (nint) inputBuffers.GetLengths().FirstOrDefault());
+					outputBuffers = this.register.AllocateGroup<OpenTK.Mathematics.Vector2>(inputBuffers.GetCount(), (nint) inputBuffers.GetLengths().FirstOrDefault());
 				}
 				else if (form == 'c')
 				{
@@ -636,9 +638,9 @@ namespace OOCL.Image.OpenCl
 			{
 				outputMem = this.register.AllocateGroup<float>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
 			}
-			else if (this.compiler.PointerOutputType == typeof(Vector2*).Name)
+			else if (this.compiler.PointerOutputType == typeof(OpenTK.Mathematics.Vector2*).Name)
 			{
-				outputMem = this.register.AllocateGroup<Vector2>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
+				outputMem = this.register.AllocateGroup<OpenTK.Mathematics.Vector2>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
 			}
 			else
 			{
@@ -665,7 +667,7 @@ namespace OOCL.Image.OpenCl
 				CLBuffer outputBuffer = outputMem[i];
 
 				// Merge arguments
-				object[] arguments = this.MergeAudioKernelArgumenstDynamic(kernelName + version, inputBuffer, outputBuffer, args);
+				object[] arguments = this.MergeAudioKernelArgumentsDynamic(kernelName + version, inputBuffer, outputBuffer, args);
 				if (arguments == null || arguments.Length <= 0)
 				{
 					return IntPtr.Zero;
@@ -709,15 +711,10 @@ namespace OOCL.Image.OpenCl
 				if (error != CLResultCode.Success)
 				{
 					this.lastError = error;
-					return objPointer;
 				}
 
 				// Release event
-				error = CL.ReleaseEvent(evt);
-				if (error != CLResultCode.Success)
-				{
-					this.lastError = error;
-				}
+				CL.ReleaseEvent(evt);
 			}
 
 			// Free input buffer if necessary
@@ -732,7 +729,7 @@ namespace OOCL.Image.OpenCl
 
 			// Optionally execute IFFT if FFT was done
 			IntPtr outputPointer = outputMem[0].Handle;
-			if (didFft && outputMem.Type == typeof(Vector2).Name)
+			if (didFft && outputMem.Type == typeof(OpenTK.Mathematics.Vector2).Name)
 			{
 				IntPtr ifftPointer = this.ExecuteFFT(outputMem[0].Handle, "01", 'c', chunkSize, overlap, true);
 				if (ifftPointer == IntPtr.Zero)
@@ -839,9 +836,9 @@ namespace OOCL.Image.OpenCl
 				{
 					outputMem = this.register.AllocateGroup<float>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
 				}
-				else if (this.compiler.PointerOutputType == typeof(Vector2*).Name)
+				else if (this.compiler.PointerOutputType == typeof(OpenTK.Mathematics.Vector2*).Name)
 				{
-					outputMem = this.register.AllocateGroup<Vector2>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
+					outputMem = this.register.AllocateGroup<OpenTK.Mathematics.Vector2>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
 				}
 				else
 				{
@@ -862,7 +859,7 @@ namespace OOCL.Image.OpenCl
 					CLBuffer outputBuffer = outputMem[i];
 
 					// Argumente zusammenführen
-					object[] arguments = this.MergeAudioKernelArgumenstDynamic(kernelName + version, inputBuffer, outputBuffer, providedArguments);
+					object[] arguments = this.MergeAudioKernelArgumentsDynamic(kernelName + version, inputBuffer, outputBuffer, providedArguments);
 					if (arguments == null || arguments.Length <= 0)
 					{
 						return (IntPtr.Zero, factor);
@@ -872,7 +869,7 @@ namespace OOCL.Image.OpenCl
 					CLResultCode error = CLResultCode.Success;
 					for (uint j = 0; j < arguments.Length; j++)
 					{
-						error = this.SetKernelArgSafe(j, arguments[(int) j]);
+						error = this.SetKernelArgSafe(j, arguments[j]);
 						if (error != CLResultCode.Success)
 						{
 							this.lastError = error;
@@ -906,7 +903,6 @@ namespace OOCL.Image.OpenCl
 					if (error != CLResultCode.Success)
 					{
 						this.lastError = error;
-						return (objPointer, factor);
 					}
 
 					// Event freigeben
@@ -932,7 +928,7 @@ namespace OOCL.Image.OpenCl
 
 				// Optional IFFT ausführen
 				IntPtr outputPointer = outputMem[0].Handle;
-				if (didFft && outputMem.Type == typeof(Vector2).Name)
+				if (didFft && outputMem.Type == typeof(OpenTK.Mathematics.Vector2).Name)
 				{
 					// Führe die asynchrone IFFT aus
 					IntPtr ifftPointer = await this.ExecuteFFTAsync(outputMem[0].Handle, "01", 'c', chunkSize, overlap, true, progress);
@@ -1213,7 +1209,7 @@ namespace OOCL.Image.OpenCl
 			return arguments;
 		}
 
-		public object[] MergeAudioKernelArgumenstDynamic(string kernelName, CLBuffer? inputBuffer = null, CLBuffer? outputBuffer = null, Dictionary<string, string>? providedArguments = null)
+		public object[] MergeAudioKernelArgumentsDynamic(string kernelName, CLBuffer? inputBuffer = null, CLBuffer? outputBuffer = null, Dictionary<string, string>? providedArguments = null)
 		{
 			// LOG Provided Arguments
 			string providedLog = "CL-EXEC | Provided Arguments: " + Environment.NewLine;
@@ -1365,6 +1361,168 @@ namespace OOCL.Image.OpenCl
 			return sortedArgs;
 		}
 
+		public object[] MergeGenericKernelArgumentsDynamic(CLKernel? kernel, CLBuffer? inputBuffer = null, CLBuffer? outputBuffer = null, Dictionary<string, string>? arguments = null)
+		{
+			if (kernel == null)
+			{
+				return [];
+			}
+
+			var requiredArgs = this.compiler.GetKernelArguments(kernel);
+			if (requiredArgs == null || requiredArgs.Count == 0)
+			{
+				return [];
+			}
+
+			object[] sortedArgs = new object[requiredArgs.Count];
+
+			for (int i = 0; i < requiredArgs.Count; i++)
+			{
+				string argName = requiredArgs.ElementAt(i).Key;
+				Type argType = requiredArgs.ElementAt(i).Value;
+				string argNameLower = argName.ToLowerInvariant();
+				bool isPointer = argType.Name.EndsWith("*");
+
+				// LOG
+				Console.WriteLine("CL-EXEC | Merging Argument: " + argType.Name + " " + argName);
+				if (isPointer)
+				{
+					if ((argNameLower.Contains("in") || argNameLower == "input") && inputBuffer != null)
+					{
+						sortedArgs[i] = inputBuffer.Value;
+						Console.WriteLine("CL-EXEC | Using Input Buffer for Argument: " + argName);
+						continue;
+					}
+					if ((argNameLower.Contains("out") || argNameLower == "output") && outputBuffer != null)
+					{
+						sortedArgs[i] = outputBuffer.Value;
+						Console.WriteLine("CL-EXEC | Using Output Buffer for Argument: " + argName);
+						continue;
+					}
+					sortedArgs[i] = new CLBuffer();
+					Console.WriteLine("CL-EXEC | No Buffer Provided for Argument: " + argName + ", using empty CLBuffer");
+					continue;
+				}
+
+				if (arguments != null && arguments.TryGetValue(argName, out string? raw))
+				{
+					sortedArgs[i] = raw == null ? 0 : ParseScalar(argType, raw);
+					Console.WriteLine("CL-EXEC | Using Provided Value for Argument: " + argName + " = " + (sortedArgs[i]?.ToString() ?? "null"));
+				}
+				else
+				{
+					sortedArgs[i] = argType == typeof(int) ? 0 :
+									argType == typeof(long) ? 0L :
+									argType == typeof(float) ? 0f :
+									argType == typeof(double) ? 0d :
+									argType == typeof(byte) ? (byte) 0 :
+									argType == typeof(uint) ? 0u :
+									0;
+					Console.WriteLine("CL-EXEC | No Value Provided for Argument: " + argName + ", using default = " + (sortedArgs[i]?.ToString() ?? "null") + " of type " + argType.Name);
+				}
+			}
+
+			// Absicherung: keine null / unbekannten Typen an Kernel geben
+			for (int i = 0; i < sortedArgs.Length; i++)
+			{
+				if (sortedArgs[i] == null)
+				{
+					Console.WriteLine("CL-EXEC | Warning: Argument " + i + " (" + requiredArgs.ElementAt(i).Key + ") is null, replacing with 0");
+					sortedArgs[i] = 0;
+				}
+				else
+				{
+					bool supported = sortedArgs[i] is CLBuffer
+						|| sortedArgs[i] is int
+						|| sortedArgs[i] is long
+						|| sortedArgs[i] is float
+						|| sortedArgs[i] is double
+						|| sortedArgs[i] is byte
+						|| sortedArgs[i] is uint
+						|| sortedArgs[i] is bool
+						|| sortedArgs[i] is OpenTK.Mathematics.Vector2
+						|| sortedArgs[i] is IntPtr;
+					if (!supported)
+					{
+						Console.WriteLine("CL-EXEC | Warning: Argument " + i + " (" + requiredArgs.ElementAt(i).Key + ") has unsupported type " + sortedArgs[i].GetType().Name + ", replacing with 0");
+						sortedArgs[i] = 0;
+					}
+				}
+			}
+
+			// Print sorted args with Type:Name(value)
+			string log = "CL-EXEC | Merged Kernel Arguments: " + Environment.NewLine;
+			for (int i = 0; i < sortedArgs.Length; i++)
+			{
+				var arg = sortedArgs[i];
+				string typeName = arg?.GetType().Name ?? "null";
+				string valueStr = arg?.ToString() ?? "null";
+				string argName = requiredArgs.ElementAt(i).Key;
+				if (arg is CLBuffer buf)
+				{
+					valueStr = buf.Handle != IntPtr.Zero ? buf.Handle.ToString() : "null";
+				}
+				log += $"[{i}]{typeName}:{argName}='{valueStr}', " + Environment.NewLine;
+			}
+
+			return sortedArgs;
+		}
+
+		private static object ParseScalar(Type t, string raw)
+		{
+			if (t == typeof(int) && int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i))
+			{
+				return i;
+			}
+
+			if (t == typeof(long) && long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long l))
+			{
+				return l;
+			}
+
+			if (t == typeof(float) && float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float f))
+			{
+				return f;
+			}
+
+			if (t == typeof(double) && double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
+			{
+				return d;
+			}
+
+			if (t == typeof(byte) && byte.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out byte b))
+			{
+				return b;
+			}
+
+			if (t == typeof(uint) && uint.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint u))
+			{
+				return u;
+			}
+
+			if (t == typeof(bool))
+			{
+				if (raw == "0")
+				{
+					return false;
+				}
+
+				if (raw == "1")
+				{
+					return true;
+				}
+
+				if (bool.TryParse(raw, out bool bo))
+				{
+					return bo;
+				}
+
+				return false;
+			}
+			return 0;
+		}
+
+
 		private CLResultCode SetKernelArgSafe(uint index, object value)
 		{
 			// Check kernel
@@ -1401,7 +1559,7 @@ namespace OOCL.Image.OpenCl
 					return CL.SetKernelArg(this.Kernel.Value, index, new IntPtr(u));
 
 				// Fall für Vector2
-				case Vector2 v:
+				case OpenTK.Mathematics.Vector2 v:
 					// Vector2 ist ein Struct, daher muss es als Array übergeben werden
 					return CL.SetKernelArg(this.Kernel.Value, index, v);
 
@@ -1484,6 +1642,171 @@ namespace OOCL.Image.OpenCl
 			}
 		}
 
-		
+
+
+
+
+		// Generic Kernel Execution
+		public async Task<TResult[]> ExecuteGenericKernelSingleAsync<TResult>(CLKernel? kernel, object[]? inputData, string? inputDataType = "Byte", long outputElementCount = 0, Dictionary<string, string>? arguments = null, int workDimensions = 1) where TResult : unmanaged
+		{
+			if (kernel == null || !kernel.HasValue || this.register == null || outputElementCount <= 0 || workDimensions < 1 || workDimensions > 3)
+			{
+				return [];
+			}
+
+			TResult[] result = [];
+
+			OpenClMem? inputMem = null;
+			if (inputData is { LongLength: > 0 } && !string.IsNullOrEmpty(inputDataType))
+			{
+				inputDataType = inputDataType.ToLowerInvariant().Trim();
+
+				// WICHTIG: Cast<object>() kommt von boxed ValueTypes (ConvertStringToTypeAsync)
+				inputMem = inputDataType switch
+				{
+					"byte" or "uint8" or "uchar" => this.register.PushData<byte>(inputData.Cast<byte>().ToArray()),
+					"sbyte" or "int8" or "char" => this.register.PushData<sbyte>(inputData.Cast<sbyte>().ToArray()),
+					"short" or "int16" => this.register.PushData<short>(inputData.Cast<short>().ToArray()),
+					"ushort" or "uint16" => this.register.PushData<ushort>(inputData.Cast<ushort>().ToArray()),
+					"int" or "int32" => this.register.PushData<int>(inputData.Cast<int>().ToArray()),
+					"uint" or "uint32" => this.register.PushData<uint>(inputData.Cast<uint>().ToArray()),
+					"long" or "int64" => this.register.PushData<long>(inputData.Cast<long>().ToArray()),
+					"ulong" or "uint64" => this.register.PushData<ulong>(inputData.Cast<ulong>().ToArray()),
+					"float" or "single" => this.register.PushData<float>(inputData.Cast<float>().ToArray()),
+					"double" => this.register.PushData<double>(inputData.Cast<double>().ToArray()),
+					"vector2" or "vec2" => this.register.PushData<OpenTK.Mathematics.Vector2>(inputData.Cast<OpenTK.Mathematics.Vector2>().ToArray()),
+					"intptr" or "pointer" => this.register.PushData<IntPtr>(inputData.Cast<IntPtr>().ToArray()),
+					_ => null,
+				};
+
+				Console.WriteLine($"CL-EXEC | Input Memory: {inputMem?.TotalLength} elements of type {inputMem?.Type ?? "null"}");
+			}
+
+			// FIX: outputElementCount AllocateSingle<T> macht schon intern elementSize * count
+			OpenClMem? outputMem = this.register.AllocateSingle<TResult>((nint) outputElementCount);
+			if (outputMem == null || outputMem.GetCount() == 0)
+			{
+				Console.WriteLine("CL-EXEC | Failed to allocate output memory.");
+				return [];
+			}
+
+			Console.WriteLine($"CL-EXEC | Output Memory: {outputMem.TotalLength} elements of type {outputMem.Type}");
+
+			// Argumente zusammenführen (Pointer richtig setzen)
+			object[] mergedArgs = this.MergeGenericKernelArgumentsDynamic(kernel, inputMem?[0], outputMem[0], arguments);
+			// Sicherheits-Check: Kernel-Argumentanzahl
+			if (mergedArgs.Length == 0)
+			{
+				Console.WriteLine("CL-EXEC | No kernel arguments found.");
+				return [];
+			}
+
+			// Set kernel arguments
+			CLResultCode error;
+			for (uint j = 0; j < mergedArgs.Length; j++)
+			{
+				error = this.SetKernelArgSafe(j, mergedArgs[(int) j]);
+				if (error != CLResultCode.Success)
+				{
+					Console.WriteLine("CL-EXEC | Failed to set kernel argument at index " + j + ": " + error);
+					this.lastError = error;
+					return [];
+				}
+
+				Console.WriteLine("CL-EXEC | Set kernel argument at index " + j + ": " + (mergedArgs[(int) j] is CLBuffer buf ? (buf.Handle != IntPtr.Zero ? buf.Handle.ToString() : "null") : mergedArgs[(int) j]?.ToString() ?? "null"));
+			}
+
+			// Dimensions
+			long elementsTotal = outputElementCount;
+
+			// Work dimensions
+			uint workDim = (uint) workDimensions;
+
+			UIntPtr[] globalWorkSize = workDim switch
+			{
+				1 => [(UIntPtr) elementsTotal],
+				2 => [(UIntPtr) Math.Ceiling(Math.Sqrt(elementsTotal)), (UIntPtr) Math.Ceiling(Math.Sqrt(elementsTotal))],
+				3 =>
+				[
+					(UIntPtr) Math.Ceiling(Math.Pow(elementsTotal, 1.0 / 3.0)),
+					(UIntPtr) Math.Ceiling(Math.Pow(elementsTotal, 1.0 / 3.0)),
+					(UIntPtr) Math.Ceiling(Math.Pow(elementsTotal, 1.0 / 3.0))
+				],
+				_ => [(UIntPtr) elementsTotal]
+			};
+
+			Console.WriteLine("CL-EXEC | Elements Total: " + elementsTotal + ", WorkDim: " + workDim + ", GlobalWorkSize: " + string.Join(", ", globalWorkSize.Select(g => g.ToString())));
+
+			await Task.Run(() =>
+			{
+				// Execute kernel
+				CLResultCode error = CL.EnqueueNDRangeKernel(
+					this.queue,
+					kernel.Value,
+					workDim,          // 1D oder 2D
+					null,             // Kein Offset
+					globalWorkSize,   // Work-Größe in Pixeln
+					null,             // Lokale Work-Size (automatisch)
+					0, null, out CLEvent evt
+				);
+				if (error != CLResultCode.Success)
+				{
+					this.lastError = error;
+					Console.WriteLine("CL-EXEC | ExecuteGenericImageEditKernel #006: Error enqueuing NDRange kernel for kernel: '" + kernel + "'. Error: " + error);
+					return;
+				}
+
+				Console.WriteLine("CL-EXEC | Kernel enqueued successfully.");
+
+				// Wait for completion
+				error = CL.WaitForEvents(1, [evt]);
+				if (error != CLResultCode.Success)
+				{
+					Console.WriteLine("CL-EXEC | Failed to wait for kernel event: " + error);
+					this.lastError = error;
+				}
+
+				Console.WriteLine("CL-EXEC | Kernel execution completed.");
+
+				// Release event
+				error = CL.ReleaseEvent(evt);
+				if (error != CLResultCode.Success)
+				{
+					Console.WriteLine("CL-EXEC | Failed to release kernel event: " + error);
+					this.lastError = error;
+				}
+
+				Console.WriteLine("CL-EXEC | Kernel event released.");
+
+				// Read back
+				if (outputMem != null && outputMem[0].Handle != IntPtr.Zero)
+				{
+					result = this.register.PullData<TResult>(outputMem[0]);
+					// Sicherheitskürzung falls Kernel weniger/mehr geschrieben hat
+					if (result.LongLength > outputElementCount)
+					{
+						Console.WriteLine("CL-EXEC | Warning: Kernel wrote more elements (" + result.LongLength + ") than expected (" + outputElementCount + "). Truncating result.");
+						Array.Resize(ref result, (int) outputElementCount);
+					}
+				}
+
+				Console.WriteLine("CL-EXEC | Data read back from device. Retrieved " + result.LongLength + " elements.");
+
+				// Free input/output
+				if (inputMem != null && inputMem[0].Handle != IntPtr.Zero)
+				{
+					Console.WriteLine("CL-EXEC | Freeing input memory.");
+					this.register.FreeBuffer(inputMem[0].Handle, true);
+				}
+				if (outputMem != null && outputMem[0].Handle != IntPtr.Zero)
+				{
+					Console.WriteLine("CL-EXEC | Freeing output memory.");
+					this.register.FreeBuffer(outputMem[0].Handle, true);
+				}
+			});
+
+			Console.WriteLine("CL-EXEC | Kernel execution completed. Retrieved " + result.LongLength + " elements.");
+			return result;
+		}
 	}
 }

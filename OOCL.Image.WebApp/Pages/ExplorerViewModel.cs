@@ -405,12 +405,16 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			var stepsDecimal = HomeViewModel.GetDimensionSteps(name) ?? [];
 			if (stepsDecimal.Length == 0)
+			{
 				return requested;
+			}
 
 			// In int konvertieren
 			var steps = stepsDecimal.Select(d => (int) d).Distinct().OrderBy(v => v).ToArray();
 			if (steps.Length == 0)
+			{
 				return requested;
+			}
 
 			int best = steps[0];
 			int bestDiff = Math.Abs(best - requested);
@@ -785,7 +789,7 @@ namespace OOCL.Image.WebApp.Pages
 		// Liefert nur Kernel, die kein Eingangs-Image benötigen (Create-Kernels)
 		public IEnumerable<string> AvailableCreateKernelNames =>
 			this.KernelInfos == null
-				? Enumerable.Empty<string>()
+				? []
 				: this.KernelInfos
 					.Where(k => k != null && (k.NeedsImage == false)) // false oder (implizit) nicht gesetzt
 					.Select(k => k.FunctionName)
@@ -795,10 +799,17 @@ namespace OOCL.Image.WebApp.Pages
 		// Auswahl setzen + Color Triplet Erkennung
 		public void SetSelectedKernel(string kernelName)
 		{
-			if (string.IsNullOrWhiteSpace(kernelName) || this.KernelInfos == null) return;
+			if (string.IsNullOrWhiteSpace(kernelName) || this.KernelInfos == null)
+			{
+				return;
+			}
+
 			var k = this.KernelInfos.FirstOrDefault(x =>
 				string.Equals(x.FunctionName, kernelName, StringComparison.OrdinalIgnoreCase));
-			if (k == null) return;
+			if (k == null)
+			{
+				return;
+			}
 
 			this.SelectedKernel = k;
 			this.SelectedKernelName = k.FunctionName;

@@ -495,11 +495,21 @@ namespace OOCL.Image.Core
 							}
 							float val = ReadSample(localData, bitDepth, bIndex); // Verwende das lokale Array
 							float abs = Math.Abs(val);
-							if (abs > peak) peak = abs;
+							if (abs > peak)
+							{
+								peak = abs;
+							}
 						}
 
-						if (peak > localMax) localMax = peak;
-						if (-peak < localMin) localMin = -peak;
+						if (peak > localMax)
+						{
+							localMax = peak;
+						}
+
+						if (-peak < localMin)
+						{
+							localMin = -peak;
+						}
 					}
 
 					columnMin[x] = localMin;

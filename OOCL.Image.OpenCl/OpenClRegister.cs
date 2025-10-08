@@ -152,16 +152,16 @@ namespace OOCL.Image.OpenCl
 			return data;
 		}
 
-		public OpenClMem? AllocateSingle<T>(IntPtr size) where T : unmanaged
+		public OpenClMem? AllocateSingle<T>(IntPtr length) where T : unmanaged
 		{
 			// Check size
-			if (size.ToInt64() < 1)
+			if (length.ToInt64() < 1)
 			{
 				return null;
 			}
 
 			// Create empty array of type and size
-			T[] data = new T[size.ToInt64()];
+			T[] data = new T[length.ToInt64()];
 			data = data.Select(x => default(T)).ToArray();
 
 			// Create buffer
@@ -173,7 +173,7 @@ namespace OOCL.Image.OpenCl
 			}
 
 			// Add to list
-			OpenClMem mem = new(buffer, size, typeof(T));
+			OpenClMem mem = new(buffer, length, typeof(T));
 
 			// Lock memory list to avoid concurrent access issues
 			lock (this.memoryLock)
@@ -270,10 +270,10 @@ namespace OOCL.Image.OpenCl
 			return chunks;
 		}
 
-		public OpenClMem? AllocateGroup<T>(IntPtr count, IntPtr size) where T : unmanaged
+		public OpenClMem? AllocateGroup<T>(IntPtr count, IntPtr length) where T : unmanaged
 		{
 			// Check count and size
-			if (count < 1 || size.ToInt64() < 1)
+			if (count < 1 || length.ToInt64() < 1)
 			{
 				return null;
 			}
@@ -286,14 +286,14 @@ namespace OOCL.Image.OpenCl
 			// Allocate each buffer
 			for (int i = 0; i < count; i++)
 			{
-				buffers[i] = CL.CreateBuffer(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, new T[size.ToInt64()], out CLResultCode error);
+				buffers[i] = CL.CreateBuffer(this.context, MemoryFlags.CopyHostPtr | MemoryFlags.ReadWrite, new T[length.ToInt64()], out CLResultCode error);
 				if (error != CLResultCode.Success)
 				{
 					this.lastError = error;
 					return null;
 				}
 
-				lengths[i] = size;
+				lengths[i] = length;
 			}
 
 			OpenClMem mem = new(buffers, lengths, type);

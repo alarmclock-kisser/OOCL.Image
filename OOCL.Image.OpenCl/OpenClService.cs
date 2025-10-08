@@ -1,6 +1,7 @@
 ﻿using OOCL.Image.Core;
 using OpenTK.Compute.OpenCL;
 using System.Diagnostics;
+using System.Numerics;
 using System.Text;
 
 namespace OOCL.Image.OpenCl
@@ -654,5 +655,442 @@ namespace OOCL.Image.OpenCl
 		{
 			return this.GetDeviceInfo(index, DeviceInfo.Type) ?? "N/A";
 		}
+
+		public async Task<string> CompileKernelStringAsync(string kernelString)
+		{
+			if (this.Compiler == null)
+			{
+				return "Compiler not initialized.";
+			}
+			
+
+			string kernelNameOrBuildLog = await this.Compiler.TryCopileKernelFromStringAsync(kernelString);
+
+			return kernelNameOrBuildLog;
+		}
+
+
+		public async Task<object[]?> ExecuteGenericDataKernelAsync(string? kernelName, string? kernelCode, string[] argTypes, string[] argNames, string[] argValues, int workDimensions, string? inputDataBase64, string? inputDataType, string outputDataType, string outputDataLength, int? openClDeviceIndex, string? openClDeviceName)
+		{
+			if (!this.Initialized)
+			{
+				if (openClDeviceIndex != null && openClDeviceIndex >= 0 && openClDeviceIndex < this.DeviceCount)
+				{
+					this.Initialize(openClDeviceIndex.Value);
+				}
+				else if (!string.IsNullOrEmpty(openClDeviceName))
+				{
+					this.Initialize(openClDeviceName);
+				}
+			}
+
+			if (this.Executioner == null || this.Compiler == null || this.Register == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteGenericDataKernel #000: OpenCL-Services not initialized.");
+				return [];
+			}
+
+			CLKernel? kernel = null;
+			if (kernelName == null)
+			{
+				if (string.IsNullOrEmpty(kernelCode))
+				{
+					Console.WriteLine("CL-SER | ExecuteGenericDataKernel #001: No kernel name or code provided.");
+					return [];
+				}
+				kernel = await this.Compiler.CompileKernelFromStringAsync(kernelCode, true);
+				if (kernel == null)
+				{
+					Console.WriteLine("CL-SER | ExecuteGenericDataKernel #002: Kernel compilation failed.");
+					return [];
+				}
+			}
+			else
+			{
+				if (string.IsNullOrEmpty(this.KernelExists(kernelName)))
+				{
+					if (!string.IsNullOrEmpty(kernelCode))
+					{
+						kernel = await this.Compiler.CompileKernelFromStringAsync(kernelCode, true);
+						if (kernel == null)
+						{
+							Console.WriteLine($"CL-SER | ExecuteGenericDataKernel #003: Kernel '{kernelName}' compilation failed.");
+							return [];
+						}
+					}
+					else
+					{
+						Console.WriteLine($"CL-SER | ExecuteGenericDataKernel #004: Kernel '{kernelName}' does not exist.");
+						return [];
+					}
+				}
+			}
+
+			// Input-Daten dekodieren (falls vorhanden)
+			object[]? typedData = null;
+			if (!string.IsNullOrWhiteSpace(inputDataBase64) && !string.IsNullOrWhiteSpace(inputDataType))
+			{
+				switch (inputDataType.ToLowerInvariant())
+				{
+					case "double":
+						typedData = (await ConvertStringToTypeAsync<double>(inputDataBase64)).Cast<object>().ToArray();
+						break;
+					case "float":
+					case "single":
+						typedData = (await ConvertStringToTypeAsync<float>(inputDataBase64)).Cast<object>().ToArray();
+						break;
+					case "int":
+					case "int32":
+						typedData = (await ConvertStringToTypeAsync<int>(inputDataBase64)).Cast<object>().ToArray();
+						break;
+					case "byte":
+					case "uint8":
+						typedData = (await ConvertStringToTypeAsync<byte>(inputDataBase64)).Cast<object>().ToArray();
+						break;
+					default:
+						Console.WriteLine("CL-SER | Unsupported inputDataType: " + inputDataType);
+						break;
+				}
+			}
+
+			// Pointer-Argumente herausfiltern (werden automatisch gesetzt)
+			Dictionary<string, string> scalarArgs = [];
+			for (int i = 0; i < Math.Min(argTypes.Length, Math.Min(argNames.Length, argValues.Length)); i++)
+			{
+				string t = argTypes[i].Trim().ToLowerInvariant();
+				if (t.Contains("*"))
+				{
+					continue; // input / output pointer NICHT setzen
+				}
+				scalarArgs[argNames[i]] = argValues[i];
+			}
+
+			long outputLength = long.TryParse(outputDataLength, out long len) ? len : 0;
+			if (outputLength <= 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteGenericDataKernel #005: Invalid output length.");
+				return [];
+			}
+
+			// Kernel ausführen je nach Output-Typ
+			switch (outputDataType.ToLowerInvariant())
+			{
+				case "int":
+				case "int32":
+					{
+						var data = await this.Executioner.ExecuteGenericKernelSingleAsync<int>(kernel, typedData, inputDataType, outputLength, scalarArgs, workDimensions);
+						return new object[] { data };
+					}
+				case "double":
+					{
+						var data = await this.Executioner.ExecuteGenericKernelSingleAsync<double>(kernel, typedData, inputDataType, outputLength, scalarArgs, workDimensions);
+						return new object[] { data };
+					}
+				case "float":
+				case "single":
+					{
+						var data = await this.Executioner.ExecuteGenericKernelSingleAsync<float>(kernel, typedData, inputDataType, outputLength, scalarArgs, workDimensions);
+						return new object[] { data };
+					}
+				case "byte":
+				case "bytes":
+				case "uint8":
+					{
+						var data = await this.Executioner.ExecuteGenericKernelSingleAsync<byte>(kernel, typedData, inputDataType, outputLength, scalarArgs, workDimensions);
+						return new object[] { data };
+					}
+				default:
+					Console.WriteLine("CL-SER | ExecuteGenericDataKernel #006: Unsupported outputDataType: " + outputDataType);
+					return [];
+			}
+		}
+
+		public async Task<Vector2[]?> ExecuteFftAsync(float[] floats)
+		{
+			Vector2[]? result = null;
+
+			if (!this.Initialized || this.Executioner == null || this.Compiler == null || this.Register == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftAsync #000: OpenCL-Services not initialized.");
+				return result;
+			}
+
+			Stopwatch sw = Stopwatch.StartNew();
+
+			// Push data
+			var mem = this.Register.PushData(floats);
+			if (mem == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftAsync #001: Pushing data to OpenCL register failed.");
+				return result;
+			}
+
+			// Exec FFT
+			var pointer = await this.Executioner.ExecuteFFTAsync((nint) mem.indexHandle, "01", 'f', floats.Length, 0.0f);
+			if (pointer == IntPtr.Zero)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftAsync #002: Executing FFT kernel failed.");
+				return result;
+			}
+
+			// Pull data
+			result = this.Register.PullData<Vector2>(pointer);
+			if (result == null || result.Length == 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftAsync #003: Pulling data from OpenCL register failed.");
+				return result;
+			}
+
+			// Free buffers
+			this.Register.FreeBuffer((nint) mem.indexHandle);
+			this.Register.FreeBuffer(pointer);
+			sw.Stop();
+
+			Console.WriteLine($"CL-SER | ExecuteFftAsync completed in {sw.Elapsed.TotalMilliseconds:F2} ms. Result length: {result.Length}");
+
+			return result;
+		}
+
+		public async Task<IEnumerable<Vector2[]>?> ExecuteFftBulkAsync(IEnumerable<float[]> floatChunks, float overlap = 0.0f)
+		{
+			if (!this.Initialized || this.Executioner == null || this.Compiler == null || this.Register == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftBulkAsync #000: OpenCL-Services not initialized.");
+				return null;
+			}
+
+			List<Vector2[]> results = [];
+			Stopwatch swTotal = Stopwatch.StartNew();
+
+			int chunkSize = floatChunks.FirstOrDefault()?.Length ?? 0;
+
+			// Push chunks
+			var mem = this.Register.PushChunks<float>(floatChunks.ToList());
+			if (mem == null || mem.GetCount() <= 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftBulkAsync #001: Pushing chunks to OpenCL register failed.");
+				return null;
+			}
+
+			// Execute FFT for each chunk
+			IntPtr pointer = await this.Executioner.ExecuteFFTAsync(mem.indexHandle, "01", 'f', chunkSize, overlap);
+			if (pointer == IntPtr.Zero)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftBulkAsync #002: Executing FFT kernel failed.");
+				return null;
+			}
+
+			// Pull chunks
+			results = this.Register.PullChunks<Vector2>(pointer).ToList();
+			if (results == null || results.Count == 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteFftBulkAsync #002: Executing FFT kernel failed.");
+				return null;
+			}
+
+			// Free buffers
+			this.Register.FreeBuffer((nint) mem.indexHandle);
+			
+			swTotal.Stop();
+			Console.WriteLine($"CL-SER | ExecuteFftBulkAsync completed in {swTotal.Elapsed.TotalMilliseconds:F2} ms. Result chunks: {results.Count}, Chunk size: {chunkSize}");
+
+			return results;
+		}
+
+		public async Task<float[]?> ExecuteIfftAsync(Vector2[] complexes)
+		{
+			float[]? result = null;
+			if (!this.Initialized || this.Executioner == null || this.Compiler == null || this.Register == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftAsync #000: OpenCL-Services not initialized.");
+				return result;
+			}
+
+			Stopwatch sw = Stopwatch.StartNew();
+			
+			// Push data
+			var mem = this.Register.PushData(complexes);
+			if (mem == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftAsync #001: Pushing data to OpenCL register failed.");
+				return result;
+			}
+			
+			// Exec IFFT
+			var pointer = await this.Executioner.ExecuteFFTAsync((nint) mem.indexHandle, "01", 'c', complexes.Length, 0.0f);
+			if (pointer == IntPtr.Zero)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftAsync #002: Executing IFFT kernel failed.");
+				return result;
+			}
+			
+			// Pull data
+			result = this.Register.PullData<float>(pointer);
+			if (result == null || result.Length == 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftAsync #003: Pulling data from OpenCL register failed.");
+				return result;
+			}
+			
+			// Free buffers
+			this.Register.FreeBuffer((nint) mem.indexHandle);
+			this.Register.FreeBuffer(pointer);
+			
+			sw.Stop();
+			
+			Console.WriteLine($"CL-SER | ExecuteIfftAsync completed in {sw.Elapsed.TotalMilliseconds:F2} ms. Result length: {result.Length}");
+			
+			return result;
+		}
+
+		public async Task<IEnumerable<float[]>?> ExecuteIfftBulkAsync(IEnumerable<Vector2[]> complexChunks, float overlap = 0.0f)
+		{
+			if (!this.Initialized || this.Executioner == null || this.Compiler == null || this.Register == null)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftBulkAsync #000: OpenCL-Services not initialized.");
+				return null;
+			}
+			
+			List<float[]> results = [];
+			Stopwatch swTotal = Stopwatch.StartNew();
+			int chunkSize = complexChunks.FirstOrDefault()?.Length ?? 0;
+			
+			// Push chunks
+			var mem = this.Register.PushChunks<Vector2>(complexChunks.ToList());
+			if (mem == null || mem.GetCount() <= 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftBulkAsync #001: Pushing chunks to OpenCL register failed.");
+				return null;
+			}
+			
+			// Execute IFFT for each chunk
+			IntPtr pointer = await this.Executioner.ExecuteFFTAsync(mem.indexHandle, "01", 'c', chunkSize, overlap);
+			if (pointer == IntPtr.Zero)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftBulkAsync #002: Executing IFFT kernel failed.");
+				return null;
+			}
+			
+			// Pull chunks
+			results = this.Register.PullChunks<float>(pointer).ToList();
+			if (results == null || results.Count == 0)
+			{
+				Console.WriteLine("CL-SER | ExecuteIfftBulkAsync #003: Pulling chunks from OpenCL register failed.");
+				return null;
+			}
+			
+			// Free buffers
+			this.Register.FreeBuffer((nint) mem.indexHandle);
+			
+			swTotal.Stop();
+			Console.WriteLine($"CL-SER | ExecuteIfftBulkAsync completed in {swTotal.Elapsed.TotalMilliseconds:F2} ms. Result chunks: {results.Count}, Chunk size: {chunkSize}");
+			
+			return results;
+		}
+
+
+
+		public static async Task<T[]> ConvertStringToTypeAsync<T>(string? base64Data, int parallelThresholdChars = 16_000_000, int? maxDegreeOfParallelism = null, bool ignoreRemainderBytes = true) where T : unmanaged
+		{
+			if (string.IsNullOrWhiteSpace(base64Data))
+			{
+				return [];
+			}
+
+			try
+			{
+				// 1) Base64 Decode (synchron, CPU-bound) – optional auslagern
+				// Bei extrem großen Strings im Hintergrund-Thread decodieren
+				byte[] raw = base64Data.Length > parallelThresholdChars
+					? await Task.Run(() => Convert.FromBase64String(base64Data))
+					: Convert.FromBase64String(base64Data);
+
+				if (typeof(T) == typeof(byte))
+				{
+					return (T[]) (object) raw; // Direkt zurück (zero-copy)
+				}
+
+				int typeSize = System.Runtime.InteropServices.Marshal.SizeOf<T>();
+				if (raw.Length < typeSize)
+				{
+					return [];
+				}
+
+				int elementCount = raw.Length / typeSize;
+				int usableBytes = elementCount * typeSize;
+
+				if (!ignoreRemainderBytes && usableBytes != raw.Length)
+				{
+					throw new InvalidOperationException($"Rohdatenlänge ({raw.Length}) nicht durch Elementgröße ({typeSize}) teilbar.");
+				}
+
+				// Klein? -> Singlethread + Array.Copy + Buffer.BlockCopy
+				if (base64Data.Length < parallelThresholdChars)
+				{
+					byte[] usableRaw = new byte[usableBytes];
+					Array.Copy(raw, 0, usableRaw, 0, usableBytes);
+					T[] result = new T[elementCount];
+					Buffer.BlockCopy(usableRaw, 0, result, 0, usableBytes);
+					return result;
+				}
+
+				// Groß: Parallel kopieren (ohne unsafe)
+				T[] resultLarge = new T[elementCount];
+
+				// Partitionierung
+				int logical = maxDegreeOfParallelism ?? Environment.ProcessorCount;
+				int partitionSizeElements = Math.Max(elementCount / (logical * 4), 1024); // Mindestens 1024 Elemente pro Partition
+				int partitionSizeBytes = partitionSizeElements * typeSize;
+
+				var ranges = new List<(int byteStart, int byteLen)>();
+				for (int offset = 0; offset < usableBytes; offset += partitionSizeBytes)
+				{
+					int len = Math.Min(partitionSizeBytes, usableBytes - offset);
+					ranges.Add((offset, len));
+				}
+
+				var po = new ParallelOptions
+				{
+					MaxDegreeOfParallelism = logical
+				};
+
+				Parallel.ForEach(ranges, po, range =>
+				{
+					int elements = range.byteLen / typeSize;
+					int destIndex = range.byteStart / typeSize;
+					Buffer.BlockCopy(raw, range.byteStart, resultLarge, destIndex * typeSize, elements * typeSize);
+				});
+
+				return resultLarge;
+			}
+			catch (FormatException)
+			{
+				return [];
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine("ConvertStringToTypeAsync error: " + ex.Message);
+				return [];
+			}
+		}
+
+		public static Task<object[]> ConvertStringToTypeAsync(string? base64Data, string typeName)
+		{
+			return typeName.ToLower() switch
+			{
+				"byte" or "bytes" => ConvertStringToTypeAsync<byte>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"sbyte" => ConvertStringToTypeAsync<sbyte>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"short" or "int16" => ConvertStringToTypeAsync<short>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"ushort" or "uint16" => ConvertStringToTypeAsync<ushort>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"int" or "int32" => ConvertStringToTypeAsync<int>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"uint" or "uint32" => ConvertStringToTypeAsync<uint>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"long" or "int64" => ConvertStringToTypeAsync<long>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"ulong" or "uint64" => ConvertStringToTypeAsync<ulong>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"float" or "single" => ConvertStringToTypeAsync<float>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				"double" => ConvertStringToTypeAsync<double>(base64Data).ContinueWith(t => t.Result.Cast<object>().ToArray()),
+				_ => Task.FromResult<object[]>([])
+			};
+		}
+
 	}
 }
