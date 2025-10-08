@@ -20,14 +20,14 @@ namespace OOCL.Image.Api.Controllers
 
 		// DTO request
 		[HttpPost("request-execution")]
-		[ProducesResponseType(typeof(OpenClExecuteResult), 200)]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<OpenClExecuteResult>> RequestExecutionAsync([FromBody] OpenClExecuteRequest request)
+		public async Task<ActionResult<KernelExecuteResult>> RequestExecutionAsync([FromBody] KernelExecuteRequest request)
 		{
 			try
 			{
-				OpenClExecuteResult result = new();
+				KernelExecuteResult result = new();
 
 				if (string.IsNullOrWhiteSpace(request.KernelName) && string.IsNullOrWhiteSpace(request.KernelCode))
 				{
@@ -35,13 +35,13 @@ namespace OOCL.Image.Api.Controllers
 				}
 
 				// Try initialize OpenCL (if not done yet)
-				if (request.OpenClDeviceIndex.HasValue)
+				if (request.DeviceIndex.HasValue)
 				{
-					this.openClService.Initialize(request.OpenClDeviceIndex.Value);
+					this.openClService.Initialize(request.DeviceIndex.Value);
 				}
-				else if (!string.IsNullOrWhiteSpace(request.OpenClDeviceName))
+				else if (!string.IsNullOrWhiteSpace(request.DeviceName))
 				{
-					this.openClService.Initialize(request.OpenClDeviceName);
+					this.openClService.Initialize(request.DeviceName);
 				}
 				else
 				{
@@ -69,7 +69,7 @@ namespace OOCL.Image.Api.Controllers
 				}
 
 				Stopwatch sw = Stopwatch.StartNew();
-				object[]? execResult = await this.openClService.ExecuteGenericDataKernelAsync(request.KernelName, request.KernelCode, request.ArgumentTypes.ToArray(), request.ArgumentNames.ToArray(), request.ArgumentValues.ToArray(), request.WorkDimension, request.InputDataBase64, request.InputDataType, request.OutputDataType, request.OutputDataLength, request.OpenClDeviceIndex, request.OpenClDeviceName);
+				object[]? execResult = await this.openClService.ExecuteGenericDataKernelAsync(request.KernelName, request.KernelCode, request.ArgumentTypes.ToArray(), request.ArgumentNames.ToArray(), request.ArgumentValues.ToArray(), request.WorkDimension, request.InputDataBase64, request.InputDataType, request.OutputDataType, request.OutputDataLength, request.DeviceIndex, request.DeviceName);
 				sw.Stop();
 
 				if (execResult == null || execResult.Length == 0)
@@ -104,10 +104,10 @@ namespace OOCL.Image.Api.Controllers
 		// Raw request
 		[HttpPost("request-execution-raw")]
 		[Consumes("text/plain", "application/json")]
-		[ProducesResponseType(typeof(OpenClExecuteResult), 200)]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<OpenClExecuteResult>> RequestExecutionRawAsync([FromBody] string kernelCode, [FromQuery] string? base64Input = null, [FromQuery] string? inputTypeStr = null, [FromQuery] string outputLengthStr = "0", [FromQuery] string outputTypeStr = "Byte", [FromQuery] Dictionary<string, string>? arguments = null, [FromQuery] string? openClDeviceName = "Core")
+		public async Task<ActionResult<KernelExecuteResult>> RequestExecutionRawAsync([FromBody] string kernelCode, [FromQuery] string? base64Input = null, [FromQuery] string? inputTypeStr = null, [FromQuery] string outputLengthStr = "0", [FromQuery] string outputTypeStr = "Byte", [FromQuery] Dictionary<string, string>? arguments = null, [FromQuery] string? openClDeviceName = "Core")
 		{
 			if (string.IsNullOrWhiteSpace(kernelCode))
 			{
@@ -144,7 +144,7 @@ namespace OOCL.Image.Api.Controllers
 				// First try compile & get kernel name from code
 				string? kernelName = this.openClService.Compiler.GetKernelName(kernelCode);
 
-				OpenClExecuteResult result = new();
+				KernelExecuteResult result = new();
 				object[]? execResult = await this.openClService.ExecuteGenericDataKernelAsync("process_data", kernelCode, new string[] { "Byte*", "int" }, new string[] { "input", "length" }, new string[] { "0", outputLengthStr }, 1, base64Input, inputTypeStr, outputTypeStr, outputLengthStr, 2, openClDeviceName);
 				if (execResult == null || execResult.Length == 0)
 				{
@@ -419,9 +419,9 @@ namespace OOCL.Image.Api.Controllers
 
 		// TESTS
 		[HttpGet("test-request-execution")]
-		[ProducesResponseType(typeof(OpenClExecuteResult), 200)]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<OpenClExecuteResult>> TestRequestExecutionAsync([FromQuery] int? arrayLength = null, [FromQuery] int? workDimension = null, [FromQuery] bool? resultAsString = null, [FromQuery] string? specificOpenClDevice = "Core")
+		public async Task<ActionResult<KernelExecuteResult>> TestRequestExecutionAsync([FromQuery] int? arrayLength = null, [FromQuery] int? workDimension = null, [FromQuery] bool? resultAsString = null, [FromQuery] string? specificOpenClDevice = "Core")
 		{
 			try
 			{
@@ -475,7 +475,7 @@ namespace OOCL.Image.Api.Controllers
 				string inputBase64 = Convert.ToBase64String(inputData.SelectMany(d => BitConverter.GetBytes(d)).ToArray());
 
 				// WICHTIG: Pointer-Argumente (input, output) NICHT mitgeben – die werden intern behandelt.
-				OpenClExecuteRequest request = new()
+				KernelExecuteRequest request = new()
 				{
 					KernelName = "to_int_round_or_cut",
 					KernelCode = source,
@@ -487,11 +487,11 @@ namespace OOCL.Image.Api.Controllers
 					InputDataType = "double",
 					OutputDataType = "int",
 					OutputDataLength = inputLength.ToString(),
-					OpenClDeviceIndex = 2,
-					OpenClDeviceName = "Core"
+					DeviceIndex = 2,
+					DeviceName = "Core"
 				};
 
-				OpenClExecuteResult result = new();
+				KernelExecuteResult result = new();
 
 				Stopwatch sw = Stopwatch.StartNew();
 				object[]? execResult = await this.openClService.ExecuteGenericDataKernelAsync(
@@ -505,8 +505,8 @@ namespace OOCL.Image.Api.Controllers
 					request.InputDataType,
 					request.OutputDataType,
 					request.OutputDataLength,
-					request.OpenClDeviceIndex,
-					request.OpenClDeviceName);
+					request.DeviceIndex,
+					request.DeviceName);
 
 				sw.Stop();
 

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace OOCL.Image.Shared
 {
-	public class OpenClExecuteResult
+	public class KernelExecuteResult
 	{
 		public string KernelName { get; set; } = string.Empty;
 		public bool Success { get; set; } = false;
@@ -19,7 +19,7 @@ namespace OOCL.Image.Shared
 
 		public double? ExecutionTimeMs { get; set; } = null;
 
-		public OpenClExecuteResult()
+		public KernelExecuteResult()
 		{
 			// Empty default ctor
 		}

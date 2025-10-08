@@ -51,6 +51,8 @@ namespace OOCL.Image.Api
 			var openClService = new OpenClService(preferredDevice);
 			builder.Services.AddSingleton(openClService);
 
+			builder.Services.AddSingleton<ExternalCudaService>();
+
 			builder.Services.AddEndpointsApiExplorer();
 			builder.Services.AddSwaggerGen(o =>
 			{

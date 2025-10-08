@@ -74,5 +74,62 @@ namespace OOCL.Image.Api.Controllers
 				});
 			}
 		}
+
+
+
+		// CUDA external worker extension
+		[HttpPost("register-as-cuda-worker")]
+		[ProducesResponseType(typeof(string), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public ActionResult<string> RegisterAsCudaWorker([FromBody] string address)
+		{
+			// Check address reachable (HttpClient i.e)
+			if (string.IsNullOrWhiteSpace(address))
+			{
+				return this.BadRequest(new ProblemDetails { Title = "Invalid address", Detail = "The provided address is null or empty." });
+			}
+
+			// Simple validation
+			if (!Uri.IsWellFormedUriString(address, UriKind.Absolute))
+			{
+				return this.BadRequest(new ProblemDetails { Title = "Invalid address", Detail = "The provided address is not a valid absolute URI." });
+			}
+
+			// HttpClient check could be added here for more robust validation
+			var uri = new Uri(address);
+			if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+			{
+				return this.BadRequest(new ProblemDetails { Title = "Invalid address", Detail = "The provided address must use HTTP or HTTPS scheme." });
+			}
+
+			var client = new HttpClient();
+			try
+			{
+				var response = client.GetAsync(address).Result;
+				if (!response.IsSuccessStatusCode)
+				{
+					return this.BadRequest(new ProblemDetails { Title = "Address unreachable", Detail = $"The provided address returned status code {response.StatusCode}." });
+				}
+			}
+			catch (Exception ex)
+			{
+				return this.BadRequest(new ProblemDetails { Title = "Address unreachable", Detail = $"Error reaching the provided address: {ex.Message}" });
+			}
+			finally
+			{
+				client.Dispose();
+			}
+
+
+			// Set in config
+			this.webApiConfig.CudaWorkerAddress = address;
+
+
+
+			return this.Ok($"CUDA worker registered at '{address}'" );
+		}
+
+
 	}
 }

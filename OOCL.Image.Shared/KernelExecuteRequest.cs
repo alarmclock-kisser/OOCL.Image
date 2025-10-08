@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 
 namespace OOCL.Image.Shared
 {
-	public class OpenClExecuteRequest
+	public class KernelExecuteRequest
 	{
-		public int? OpenClDeviceIndex { get; set; } = null;
-		public string? OpenClDeviceName { get; set; } = null;
+		public int? DeviceIndex { get; set; } = null;
+		public string? DeviceName { get; set; } = null;
 
 		public string? KernelName { get; set; } = null;
 		public string? KernelCode { get; set; } = null;
@@ -26,7 +26,7 @@ namespace OOCL.Image.Shared
 		public string OutputDataType { get; set; } = "byte";
 		public string OutputDataLength { get; set; } = "0";
 
-		public OpenClExecuteRequest()
+		public KernelExecuteRequest()
 		{
 			// Empty ctor
 		}
