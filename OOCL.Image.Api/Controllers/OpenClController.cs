@@ -463,6 +463,122 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 
+		[HttpPost("timestretch-audio-file-download")]
+		[Consumes("multipart/form-data")]
+		[ProducesResponseType(typeof(FileContentResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<IActionResult> TimestretchAudioFileAsync(IFormFile audioFile, [FromQuery] string kernelName = "timestretch_double03", [FromQuery] double speedFactor = 0.6667, [FromQuery] int chunkSize = 8192, [FromQuery] float overlap = 0.5f, [FromQuery] string format = "wav", [FromQuery] int bits = 24, [FromQuery] string? forceOpenClDevice = "Core")
+		{
+			if (!string.IsNullOrEmpty(forceOpenClDevice))
+			{
+				await Task.Run(() => this.openClService.Initialize(forceOpenClDevice));
+			}
+
+			if (!this.openClService.Initialized)
+			{
+				await this.logger.LogAsync("[400] api/opencl/timestretch-audio-file: OpenCL Not Initialized", nameof(OpenClController));
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
+			}
+			if (audioFile == null || audioFile.Length == 0)
+			{
+				await this.logger.LogAsync("[400] api/opencl/timestretch-audio-file: No audio file uploaded", nameof(OpenClController));
+				return this.BadRequest(new ProblemDetails { Status = 400, Title = "No audio file uploaded" });
+			}
+
+			overlap = Math.Clamp(overlap, 0.0f, 0.9f);
+			speedFactor = Math.Clamp(speedFactor, 0.1, 10.0);
+			if (string.IsNullOrWhiteSpace(kernelName))
+			{
+				kernelName = "timestretch_double03";
+			}
+
+			format = format.Trim('.').ToLowerInvariant();
+			if (format != "wav" && format != "mp3")
+			{
+				format = "wav";
+			}
+
+			// Make ChunkSize a power of two
+			int power = (int)Math.Round(Math.Log2(chunkSize));
+			chunkSize = (int)Math.Pow(2, power);
+			chunkSize = Math.Clamp(chunkSize, 128, 65536);
+
+			try
+			{
+				// Temp file
+				string tempFilePath = Path.GetTempFileName();
+				using (var stream = System.IO.File.Create(tempFilePath))
+				{
+					await audioFile.CopyToAsync(stream);
+				}
+
+				var audio = await this.audioCollection.ImportAsync(tempFilePath);
+				if (audio == null)
+				{
+					await this.logger.LogAsync("[400] api/opencl/timestretch-audio-file: Failed to import uploaded audio file", nameof(OpenClController));
+					return this.BadRequest(new ProblemDetails { Status = 400, Title = "Failed to import uploaded audio file" });
+				}
+
+				var result = await this.openClService.TimeStretch(audio, kernelName, "", speedFactor, chunkSize, overlap);
+				if (result == null || result.Data.LongLength <= 0)
+				{
+					await this.logger.LogAsync("[500] api/opencl/timestretch-audio-file: OpenCL returned null or empty audio", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed", Detail = result?.ErrorMessage  ?? "No result object returned." });
+				}
+
+				if (format == "mp3")
+				{
+					if (bits != 96 && bits != 128 && bits != 192 && bits != 256 && bits != 320)
+					{
+						bits = 192;
+					}
+				}
+				else
+				{
+					format = "wav";
+					if (bits != 16 && bits != 24 && bits != 32)
+					{
+						bits = 24;
+					}
+				}
+
+				var baseName = string.IsNullOrWhiteSpace(result.Name) ? "audio" : result.Name.Replace("▶ ", "").Replace("|| ", "").Trim();
+				if (string.IsNullOrWhiteSpace(baseName))
+				{
+					baseName = "audio";
+				}
+
+				string? outFile = null;
+				if (format.Contains("3"))
+				{
+					outFile = await AudioExporter.ExportMp3Async(result, tempFilePath, bits);
+				}
+				else
+				{
+					outFile = await AudioExporter.ExportWavAsync(result, tempFilePath, bits);
+				}
+				if (string.IsNullOrWhiteSpace(outFile) || !System.IO.File.Exists(outFile))
+				{
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Title = "Error exporting audio as " + format,
+						Detail = "The audio file could not be exported in the requested format. ('" + outFile + "')",
+						Status = 500
+					});
+				}
+				byte[] fileBytes = await System.IO.File.ReadAllBytesAsync(outFile);
+				string fileName = Path.GetFileName(outFile) ?? $"{baseName}.{format}";
+				string contentType = format.Contains("3") ? "audio/mpeg" : "audio/wav";
+				return this.File(fileBytes, contentType, fileName);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
+				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to process uploaded audio", Detail = ex.Message });
+			}
+		}
+
 
 		[HttpGet("test-execute-audio-timestretch-default")]
 		[ProducesResponseType(typeof(IEnumerable<AudioObjInfo>), 200)]

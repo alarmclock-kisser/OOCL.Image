@@ -1787,6 +1787,7 @@ namespace OOCL.Image.Core
 		}
 
 		public string? ContentHash { get; internal set; } // SHA256 of original file
+		public string ErrorMessage { get; set; } = string.Empty;
 
 		internal static string? ComputeFileHash(string filePath)
 		{

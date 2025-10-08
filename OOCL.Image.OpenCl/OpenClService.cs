@@ -426,6 +426,7 @@ namespace OOCL.Image.OpenCl
 			// Check executioner
 			if (this.Executioner == null)
 			{
+				obj.ErrorMessage = "Kernel executioner not initialized.";
 				Console.WriteLine("Kernel executioner not initialized (Cannot execute audio kernel)");
 				return obj;
 			}
@@ -439,6 +440,7 @@ namespace OOCL.Image.OpenCl
 			}
 			if (!obj.OnDevice)
 			{
+				obj.ErrorMessage = "AudioObj is not on device after moving.";
 				return obj;
 			}
 
@@ -495,9 +497,11 @@ namespace OOCL.Image.OpenCl
 			sw.Stop();
 			obj["stretch"] = sw.Elapsed.TotalMilliseconds;
 
-			if (obj.Pointer == IntPtr.Zero && log)
+			if (obj.Pointer == IntPtr.Zero)
 			{
-				// Console.WriteLine("Failed to execute audio kernel", "Pointer=" + obj.Pointer.ToString("X16"), 1);
+				obj.ErrorMessage = "Failed to execute audio kernel: " + kernelName;
+				Console.WriteLine("Failed to execute audio kernel: " + kernelName + " Pointer=" + obj.Pointer.ToString("X16"));
+				return obj;
 			}
 
 			// Reload kernel
@@ -516,6 +520,11 @@ namespace OOCL.Image.OpenCl
 			if (moved && obj.OnDevice && obj.Form.StartsWith("f"))
 			{
 				await this.MoveAudio(obj, chunkSize, overlap);
+				if (obj.OnDevice)
+				{
+					obj.ErrorMessage = "Failed to move AudioObj back to host. (Pointer is not zero after pulling)";
+					return obj;
+				}
 			}
 
 			return obj;
@@ -579,6 +588,7 @@ namespace OOCL.Image.OpenCl
 					IntPtr pointer = (await this.MoveAudio(obj, chunkSize, overlap, false)).Pointer;
 					if (pointer == IntPtr.Zero)
 					{
+						obj.ErrorMessage = "Failed to move AudioObj to device.";
 						return obj;
 					}
 					moved = true;
@@ -606,6 +616,7 @@ namespace OOCL.Image.OpenCl
 				var ptr = (await this.ExecuteAudioKernel(obj, kernelName, "", chunkSize, overlap, optionalArgs, true, progress)).Pointer;
 				if (ptr == IntPtr.Zero)
 				{
+					obj.ErrorMessage = obj.ErrorMessage + " (Failed to execute time-stretch kernel: " + kernelName + ")";
 					return obj;
 				}
 
@@ -615,12 +626,14 @@ namespace OOCL.Image.OpenCl
 					IntPtr resultPointer = (await this.MoveAudio(obj, chunkSize, overlap)).Pointer;
 					if (resultPointer != IntPtr.Zero)
 					{
+						obj.ErrorMessage = "Failed to move AudioObj back to host. (Pointer is not zero after pulling)";
 						return obj;
 					}
 				}
 			}
 			catch (Exception ex)
 			{
+				obj.ErrorMessage = ex.Message;
 				Console.WriteLine(ex);
 			}
 			finally

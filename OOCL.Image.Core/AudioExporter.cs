@@ -16,7 +16,7 @@ namespace OOCL.Image.Core
 			// Get export dir
 			if (!Directory.Exists(outDir))
 			{
-				return null;
+				return "Out directory does not exist: " + outDir;
 			}
 
 			string outFile = Path.Combine(outDir, $"{audio.Name} [{audio.Bpm:F1}] {bitrate}kBit.mp3");
@@ -60,13 +60,16 @@ namespace OOCL.Image.Core
 		{
 			if (audio.Data == null || audio.Data.Length == 0)
 			{
-				return null;
+				return "AudioObj data was null or empty";
 			}
 
 			string baseFileName = $"{audio.Name.Replace("▶ ", "").Replace("|| ", "")}{(audio.Bpm > 10 ? (" [" + audio.Bpm.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "]") : "")}".Trim();
 			string finalPath = Path.Combine(outPath, $"{baseFileName}.wav");
 
-			Directory.CreateDirectory(outPath);
+			if (!Directory.Exists(outPath))
+			{
+				return "Out directory does not exist: " + outPath;
+			}
 
 			Stopwatch sw = Stopwatch.StartNew();
 
