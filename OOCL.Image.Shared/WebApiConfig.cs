@@ -16,7 +16,7 @@ namespace OOCL.Image.Shared
 		public int? MaxLogLines { get; set; }
 		public bool? CleanupPreviousLogFiles { get; set; }
 
-		public string? CudaWorkerAddress { get; set; } = null;
+		public List<string> CudaWorkerAddresses { get; set; } = [];
 
 		public WebApiConfig()
 		{

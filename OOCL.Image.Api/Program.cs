@@ -148,6 +148,13 @@ namespace OOCL.Image.Api
 				usePathBase,
 				builder.Configuration["ApiBaseUrl"]);
 
+			app.Use(async (ctx, next) =>
+			{
+				var log = ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("PathDebug");
+				log.LogInformation("Req PathBase='{Base}' Path='{Path}' RawTarget='{Raw}'", ctx.Request.PathBase, ctx.Request.Path, ctx.Request.HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpRequestFeature>()?.RawTarget);
+				await next();
+			});
+
 			app.Run();
 		}
 	}

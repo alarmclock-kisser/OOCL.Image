@@ -29,7 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OOCL.Image.Api\OOCL.Image.Api.csproj" />
     <ProjectReference Include="..\OOCL.Image.Shared\OOCL.Image.Shared.csproj" />
   </ItemGroup>
 

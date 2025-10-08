@@ -2,16 +2,125 @@
 using OOCL.Image.Core;
 using OOCL.Image.Shared;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace OOCL.Image.Api.Controllers
 {
+	[ApiController]
+	[Route("api/[controller]")]
 	public class ExternalCudaController : ControllerBase
 	{
+		private readonly RollingFileLogger logger;
+		private readonly WebApiConfig webApiConfig;
 		private readonly ExternalCudaService cudaService;
 
-		public ExternalCudaController(ExternalCudaService cudaService)
+		public ExternalCudaController(RollingFileLogger rollingFileLogger, WebApiConfig webApiConfig, ExternalCudaService cudaService)
 		{
+			this.logger = rollingFileLogger;
+			this.webApiConfig = webApiConfig;
 			this.cudaService = cudaService ?? throw new ArgumentNullException(nameof(cudaService));
+		}
+
+		[HttpGet("status")]
+		[ProducesResponseType(typeof(string), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<string>> GetStatus()
+		{
+			try
+			{
+				string status = "OK";
+
+				if (!this.webApiConfig.CudaWorkerAddresses.Any())
+				{
+					status = "No CUDA worker registered.";
+				}
+				else
+				{
+					status += ". (" + this.webApiConfig.CudaWorkerAddresses.Count + " worker(s) registered) ";
+				}
+
+				await logger.LogAsync($"Status requested: {status}", nameof(ExternalCudaController));
+				return this.Ok(status);
+			}
+			catch (Exception ex)
+			{
+				await logger.LogAsync($"Exception in GetStatus: {ex.Message}", nameof(ExternalCudaController));
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Exception",
+					Detail = ex.Message
+				});
+			}
+		}
+
+		[HttpPost("register")]
+		[ProducesResponseType(typeof(bool), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<bool>> RegisterAddress([FromBody] string workerApiAddress)
+		{
+			workerApiAddress = workerApiAddress?.Trim().TrimEnd('/') ?? "";
+			if (string.IsNullOrWhiteSpace(workerApiAddress))
+			{
+				await this.logger.LogAsync("Empty workerApiAddress provided for registration.", nameof(ExternalCudaController));
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Worker address missing",
+					Detail = "Empty workerApiAddress"
+				});
+			}
+
+			// Nur für diesen Call Zertifikatsprüfung deaktivieren (self-signed tolerieren)
+			var handler = new HttpClientHandler
+			{
+				ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+			};
+			using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+
+			var statusUrl = $"{workerApiAddress}/api/Cuda/status";
+			await this.logger.LogAsync($"Probing CUDA worker at {statusUrl}", nameof(ExternalCudaController));
+
+			try
+			{
+				var response = await httpClient.GetAsync(statusUrl);
+				if (response.IsSuccessStatusCode)
+				{
+					if (this.webApiConfig.CudaWorkerAddresses.Contains(workerApiAddress))
+					{
+						await this.logger.LogAsync($"CUDA worker already registered: {workerApiAddress}", nameof(ExternalCudaController));
+						return this.Ok(true);
+					}
+					else
+					{
+						this.webApiConfig.CudaWorkerAddresses.Add(workerApiAddress);
+					}
+					
+					await this.logger.LogAsync($"Registered CUDA worker: {workerApiAddress}", nameof(ExternalCudaController));
+					return this.Ok(true);
+				}
+				else
+				{
+					await this.logger.LogAsync($"Probe failed {statusUrl} -> {response.StatusCode}", nameof(ExternalCudaController));
+					return this.StatusCode(500, new ProblemDetails
+					{
+						Status = 500,
+						Title = "Probe failed",
+						Detail = $"GET {statusUrl} returned {(int) response.StatusCode} {response.StatusCode}"
+					});
+				}
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogAsync($"Exception probing {statusUrl}: {ex.Message}", nameof(ExternalCudaController));
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Exception during probe",
+					Detail = ex.Message
+				});
+			}
 		}
 
 		[HttpPost("request-cuda-execute")]
