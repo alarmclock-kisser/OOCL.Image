@@ -449,8 +449,17 @@ namespace OOCL.Image.Api.Controllers
 		{
 			var normalized = NormalizeWorkerBase(workerBase);
 
-			var urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-single-base64",
+			IEnumerable<string> urls = [];
+			if (request.InputDataBase64Chunks.Any())
+			{
+				urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-single-base64",
 				"Cuda/request-generic-execution-single-base64");
+			}
+			else
+			{
+				urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-batch-base64",
+					"Cuda/request-generic-execution-batch-base64");
+			}
 
 			// Basis-Query-Parameter (ohne argNames/argValues)
 			var baseParams = new Dictionary<string, string?>
@@ -524,7 +533,26 @@ namespace OOCL.Image.Api.Controllers
 			// Rebuild final query string
 			var query = fragments.Count > 0 ? "?" + string.Join("&", fragments) : string.Empty;
 
-			var jsonBody = "\"" + (request.InputDataBase64 ?? "").Replace("\"", "\\\"") + "\"";
+			// Build JSON body: if chunks are provided send JSON array, otherwise send single JSON string
+			string jsonBody;
+			if (request.InputDataBase64Chunks != null && request.InputDataBase64Chunks.Any())
+			{
+				try
+				{
+					jsonBody = JsonSerializer.Serialize(request.InputDataBase64Chunks);
+				}
+				catch (Exception ex)
+				{
+					await this.logger.LogAsync($"Failed to serialize InputDataBase64Chunks: {ex.Message}", nameof(ExternalCudaController));
+					return new(false, 500, null, this.Problem("Serialization failed", ex.Message, 500));
+				}
+			}
+			else
+			{
+				// single base64 string as JSON string
+				jsonBody = JsonSerializer.Serialize(request.InputDataBase64 ?? string.Empty);
+			}
+
 			var jsonContent = new StringContent(jsonBody, Encoding.UTF8, "application/json");
 
 			using var http = this.CreateInsecureHttpClient();
