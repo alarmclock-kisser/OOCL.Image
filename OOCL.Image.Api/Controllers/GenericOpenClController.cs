@@ -145,7 +145,7 @@ namespace OOCL.Image.Api.Controllers
 				string? kernelName = this.openClService.Compiler.GetKernelName(kernelCode);
 
 				KernelExecuteResult result = new();
-				object[]? execResult = await this.openClService.ExecuteGenericDataKernelAsync("process_data", kernelCode, new string[] { "Byte*", "int" }, new string[] { "input", "length" }, new string[] { "0", outputLengthStr }, 1, base64Input, inputTypeStr, outputTypeStr, outputLengthStr, 2, openClDeviceName);
+				object[]? execResult = await this.openClService.ExecuteGenericDataKernelAsync("process_data", kernelCode, ["Byte*", "int"], ["input", "length"], ["0", outputLengthStr], 1, base64Input, inputTypeStr, outputTypeStr, outputLengthStr, 2, openClDeviceName);
 				if (execResult == null || execResult.Length == 0)
 				{
 					result.KernelName = kernelName ?? "N/A";

@@ -156,6 +156,58 @@ namespace OOCL.Image.Api.Controllers
 			}
 		}
 
+		[HttpDelete("unregister")]
+		[Consumes("application/json", "text/plain")]
+		[ProducesResponseType(typeof(bool), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<bool>> UnregisterAddress([FromBody] string workerApiAddress)
+		{
+			workerApiAddress = (workerApiAddress ?? "").Trim().TrimEnd('/');
+			if (string.IsNullOrWhiteSpace(workerApiAddress))
+			{
+				await this.logger.LogAsync("Empty workerApiAddress provided for unregistration.", nameof(ExternalCudaController));
+				return this.StatusCode(500, this.Problem("Worker address missing", "Empty workerApiAddress", 500));
+			}
+
+			var normalized = NormalizeWorkerBase(workerApiAddress);
+			if (this.webApiConfig.CudaWorkerAddresses.Contains(normalized))
+			{
+				this.webApiConfig.CudaWorkerAddresses.Remove(normalized);
+				await this.logger.LogAsync($"Unregistered CUDA worker: {normalized}", nameof(ExternalCudaController));
+				return this.Ok(true);
+			}
+			else
+			{
+				await this.logger.LogAsync($"CUDA worker not found for unregistration: {normalized}", nameof(ExternalCudaController));
+				return this.Ok(false);
+			}
+		}
+
+		[HttpGet("refresh-workers")]
+		[ProducesResponseType(typeof(IEnumerable<string>), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<IEnumerable<string>>> RefreshWorkers()
+		{
+			var workerUrls = this.webApiConfig.CudaWorkerAddresses.ToList();
+			List<string> validWorkers = [];
+			foreach (var url in workerUrls)
+			{
+				if (await this.IsWorkerOnline(url))
+				{
+					validWorkers.Add(url);
+				}
+				else
+				{
+					validWorkers.Add("");
+				}
+			}
+
+			this.webApiConfig.CudaWorkerAddresses = validWorkers.Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+			await this.logger.LogAsync($"Refreshed CUDA workers. Valid count: {this.webApiConfig.CudaWorkerAddresses.Count}", nameof(ExternalCudaController));
+
+			return this.Ok(validWorkers);
+		}
+
 		// ---------- Forward Single Execution (Base64) ----------
 
 		[HttpPost("request-cuda-execute-single-base64")]
@@ -166,10 +218,15 @@ namespace OOCL.Image.Api.Controllers
 		public async Task<ActionResult<KernelExecuteResult>> RequestCudaExecuteSingleBase64Async([FromBody] KernelExecuteRequest request, [FromQuery] string? preferredClientApiUrl = null)
 		{
 			var worker = await this.ResolveOrRegisterWorker(preferredClientApiUrl);
-			if (worker == null) return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
 
 			if (string.IsNullOrWhiteSpace(request?.KernelCode))
+			{
 				return this.BadRequest(this.Problem("Invalid request", "Missing Kernel source code", 400));
+			}
 
 			var sw = Stopwatch.StartNew();
 			var forwardResp = await this.ForwardKernelExecuteBase64Async(worker, request);
@@ -204,13 +261,17 @@ namespace OOCL.Image.Api.Controllers
 		{
 			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
 			if (worker == null)
+			{
 				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
 
 			int len = arraySize.GetValueOrDefault(1024);
 			var rnd = new Random();
 			var floats = new float[len];
 			for (int i = 0; i < len; i++)
+			{
 				floats[i] = (float) (rnd.NextDouble() * 199.998 - 99.999);
+			}
 
 			string inputBase64 = Convert.ToBase64String(floats.SelectMany(BitConverter.GetBytes).ToArray());
 
@@ -246,13 +307,16 @@ namespace OOCL.Image.Api.Controllers
 				OutputDataType = "int",
 				OutputDataLength = len.ToString(),
 				WorkDimension = 1,
-				ArgumentNames = new[] { "input", "output", "cutoffMode", "length" },
-				ArgumentValues = new[] { "0", "0", "0", len.ToString() }
+				ArgumentNames = ["input", "output", "cutoffMode", "length"],
+				ArgumentValues = ["0", "0", "0", len.ToString()],
+				ArgumentTypes = ["float*", "int*", "int", "int"]
 			};
 
 			var forward = await this.ForwardKernelExecuteBase64Async(worker, req);
 			if (!forward.Success)
+			{
 				return this.StatusCode(forward.StatusCode, forward.Problem!);
+			}
 
 			return this.Ok(forward.Result);
 		}
@@ -268,16 +332,77 @@ namespace OOCL.Image.Api.Controllers
 			var urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-single-base64",
 				"Cuda/request-generic-execution-single-base64");
 
-			var query = BuildQuery(new Dictionary<string, string?>
+			// Basis-Query-Parameter (ohne argNames/argValues)
+			var baseParams = new Dictionary<string, string?>
 			{
 				["kernelCode"] = request.KernelCode,
 				["inputDataType"] = request.InputDataType,
 				["outputDataLength"] = request.OutputDataLength,
 				["outputDataType"] = request.OutputDataType,
-				["workDimension"] = request.WorkDimension > 0 ? request.WorkDimension.ToString() : "1",
 				["deviceName"] = string.IsNullOrWhiteSpace(request.DeviceName) ? null : request.DeviceName,
-				["deviceIndex"] = request.DeviceIndex?.ToString()
-			});
+				["deviceIndex"] = request.DeviceIndex?.ToString(),
+				["workDimension"] = request.WorkDimension > 0 ? request.WorkDimension.ToString() : "1"
+			};
+
+			// Build base query (may be empty or start with '?')
+			var baseQuery = BuildQuery(baseParams); // e.g. "?kernelCode=...&..."
+			
+			// Normalize into list of key=value fragments (without leading '?')
+			var fragments = new List<string>();
+			if (!string.IsNullOrWhiteSpace(baseQuery))
+			{
+				var trimmed = baseQuery.TrimStart('?');
+				if (!string.IsNullOrEmpty(trimmed))
+					fragments.Add(trimmed);
+			}
+
+			// Append argNames/argValues as repeated query params (paired)
+			if (request.ArgumentNames != null)
+			{
+				// If argument values shorter, use empty string for missing ones
+				int nameCount = request.ArgumentNames.Count();
+				for (int i = 0; i < nameCount; i++)
+				{
+					var name = request.ArgumentNames.ElementAt(i) ?? string.Empty;
+					// defensive: if caller accidentally passed a CSV in a single element, try to split it
+					if (nameCount == 1 && name.Contains(',') && (request.ArgumentValues == null || request.ArgumentValues.Count() == 1 && request.ArgumentValues.FirstOrDefault()?.Contains(',') == true))
+					{
+						// split both names and values if both are CSV
+						var splitNames = name.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
+						var splitVals = (request.ArgumentValues != null ? request.ArgumentValues.FirstOrDefault() ?? string.Empty : string.Empty)
+							.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
+
+						int n = Math.Max(splitNames.Length, splitVals.Length);
+						for (int j = 0; j < n; j++)
+						{
+							var nm = j < splitNames.Length ? splitNames[j] : string.Empty;
+							var val = j < splitVals.Length ? splitVals[j] : string.Empty;
+							fragments.Add($"argNames={Uri.EscapeDataString(nm)}");
+							fragments.Add($"argValues={Uri.EscapeDataString(val)}");
+						}
+						// done with CSV special-case
+						break;
+					}
+					else
+					{
+						var val = request.ArgumentValues?.ElementAtOrDefault(i) ?? string.Empty;
+						fragments.Add($"argNames={Uri.EscapeDataString(name)}");
+						fragments.Add($"argValues={Uri.EscapeDataString(val)}");
+					}
+				}
+			}
+			else if (request.ArgumentValues != null)
+			{
+				// No names but values exist -> still send values with empty names (edge-case)
+				foreach (var v in request.ArgumentValues)
+				{
+					fragments.Add($"argNames=");
+					fragments.Add($"argValues={Uri.EscapeDataString(v ?? string.Empty)}");
+				}
+			}
+
+			// Rebuild final query string
+			var query = fragments.Count > 0 ? "?" + string.Join("&", fragments) : string.Empty;
 
 			var jsonBody = "\"" + (request.InputDataBase64 ?? "").Replace("\"", "\\\"") + "\"";
 			var jsonContent = new StringContent(jsonBody, Encoding.UTF8, "application/json");
@@ -366,10 +491,17 @@ namespace OOCL.Image.Api.Controllers
 
 		private static string NormalizeWorkerBase(string raw)
 		{
-			if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+			if (string.IsNullOrWhiteSpace(raw))
+			{
+				return string.Empty;
+			}
+
 			var baseUrl = raw.Trim().TrimEnd('/');
 			while (baseUrl.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+			{
 				baseUrl = baseUrl[..^4].TrimEnd('/');
+			}
+
 			return baseUrl;
 		}
 
@@ -457,12 +589,24 @@ namespace OOCL.Image.Api.Controllers
 					return null;
 				}
 
-				// Try get status.Index >= 0 ? status.DeviceName : null
-				var parts = status.Split(';', 2);
-				if (parts.Length == 2 && int.TryParse(parts[0], out int idx) && idx >= 0)
+				var content = await resp.Content.ReadAsStringAsync();
+				if (string.IsNullOrWhiteSpace(content))
 				{
-					return parts[1];
+					return null;
 				}
+
+				// Try JSON parse
+				try
+				{
+					using var doc = JsonDocument.Parse(content);
+					var root = doc.RootElement;
+					if (root.TryGetProperty("Initialized", out var pInit) && pInit.GetBoolean()
+						&& root.TryGetProperty("DeviceName", out var pName) && pName.ValueKind == JsonValueKind.String)
+					{
+						return pName.GetString();
+					}
+				}
+				catch (JsonException) { /* invalid json — already tried legacy format */ }
 
 				return null;
 			}
