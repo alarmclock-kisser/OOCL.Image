@@ -2,6 +2,7 @@
 using OOCL.Image.Core;
 using OOCL.Image.OpenCl;
 using OOCL.Image.Shared;
+using System.Diagnostics;
 
 namespace OOCL.Image.Api.Controllers
 {
@@ -443,7 +444,7 @@ namespace OOCL.Image.Api.Controllers
 				args["chan"] = audio.Channels.ToString();
 				args["bit"] = audio.BitDepth.ToString();
 				args["length"] = audio.Data.LongLength.ToString();
-				
+
 				var result = await this.openClService.ExecuteAudioKernel(audio, request.KernelName, "", request.ChunkSize, request.Overlap, args);
 				if (result == null)
 				{
@@ -500,8 +501,8 @@ namespace OOCL.Image.Api.Controllers
 			}
 
 			// Make ChunkSize a power of two
-			int power = (int)Math.Round(Math.Log2(chunkSize));
-			chunkSize = (int)Math.Pow(2, power);
+			int power = (int) Math.Round(Math.Log2(chunkSize));
+			chunkSize = (int) Math.Pow(2, power);
 			chunkSize = Math.Clamp(chunkSize, 128, 65536);
 
 			try
@@ -524,7 +525,7 @@ namespace OOCL.Image.Api.Controllers
 				if (result == null || result.Data.LongLength <= 0)
 				{
 					await this.logger.LogAsync("[500] api/opencl/timestretch-audio-file: OpenCL returned null or empty audio", nameof(OpenClController));
-					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed", Detail = result?.ErrorMessage  ?? "No result object returned." });
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed", Detail = result?.ErrorMessage ?? "No result object returned." });
 				}
 
 				if (format == "mp3")
@@ -633,6 +634,84 @@ namespace OOCL.Image.Api.Controllers
 				var infos = await Task.Run(() => results.Select(r => new AudioObjInfo(r)));
 
 				return this.Ok(infos);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
+				return this.StatusCode(500, new ProblemDetails
+				{
+					Status = 500,
+					Title = "Internal Server Error",
+					Detail = ex.Message
+				});
+			}
+		}
+
+		[HttpGet("run-benchmark")]
+		[ProducesResponseType(typeof(KernelBenchmarkResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<KernelBenchmarkResult>> RunKernelBenchmarkAsync([FromQuery] string? kernelName = "benchmark00", [FromQuery] int iterations = 4096, [FromQuery] int opsPerIter = 4096, [FromQuery] string? deviceName = null)
+		{
+			try
+			{
+				if (!this.openClService.Initialized)
+				{
+					if (!string.IsNullOrWhiteSpace(deviceName))
+					{
+						await Task.Run(() => this.openClService.Initialize(deviceName));
+						await this.logger.LogAsync($"[200] api/opencl/run-benchmark: Forced OpenCL initialization with device name '{deviceName}'", nameof(OpenClController));
+						if (!this.openClService.Initialized)
+						{
+							await this.logger.LogAsync("[400] api/opencl/run-benchmark: OpenCL Not Initialized after forced initialization", nameof(OpenClController));
+							return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized after forced initialization" });
+						}
+					}
+				}
+				if (!this.openClService.Initialized)
+				{
+					await this.logger.LogAsync("[400] api/opencl/run-benchmark: OpenCL Not Initialized", nameof(OpenClController));
+					return this.BadRequest(new ProblemDetails { Status = 400, Title = "OpenCL Not Initialized" });
+				}
+				if (string.IsNullOrWhiteSpace(kernelName))
+				{
+					kernelName = "benchmark00";
+				}
+				
+				string? kernelFile = this.openClService.Compiler?.KernelFiles.FirstOrDefault(kf => string.Equals(kf, kernelName, StringComparison.OrdinalIgnoreCase));
+				if (string.IsNullOrWhiteSpace(kernelFile))
+				{
+					await this.logger.LogAsync($"[404] api/opencl/run-benchmark: Kernel '{kernelName}' not found", nameof(OpenClController));
+					return this.NotFound(new ProblemDetails { Status = 404, Title = $"Kernel '{kernelName}' not found" });
+				}
+
+				Stopwatch sw = Stopwatch.StartNew();
+
+				double? result = await this.openClService.RunBenchmark(kernelName, iterations, opsPerIter);
+				if (!result.HasValue || result.Value <= 0)
+				{
+					await this.logger.LogAsync("[500] api/opencl/run-benchmark: Benchmark execution failed", nameof(OpenClController));
+					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Benchmark execution failed" });
+				}
+
+				sw.Stop();
+
+				var dto = new KernelBenchmarkResult
+				{
+					KernelName = kernelName,
+					DeviceName = this.openClService.GetDeviceEntries().ElementAt(this.openClService.Index),
+					Score = result.Value,
+					IterationsArg = iterations,
+					OperationsPerIterationArg = opsPerIter,
+					RawScore = null,
+					Unit = "GFLOP/s",
+					ExecutionTimeMs = sw.Elapsed.TotalMilliseconds,
+					ErrorMessage = null
+				};
+
+				await this.logger.LogAsync($"[200] api/opencl/run-benchmark: Benchmark completed for kernel '{kernelName}' on device '{dto.DeviceName}' with score {dto.Score} {dto.Unit}", nameof(OpenClController));
+				return this.Ok(dto);
 			}
 			catch (Exception ex)
 			{

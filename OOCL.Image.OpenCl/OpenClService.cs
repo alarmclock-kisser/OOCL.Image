@@ -1105,5 +1105,51 @@ namespace OOCL.Image.OpenCl
 			};
 		}
 
+		public async Task<double?> RunBenchmark(string kernelName = "benchmark00", int iterations = 256, int opsPerIter = 256)
+		{
+			if (this.Executioner == null || this.Compiler == null || this.Register == null)
+			{
+				Console.WriteLine("CL-SER | RunBenchmark #001: OpenCL-Services not initialized.");
+				return null;
+			}
+			
+			// Check if kernel exists
+			if (string.IsNullOrEmpty(this.KernelExists(kernelName)))
+			{
+				Console.WriteLine($"CL-SER | RunBenchmark #002: Kernel '{kernelName}' does not exist.");
+				return null;
+			}
+
+			Stopwatch sw = Stopwatch.StartNew();
+
+			// Exec call
+			var result = await this.ExecuteGenericDataKernelAsync(
+				kernelName: kernelName,
+				kernelCode: null,
+				argTypes: new string[] { "int", "int" },
+				argNames: new string[] { "iterations", "opsPerIter" },
+				argValues: new string[] { iterations.ToString(), opsPerIter.ToString() },
+				workDimensions: 1,
+				inputDataBase64: null,
+				inputDataType: null,
+				outputDataType: "double",
+				outputDataLength: "1",
+				openClDeviceIndex: this.Index,
+				openClDeviceName: null
+				);
+
+			sw.Stop();
+
+			if (result == null || result.Length == 0 || result[0] is not double[] arr || arr.Length == 0)
+			{
+				Console.WriteLine($"CL-SER | RunBenchmark #003: Kernel '{kernelName}' execution failed or returned no data.");
+				return null;
+			}
+
+			double score = arr.FirstOrDefault();
+			score = score / sw.Elapsed.TotalSeconds / 1_000_000_000.0d; // GOPS
+
+			return score;
+		}
 	}
 }

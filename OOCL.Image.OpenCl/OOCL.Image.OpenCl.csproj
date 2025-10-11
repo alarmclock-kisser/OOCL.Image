@@ -25,6 +25,9 @@
     <None Update="Kernels\Audio\timestretch_double03.cl">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Kernels\Generic\benchmark00.cl">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Kernels\Image\edgeDetection00.cl">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
