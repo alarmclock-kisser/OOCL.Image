@@ -250,6 +250,47 @@ namespace OOCL.Image.Api.Controllers
 			return this.Ok(forwardResp.Result);
 		}
 
+		[HttpPost("request-cuda-execute-batch-base64")]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<KernelExecuteResult>> RequestCudaExecuteBatchBase64Async([FromBody] KernelExecuteRequest request, [FromQuery] string? preferredClientApiUrl = null)
+		{
+			var worker = await this.ResolveOrRegisterWorker(preferredClientApiUrl);
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
+
+			if (string.IsNullOrWhiteSpace(request?.KernelCode))
+			{
+				return this.BadRequest(this.Problem("Invalid request", "Missing Kernel source code", 400));
+			}
+
+			var sw = Stopwatch.StartNew();
+			var forwardResp = await this.ForwardKernelExecuteBase64Async(worker, request);
+			sw.Stop();
+
+			if (forwardResp == null)
+			{
+				return this.StatusCode(500, this.Problem("Internal error", "Forwarding returned null", 500));
+			}
+
+			if (!forwardResp.Success)
+			{
+				return this.StatusCode(forwardResp.StatusCode, forwardResp.Problem!);
+			}
+
+			if (forwardResp.Result != null)
+			{
+				forwardResp.Result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
+			}
+
+			return this.Ok(forwardResp.Result);
+		}
+
+
 		// ---------- Test Endpoint (Generates Random Data & Calls Worker) ----------
 
 		[HttpGet("test-cuda-execute-single-base64")]
@@ -320,6 +361,85 @@ namespace OOCL.Image.Api.Controllers
 
 			return this.Ok(forward.Result);
 		}
+
+		[HttpGet("test-cuda-execute-batch-base64")]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<KernelExecuteResult>> TestCudaExecuteBatchBase64Async([FromQuery] int? arraySize = 1024, [FromQuery] int? arrayStride = 2, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
+		{
+			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
+
+			int len = arraySize ?? 1024;
+			int stride = arrayStride ?? 2;
+			var rnd = new Random();
+			var floats = new float[len * stride];
+			for (int i = 0; i < len * stride; i++)
+			{
+				floats[i] = (float)(rnd.NextDouble() * 199.998 - 99.999);
+			}
+
+			string[] inputBase64Chunks = new string[stride];
+			for (int s = 0; s < stride; s++)
+			{
+				var chunk = new float[len];
+				for (int i = 0; i < len; i++)
+				{
+					chunk[i] = floats[i * stride + s];
+				}
+				inputBase64Chunks[s] = Convert.ToBase64String(chunk.SelectMany(BitConverter.GetBytes).ToArray());
+			}
+
+			string kernelCode = @"
+					extern ""C"" __global__ void to_int_round_or_cut_chunks_f(
+						const float* __restrict__ input,
+						int* __restrict__ output,
+						int cutoffMode,
+						int length)
+					{
+						int gid = blockIdx.x * blockDim.x + threadIdx.x;
+						if (gid >= length) return;
+						float v = input[gid];
+						int result;
+						if (cutoffMode != 0) {
+							result = (int)(v);
+						} else {
+							result = (v >= 0.0f)
+								? (int)floorf(v + 0.5f)
+								: (int)ceilf(v - 0.5f);
+						}
+						output[gid] = result;
+					}";
+			var req = new KernelExecuteRequest
+			{
+				DeviceName = specificCudaDevice ?? "",
+				KernelCode = kernelCode,
+				KernelName = "to_int_round_or_cut_chunks_f",
+				InputDataBase64 = null,
+				InputDataBase64Chunks = inputBase64Chunks,
+				InputDataType = "float",
+				OutputDataType = "int",
+				OutputDataLength = len.ToString(),
+				WorkDimension = stride,
+				ArgumentNames = ["input", "output", "cutoffMode", "length"],
+				ArgumentValues = ["0", "0", " 0", len.ToString()],
+				ArgumentTypes = ["float*", "int*", "int", "int"]
+			};
+
+			var forward = await this.ForwardKernelExecuteBase64Async(worker, req);
+			if (!forward.Success)
+			{
+				return this.StatusCode(forward.StatusCode, forward.Problem!);
+			}
+
+			return this.Ok(forward.Result);
+		}
+
 
 		// ---------- Core Forward Logic ----------
 

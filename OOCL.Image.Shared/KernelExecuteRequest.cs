@@ -21,7 +21,9 @@ namespace OOCL.Image.Shared
 		public int WorkDimension { get; set; } = 1;
 
 		public string? InputDataBase64 { get; set; } = null;
+		public IEnumerable<string> InputDataBase64Chunks { get; set; } = [];
 		public string? InputDataType { get; set; } = null;
+		public int InputDataStride { get; set; } = 1;
 
 		public string OutputDataType { get; set; } = "byte";
 		public string OutputDataLength { get; set; } = "0";

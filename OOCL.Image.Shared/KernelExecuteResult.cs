@@ -14,6 +14,7 @@ namespace OOCL.Image.Shared
 
 		public string? OutputPointer { get; set; } = null;
 		public string? OutputDataBase64 { get; set; } = null;
+		public IEnumerable<string> OutputDataBase64Chunks { get; set; } = [];
 		public string? OutputDataType { get; set; } = null;
 		public string OutputDataLength { get; set; } = "0";
 
