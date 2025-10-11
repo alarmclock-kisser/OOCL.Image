@@ -443,10 +443,6 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 		[HttpGet("test-cuda-execute-single-dto")]
-		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
-		[ProducesResponseType(typeof(ProblemDetails), 400)]
-		[ProducesResponseType(typeof(ProblemDetails), 404)]
-		[ProducesResponseType(typeof(ProblemDetails), 500)]
 		public async Task<ActionResult<KernelExecuteResult>> TestCudaExecuteSingleDtoAsync([FromQuery] int? arraySize = 1024, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
 		{
 			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
@@ -467,41 +463,22 @@ namespace OOCL.Image.Api.Controllers
 			var dto = new KernelExecuteRequest
 			{
 				DeviceName = specificCudaDevice ?? "",
-				KernelCode = @"
-					extern ""C"" __global__ void to_int_round_or_cut_f(
-						const float* __restrict__ input,
-						int* __restrict__ output,
-						int cutoffMode,
-						int length)
-					{
-						int gid = blockIdx.x * blockDim.x + threadIdx.x;
-						if (gid >= length) return;
-						float v = input[gid];
-						int result;
-						if (cutoffMode != 0) {
-							result = (int)(v);
-						} else {
-							result = (v >= 0.0f)
-								? (int)floorf(v + 0.5f)
-								: (int)ceilf(v - 0.5f);
-						}
-						output[gid] = result;
-					}",
+				KernelCode = @" ... ",
 				KernelName = "to_int_round_or_cut_f",
 				InputDataBase64 = inputBase64,
 				InputDataType = "float",
 				OutputDataType = "int",
 				OutputDataLength = len.ToString(),
 				WorkDimension = 1,
-				ArgumentNames = ["input", "output", "cutoffMode", "length"],
-				ArgumentValues = ["0", "0", "0", len.ToString()],
-				ArgumentTypes = ["float*", "int*", "int", "int"]
+				ArgumentNames = new[] { "input", "output", "cutoffMode", "length" },
+				ArgumentValues = new[] { "0", "0", "0", len.ToString() },
+				ArgumentTypes = new[] { "float*", "int*", "int", "int" }
 			};
 
 			var sw = Stopwatch.StartNew();
 			using var httpClient = this.CreateInsecureHttpClient();
 			Console.WriteLine($"{worker}/api/ExternalCuda/request-cuda-execute-single");
-			var resp = await httpClient.PostAsJsonAsync($"{worker}/api/ExternalCuda/request-cuda-execute-single", dto);
+			var resp = await httpClient.PostAsJsonAsync($"{worker}/api/api/ExternalCuda/request-cuda-execute-single", dto);
 			sw.Stop();
 
 			if (!resp.IsSuccessStatusCode)
@@ -586,7 +563,7 @@ namespace OOCL.Image.Api.Controllers
 
 			var sw = Stopwatch.StartNew();
 			using var httpClient = this.CreateInsecureHttpClient();
-			Console.WriteLine($"{worker}/api/ExternalCuda/request-cuda-execute-batch");
+			Console.WriteLine($"{worker}/api/api/ExternalCuda/request-cuda-execute-batch");
 			var resp = await httpClient.PostAsJsonAsync($"{worker}/api/ExternalCuda/request-cuda-execute-batch", dto);
 			sw.Stop();
 			if (!resp.IsSuccessStatusCode)
@@ -613,16 +590,21 @@ namespace OOCL.Image.Api.Controllers
 		{
 			var normalized = NormalizeWorkerBase(workerBase);
 
+			// Korrigierte URL-Auswahl + Body-Bau + Logging vor dem Senden
 			IEnumerable<string> urls = [];
-			if (request.InputDataBase64Chunks?.Count() > 0)
+			if (request.InputDataBase64Chunks != null && request.InputDataBase64Chunks.Any())
 			{
-				urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-single-base64",
-				"Cuda/request-generic-execution-single-base64");
+				// Wenn CHUNKS vorhanden → batch endpoints (Array im Body)
+				urls = BuildCandidateUrls(normalized,
+					"api/Cuda/request-generic-execution-batch-base64",
+					"Cuda/request-generic-execution-batch-base64");
 			}
 			else
 			{
-				urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-batch-base64",
-					"Cuda/request-generic-execution-batch-base64");
+				// KEINE chunks → single endpoints (ein JSON-String im Body)
+				urls = BuildCandidateUrls(normalized,
+					"api/Cuda/request-generic-execution-single-base64",
+					"Cuda/request-generic-execution-single-base64");
 			}
 
 			// Basis-Query-Parameter (ohne argNames/argValues)
@@ -697,7 +679,7 @@ namespace OOCL.Image.Api.Controllers
 			// Rebuild final query string
 			var query = fragments.Count > 0 ? "?" + string.Join("&", fragments) : string.Empty;
 
-			// Build JSON body: if chunks are provided send JSON array, otherwise send single JSON string
+			// JSON-Body: Array wenn chunks, sonst einzelner JSON-String
 			string jsonBody;
 			if (request.InputDataBase64Chunks != null && request.InputDataBase64Chunks.Any())
 			{
@@ -713,18 +695,20 @@ namespace OOCL.Image.Api.Controllers
 			}
 			else
 			{
-				// single base64 string as JSON string
 				jsonBody = JsonSerializer.Serialize(request.InputDataBase64 ?? string.Empty);
 			}
 
+			// Log Preview (gekürzt) + Ziele für Diagnose
+			await this.logger.LogAsync($"Forwarding to candidates: {string.Join(',', urls)} | Query: {query} | BodyPreview: {(jsonBody.Length > 2000 ? jsonBody.Substring(0,2000) + "..." : jsonBody)}", nameof(ExternalCudaController));
+
 			var jsonContent = new StringContent(jsonBody, Encoding.UTF8, "application/json");
 
+			// Sende an Kandidaten
 			using var http = this.CreateInsecureHttpClient();
 			foreach (var baseUrl in urls)
 			{
 				var finalUrl = baseUrl + query;
-				await this.logger.LogAsync($"Forwarding execution to {finalUrl}", nameof(ExternalCudaController));
-
+				await this.logger.LogAsync($"POST -> {finalUrl}", nameof(ExternalCudaController));
 				HttpResponseMessage resp;
 				try
 				{
