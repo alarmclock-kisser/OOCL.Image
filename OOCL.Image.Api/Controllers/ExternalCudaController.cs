@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using static System.Net.WebRequestMethods;
 
 namespace OOCL.Image.Api.Controllers
 {
@@ -441,6 +442,168 @@ namespace OOCL.Image.Api.Controllers
 			return this.Ok(forward.Result);
 		}
 
+		[HttpGet("test-cuda-execute-single-dto")]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<KernelExecuteResult>> TestCudaExecuteSingleDtoAsync([FromQuery] int? arraySize = 1024, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
+		{
+			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
+
+			int len = arraySize ?? 1024;
+			var rnd = new Random();
+			var floats = new float[len];
+			for (int i = 0; i < len; i++)
+			{
+				floats[i] = (float)(rnd.NextDouble() * 199.998 - 99.999);
+			}
+
+			string inputBase64 = Convert.ToBase64String(floats.SelectMany(BitConverter.GetBytes).ToArray());
+			var dto = new KernelExecuteRequest
+			{
+				DeviceName = specificCudaDevice ?? "",
+				KernelCode = @"
+					extern ""C"" __global__ void to_int_round_or_cut_f(
+						const float* __restrict__ input,
+						int* __restrict__ output,
+						int cutoffMode,
+						int length)
+					{
+						int gid = blockIdx.x * blockDim.x + threadIdx.x;
+						if (gid >= length) return;
+						float v = input[gid];
+						int result;
+						if (cutoffMode != 0) {
+							result = (int)(v);
+						} else {
+							result = (v >= 0.0f)
+								? (int)floorf(v + 0.5f)
+								: (int)ceilf(v - 0.5f);
+						}
+						output[gid] = result;
+					}",
+				KernelName = "to_int_round_or_cut_f",
+				InputDataBase64 = inputBase64,
+				InputDataType = "float",
+				OutputDataType = "int",
+				OutputDataLength = len.ToString(),
+				WorkDimension = 1,
+				ArgumentNames = ["input", "output", "cutoffMode", "length"],
+				ArgumentValues = ["0", "0", "0", len.ToString()],
+				ArgumentTypes = ["float*", "int*", "int", "int"]
+			};
+
+			var sw = Stopwatch.StartNew();
+			using var httpClient = this.CreateInsecureHttpClient();
+			Console.WriteLine($"{worker}/api/ExternalCuda/request-cuda-execute-single");
+			var resp = await httpClient.PostAsJsonAsync($"{worker}/api/ExternalCuda/request-cuda-execute-single", dto);
+			sw.Stop();
+
+			if (!resp.IsSuccessStatusCode)
+			{
+				var body = await resp.Content.ReadAsStringAsync();
+				return this.StatusCode((int) resp.StatusCode, this.Problem("Error from forwarding", body, (int) resp.StatusCode));
+			}
+
+			var result = await resp.Content.ReadFromJsonAsync<KernelExecuteResult>();
+			if (result != null)
+			{
+				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
+			}
+
+			return this.Ok(result);
+		}
+
+		[HttpGet("test-cuda-execute-batch-dto")]
+		[ProducesResponseType(typeof(KernelExecuteResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<KernelExecuteResult>> TestCudaExecuteBatchDtoAsync([FromQuery] int? arraySize = 1024, [FromQuery] int? arrayStride = 2, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
+		{
+			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
+			int len = arraySize ?? 1024;
+			int stride = arrayStride ?? 2;
+			var rnd = new Random();
+			var floats = new float[len * stride];
+			for (int i = 0; i < len * stride; i++)
+			{
+				floats[i] = (float)(rnd.NextDouble() * 199.998 - 99.999);
+			}
+			string[] inputBase64Chunks = new string[stride];
+			for (int s = 0; s < stride; s++)
+			{
+				var chunk = new float[len];
+				for (int i = 0; i < len; i++)
+				{
+					chunk[i] = floats[i * stride + s];
+				}
+				inputBase64Chunks[s] = Convert.ToBase64String(chunk.SelectMany(BitConverter.GetBytes).ToArray());
+			}
+			var dto = new KernelExecuteRequest
+			{
+				DeviceName = specificCudaDevice ?? "",
+				KernelCode = @"
+					extern ""C"" __global__ void to_int_round_or_cut_chunks_f(
+						const float* __restrict__ input,
+						int* __restrict__ output,
+						int cutoffMode,
+						int length)
+					{
+						int gid = blockIdx.x * blockDim.x + threadIdx.x;
+						if (gid >= length) return;
+						float v = input[gid];
+						int result;
+						if (cutoffMode != 0) {
+							result = (int)(v);
+						} else {
+							result = (v >= 0.0f)
+								? (int)floorf(v + 0.5f)
+								: (int)ceilf(v - 0.5f);
+						}
+						output[gid] = result;
+					}",
+				KernelName = "to_int_round_or_cut_chunks_f",
+				InputDataBase64 = null,
+				InputDataBase64Chunks = inputBase64Chunks,
+				InputDataType = "float",
+				OutputDataType = "int",
+				OutputDataLength = len.ToString(),
+				WorkDimension = 1,
+				ArgumentNames = ["input", "output", "cutoffMode", "length"],
+				ArgumentValues = ["0", "0", "0", len.ToString()],
+				ArgumentTypes = ["float*", "int*", "int", "int"]
+				};
+
+			var sw = Stopwatch.StartNew();
+			using var httpClient = this.CreateInsecureHttpClient();
+			Console.WriteLine($"{worker}/api/ExternalCuda/request-cuda-execute-batch");
+			var resp = await httpClient.PostAsJsonAsync($"{worker}/api/ExternalCuda/request-cuda-execute-batch", dto);
+			sw.Stop();
+			if (!resp.IsSuccessStatusCode)
+			{
+				var body = await resp.Content.ReadAsStringAsync();
+				return this.StatusCode((int)resp.StatusCode, this.Problem("Error from forwarding", body, (int)resp.StatusCode));
+			}
+
+			var result = await resp.Content.ReadFromJsonAsync<KernelExecuteResult>();
+			if (result != null)
+			{
+				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
+			}
+
+			return this.Ok(result);
+		}
+
 
 		// ---------- Core Forward Logic ----------
 
@@ -476,7 +639,7 @@ namespace OOCL.Image.Api.Controllers
 
 			// Build base query (may be empty or start with '?')
 			var baseQuery = BuildQuery(baseParams); // e.g. "?kernelCode=...&..."
-			
+
 			// Normalize into list of key=value fragments (without leading '?')
 			var fragments = new List<string>();
 			if (!string.IsNullOrWhiteSpace(baseQuery))
