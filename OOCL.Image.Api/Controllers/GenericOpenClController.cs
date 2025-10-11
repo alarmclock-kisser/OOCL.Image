@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using alarmclockkisser.KernelDtos;
+using Microsoft.AspNetCore.Mvc;
 using OOCL.Image.OpenCl;
 using OOCL.Image.Shared;
 using System.Diagnostics;

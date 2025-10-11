@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Components.Forms;
+﻿using alarmclockkisser.KernelDtos;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Mvc;
 using OOCL.Image.Core;
 using OOCL.Image.Shared;
@@ -425,7 +426,7 @@ namespace OOCL.Image.Api.Controllers
 				InputDataType = "float",
 				OutputDataType = "int",
 				OutputDataLength = len.ToString(),
-				WorkDimension = stride,
+				WorkDimension = 1,
 				ArgumentNames = ["input", "output", "cutoffMode", "length"],
 				ArgumentValues = ["0", "0", " 0", len.ToString()],
 				ArgumentTypes = ["float*", "int*", "int", "int"]
@@ -450,7 +451,7 @@ namespace OOCL.Image.Api.Controllers
 			var normalized = NormalizeWorkerBase(workerBase);
 
 			IEnumerable<string> urls = [];
-			if (request.InputDataBase64Chunks.Any())
+			if (request.InputDataBase64Chunks?.Count() > 0)
 			{
 				urls = BuildCandidateUrls(normalized, "api/Cuda/request-generic-execution-single-base64",
 				"Cuda/request-generic-execution-single-base64");

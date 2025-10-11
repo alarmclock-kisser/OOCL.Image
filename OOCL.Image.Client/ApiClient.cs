@@ -433,7 +433,7 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"Called GetOpenClServiceInfoAsync()", nameof(ApiClient));
 			try
 			{
-				return await this.internalClient.StatusAsync();
+				return await this.internalClient.Status2Async();
 			}
 			catch (Exception ex)
 			{
