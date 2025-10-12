@@ -109,30 +109,30 @@ namespace OOCL.Image.WebApp.Pages
 
 		public void SetFftSize(decimal value)
 		{
-			const int MinChunk = 128;
-			const int MaxChunk = 65536;
+			const int MinFftSize = 32;
+			const int MaxFftSize = 256 * 1024 * 1024; // 256k
 
 			int intValue = (int) value;
-			if (intValue < MinChunk)
+			if (intValue < MinFftSize)
 			{
-				intValue = MinChunk;
+				intValue = MinFftSize;
 			}
 
-			if (intValue > MaxChunk)
+			if (intValue > MaxFftSize)
 			{
-				intValue = MaxChunk;
+				intValue = MaxFftSize;
 			}
 
 			// Aktuellen ChunkSize in gültigen Bereich bringen
 			int current = this.FftSize;
-			if (current < MinChunk)
+			if (current < MinFftSize)
 			{
-				current = MinChunk;
+				current = MinFftSize;
 			}
 
-			if (current > MaxChunk)
+			if (current > MaxFftSize)
 			{
-				current = MaxChunk;
+				current = MaxFftSize;
 			}
 
 			// Sicherstellen, dass current eine Zweierpotenz ist (ansonsten auf nächstkleinere potenz setzen)
@@ -145,9 +145,9 @@ namespace OOCL.Image.WebApp.Pages
 			if (intValue > current)
 			{
 				long next = (long) current * 2;
-				if (next > MaxChunk)
+				if (next > MaxFftSize)
 				{
-					next = MaxChunk;
+					next = MaxFftSize;
 				}
 
 				this.FftSize = (int) next;
@@ -158,9 +158,9 @@ namespace OOCL.Image.WebApp.Pages
 			if (intValue < current)
 			{
 				int prev = current / 2;
-				if (prev < MinChunk)
+				if (prev < MinFftSize)
 				{
-					prev = MinChunk;
+					prev = MinFftSize;
 				}
 
 				this.FftSize = prev;

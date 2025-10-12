@@ -54,7 +54,13 @@ else
                 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                     <div>
                         <label>FFT Size (32 - 256M)</label>
-                        <RadzenNumeric TValue="int" @bind-Value="VM.FftSize" Change="@( (int v) => { VM.SetFftSize(v); StateHasChanged(); } )" Min="32" Max="65536" Style="width:160px;" />
+                        <RadzenNumeric TValue="int"
+                                       Value="VM.FftSize"
+                                       Change="@( (int v) => OnFftSizeChanged(v) )"
+                                       Min="32"
+                                       Max="65536"
+                                       Step="1"
+                                       Style="width:120px;" />
                     </div>
 
                     <div>
@@ -133,6 +139,13 @@ else
         VM = new CudaViewModel(Api, Config, Notifications, JS, DialogService);
 
         await VM.InitializeAsync();
+    }
+
+    private void OnFftSizeChanged(int value)
+    {
+        // VM.ToggleChunkSize expects a numeric value; it snaps to nearest power of two
+        VM.SetFftSize(value);
+        StateHasChanged();
     }
 
 
