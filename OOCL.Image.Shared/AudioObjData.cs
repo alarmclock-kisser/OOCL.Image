@@ -32,6 +32,7 @@ namespace OOCL.Image.Shared
 			this.Overlap = obj.OverlapSize / (obj.ChunkSize > 0 ? obj.ChunkSize : 1);
 			this.Samples = obj.GetBytes();
 			this.SizeInMb = obj.SizeInMb;
+			this.Length = this.Chunks.Any() ? $"[{this.Chunks.Count()}][{this.Chunks.FirstOrDefault()?.LongLength}]" : $"{this.Samples.LongLength}";
 		}
 
 
