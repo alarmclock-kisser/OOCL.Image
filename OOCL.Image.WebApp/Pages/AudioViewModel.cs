@@ -26,8 +26,12 @@ namespace OOCL.Image.WebApp.Pages
         private readonly IJSRuntime js;
         private readonly DialogService dialogs;
 
-        // Collections
-        public List<AudioEntry> AudioEntries { get; private set; } = [];
+		public string StatusSummary => this.openClServiceInfo?.Initialized == true
+			? $"{this.openClServiceInfo.DeviceName} [{this.openClServiceInfo.DeviceId}]"
+			: "Device not initialized";
+
+		// Collections
+		public List<AudioEntry> AudioEntries { get; private set; } = [];
         public List<AudioObjDto> ClientAudioCollection { get; private set; } = [];
         public string DataLocation => this.isServerSidedData.HasValue && this.isServerSidedData.Value == true ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
         public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Data.SizeInMb).Sum().ToString("F2") + " MB";
