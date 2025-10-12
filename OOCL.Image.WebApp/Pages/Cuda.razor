@@ -106,11 +106,10 @@ else
                                 }
                             </div>
                         </div>
-                    </div>
-
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <button class="rz-button rz-primary" @onclick="@(async () => { await VM.RunCufftTestAsync(); StateHasChanged(); })">Run</button>
-                        <div style="margin-left:12px;">ExecutionTime: @VM.ExecutionTimeMs ms</div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button class="rz-button rz-primary" @onclick="@(async () => { await VM.RunCufftTestAsync(); StateHasChanged(); })">Run</button>
+                            <div style="margin-left:12px;">ExecutionTime: @VM.ExecutionTimeMs ms</div>
+                        </div>
                     </div>
                 </div>
                 <div style="min-width:360px;">
