@@ -22,7 +22,7 @@
 <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
     <h3>Audio</h3>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
-        <RadzenButton Icon="add" Text="Add sample" Click="@AddSample" />
+        <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
         <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
         <span style="margin-left:auto;font-size:.9rem;color:gray;">@VM.AudioEntries.Count audio objects</span>
     </div>
@@ -97,13 +97,7 @@
         }
     }
 
-    private async Task AddSample()
-    {
-        VM.AddSampleAudio();
-        StateHasChanged();
-
-        await Task.CompletedTask;
-    }
+    private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
 
     private async Task Reload()
     {

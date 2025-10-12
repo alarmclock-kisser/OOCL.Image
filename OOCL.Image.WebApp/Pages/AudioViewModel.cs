@@ -122,10 +122,21 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
-		public void AddSampleAudio()
-        {
-			
-        }
+		public async Task UploadAudioAsync(FileParameter file)
+		{
+			bool isServerSidedData = await this.Api.IsServersidedDataAsync();
+
+			var dto = await this.Api.UploadAudioAsync(file, !isServerSidedData);
+			if (dto != null)
+			{
+				if (isServerSidedData)
+				{
+					this.ClientAudioCollection.Add(dto);
+				}
+			}
+
+			await this.LoadTracks();
+		}
 
         public async Task RemoveAsync(Guid id)
         {
@@ -152,6 +163,8 @@ namespace OOCL.Image.WebApp.Pages
 			{
 				return;
 			}
+
+			await Task.CompletedTask;
 		}
 
         public async Task ProcessAsync(Guid id)
