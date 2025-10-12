@@ -107,32 +107,55 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
-		private static int SnapToPowerOfTwo(int value)
+		private int lastFftSize = 4096;
+
+		public void SetFftSize(int newValue)
 		{
-			const int MinFftSize = 32;
-			const int MaxFftSize = 256 * 1024 * 1024;
+			// aktuelle FFT merken (Initialwert oder letzte Runde)
+			int current = this.FftSize;
 
-			int v = value;
-			if (v < MinFftSize) v = MinFftSize;
-			if (v > MaxFftSize) v = MaxFftSize;
+			// Schritt erkannt?
+			bool increased = newValue > current;
 
-			if (IsPowerOfTwo(v)) return v;
-			return PrevPowerOfTwo(v);
+			// Alle erlaubten Zweierpotenzen (du kannst den Bereich nach oben erweitern)
+			int[] powers =
+			[32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456];
+
+			// aktuelle Position im Array finden
+			int idx = Array.FindIndex(powers, p => p == current);
+			if (idx < 0)
+			{
+				// falls kein exakter Match → nächste passende PowerOfTwo
+				current = PrevPowerOfTwo(newValue);
+				idx = Array.FindIndex(powers, p => p == current);
+				if (idx < 0)
+					idx = 0;
+			}
+
+			if (increased)
+			{
+				// +1 gedrückt → nächstgrößere PowerOfTwo
+				if (idx < powers.Length - 1)
+					this.FftSize = powers[idx + 1];
+			}
+			else
+			{
+				// -1 gedrückt → nächstkleinere PowerOfTwo
+				if (idx > 0)
+					this.FftSize = powers[idx - 1];
+			}
+
+			this.lastFftSize = this.FftSize;
 		}
 
-		private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
 
 		private static int PrevPowerOfTwo(int x)
 		{
 			if (x < 1) return 1;
 			int p = 1;
-			while ((p << 1) <= x) p <<= 1;
+			while ((p << 1) <= x)
+				p <<= 1;
 			return p;
-		}
-
-		public void SetFftSize(int v)
-		{
-			this.FftSize = SnapToPowerOfTwo(v);
 		}
 
 		public async Task RequestFftTestAsync()
@@ -164,7 +187,6 @@ namespace OOCL.Image.WebApp.Pages
 			this.ExecutionTimeMs = 0;
 			this.PreviewText = string.Empty;
 
-			this.FftSize = SnapToPowerOfTwo(this.FftSize);
 			this.BatchSize = Math.Clamp(this.BatchSize, 1, 1024);
 
 			if (this.RequestTestMode)
