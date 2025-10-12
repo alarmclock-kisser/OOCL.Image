@@ -24,7 +24,9 @@
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
         <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
         <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
-        <span style="margin-left:auto;font-size:.9rem;color:gray;">@VM.AudioEntries.Count Tracks loaded @VM.DataLocation</span>
+        <span style="margin-left:auto;font-size:.9rem;color:gray;">
+            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Tracks loaded {VM.DataLocation}")
+        </span>
     </div>
 
     <!-- Neu: Card mit BPM / Stretch Controls (Toggle + 3 Numerics) -->
