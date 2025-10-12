@@ -160,18 +160,18 @@ else
                     {
                         <div style="color:gray;">No selection</div>
                     }
-                    <RadzenDropDown TValue="string"
-                                    Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
-                                    Value="@VM.DownloadAudioType"
-                                    Change="@((args) => OnFormatChanged(args as string))"
-                                    Style="width:100px;"
-                                    Placeholder="Format" />
-                    <RadzenDropDown TValue="int"
-                                    Data="@( GetBitsForSelected() )"
-                                    @bind-Value="VM.DownloadAudioBits"
-                                    Style="width:100px;"
-                                    Placeholder="Bits" />
                 </RadzenCard>
+                <RadzenDropDown TValue="string"
+                                Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
+                                Value="@VM.DownloadAudioType"
+                                Change="@((args) => OnFormatChanged(args as string))"
+                                Style="width:100px;"
+                                Placeholder="Format" />
+                <RadzenDropDown TValue="int"
+                                Data="@( GetBitsForSelected() )"
+                                @bind-Value="VM.DownloadAudioBits"
+                                Style="width:100px;"
+                                Placeholder="Bits" />
             </div>
             <div style="margin-bottom:12px;">
                 <RadzenCard>
