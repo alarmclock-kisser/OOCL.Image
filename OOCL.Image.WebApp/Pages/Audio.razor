@@ -154,33 +154,9 @@
     private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
     private async Task OnInputFileChange(InputFileChangeEventArgs e)
     {
-        var browserFile = e.File;
-        if (browserFile == null)
-        {
-            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "No file selected", Duration = 2000 });
-            return;
-        }
-
-        try
-        {
-            // Optional: Größe prüfen gegen ApiConfig.MaxUploadSizeMb
-            var apiConfig = await Api.GetApiConfigAsync();
-            if (apiConfig?.MaxUploadSizeMb != null && browserFile.Size > (long) apiConfig.MaxUploadSizeMb.Value * 1024 * 1024)
-            {
-                Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "File too large for server", Duration = 3000 });
-                return;
-            }
-
-            // Upload via ApiClient (IBrowserFile overload)
-            await VM.UploadAudioAsync(browserFile);
-
-            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Upload successful", Duration = 2000 });
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Upload error: " + ex.Message, Duration = 3500 });
-        }
+        await VM.OnInputFileChange(e);
+        await VM.ReloadAsync();
+        StateHasChanged();
     }
 
     private async Task Reload()

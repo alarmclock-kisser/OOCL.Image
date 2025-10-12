@@ -122,7 +122,7 @@ namespace OOCL.Image.Client
 				var sc = new StreamContent(stream);
 				sc.Headers.ContentType = new MediaTypeHeaderValue(browserFile.ContentType ?? "application/octet-stream");
 				content.Add(sc, "file", browserFile.Name);
-				var response = await this.httpClient.PostAsync("api/image/load", content);
+				var response = await this.httpClient.PostAsync("api/image/load-image", content);
 				if (!response.IsSuccessStatusCode)
 				{
 					Console.WriteLine(await response.Content.ReadAsStringAsync());
@@ -140,7 +140,7 @@ namespace OOCL.Image.Client
 
 		public async Task<AudioObjDto> UploadAudioAsync(FileParameter file, bool includeData = false)
 		{
-			await this.logger.LogAsync($"Called UploadAudioAsync()", nameof(ApiClient));
+			await this.logger.LogAsync($"Called UploadAudioAsync(FileParameter file: {(file != null)}, bool includeData: {includeData.ToString()})", nameof(ApiClient));
 			if (file == null || file.Data == null || string.IsNullOrWhiteSpace(file.FileName))
 			{
 				return new AudioObjDto();
@@ -158,7 +158,11 @@ namespace OOCL.Image.Client
 
 		public async Task<AudioObjDto> UploadAudioAsync(IBrowserFile browserFile, bool includeData = false)
 		{
-			await this.logger.LogAsync($"Called UploadAudioAsync()", nameof(ApiClient));
+			await this.logger.LogAsync($"Called UploadAudioAsync(IBrowserFile browserFile: {(browserFile != null)}, bool includeData: {includeData.ToString()})", nameof(ApiClient));
+			if (browserFile == null)
+			{
+				return new AudioObjDto();
+			}
 			try
 			{
 				using var content = new MultipartFormDataContent();
@@ -166,7 +170,7 @@ namespace OOCL.Image.Client
 				var sc = new StreamContent(stream);
 				sc.Headers.ContentType = new MediaTypeHeaderValue(browserFile.ContentType ?? "application/octet-stream");
 				content.Add(sc, "file", browserFile.Name);
-				var response = await this.httpClient.PostAsync("api/audio/load?includeData=" + (includeData ? "true" : "false"), content);
+				var response = await this.httpClient.PostAsync("api/audio/load-audio?includeData=" + (includeData ? "true" : "false"), content);
 				if (!response.IsSuccessStatusCode)
 				{
 					Console.WriteLine(await response.Content.ReadAsStringAsync());

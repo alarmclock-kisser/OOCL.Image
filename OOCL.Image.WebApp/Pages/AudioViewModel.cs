@@ -161,32 +161,31 @@ namespace OOCL.Image.WebApp.Pages
             await this.ReloadAsync();
 		}
 
-        public async Task UploadAudioAsync(IBrowserFile browserFile)
-        {
-            bool serverSidedData = await this.api.IsServersidedDataAsync();
+		public async Task OnInputFileChange(InputFileChangeEventArgs e)
+		{
+			var file = e.File;
+			var apiConfig = await api.GetApiConfigAsync();
+			using var stream = file.OpenReadStream((long) (apiConfig.MaxUploadSizeMb ?? 32) * 1024 * 1024);
+			using var ms = new MemoryStream();
+			await stream.CopyToAsync(ms);
+			var bytes = ms.ToArray();
+			var fileParameter = new FileParameter(new MemoryStream(bytes), file.Name, file.ContentType);
 
-			try
+            bool isServerSidedData = await this.api.IsServersidedDataAsync();
+
+			var dto = await this.api.UploadAudioAsync(fileParameter, !isServerSidedData);
+
+            if (dto != null && dto.Info != null)
             {
-                var dto = await this.api.UploadAudioAsync(browserFile, !serverSidedData);
-                if (dto != null && dto.Info != null)
+                if (!isServerSidedData)
                 {
-					if (!serverSidedData)
-                    {
-						this.ClientAudioCollection.Add(dto);
-					}
-                    
-                    this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds));
-				}
-            }
-            catch (Exception ex)
-            {
-				this.notifications?.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = $"Upload failed: {ex.Message}" });
-            }
-            finally
-            {
-                await this.EnforceTracksLimit();
+                    this.ClientAudioCollection.Add(dto);
+                }
+                this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds));
 			}
-        }
+
+            await this.EnforceTracksLimit();
+		}
 
         public async Task RemoveAsync(Guid id)
         {

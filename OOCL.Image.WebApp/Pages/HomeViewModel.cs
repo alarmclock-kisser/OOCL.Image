@@ -749,7 +749,7 @@ namespace OOCL.Image.WebApp.Pages
             }
             try
             {
-                using var stream = file.OpenReadStream(20 * 1024 * 1024);
+                using var stream = file.OpenReadStream((long) (this.ApiConfig.MaxUploadSizeMb ?? 20) * 1024 * 1024);
                 using var ms = new MemoryStream();
                 await stream.CopyToAsync(ms);
                 var bytes = ms.ToArray();
