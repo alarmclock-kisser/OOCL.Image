@@ -144,7 +144,12 @@
     private static List<OpenClKernelInfo>? cachedKernelInfos;
     private static DateTime lastMetaFetchUtc = DateTime.MinValue;
     private static readonly TimeSpan metaTtl = TimeSpan.FromMinutes(10);
+
+    // Use non-blocking acquire to avoid queuing many requests on server-wide SemaphoreSlim.
+    // Previously we used a blocking WaitAsync() which caused other callers to wait and
+    // produced the observed ~9s delay on first global load.
     private static readonly SemaphoreSlim metaLock = new(1, 1);
+
     private static List<string> appLogs = [];
     private static List<string> apiLogs = [];
 
@@ -158,7 +163,8 @@
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        await RefreshLogsAsync();
+        // Refresh logs async but don't block navigation handlers
+        _ = RefreshLogsAsync();
         StateHasChanged();
     }
 
@@ -167,13 +173,18 @@
         if (firstRender)
         {
             await JS.InvokeVoidAsync("theme.set", isDark);
-            _ = EnsureMetaAsync(); // Fire & forget
-            await RefreshLogsAsync();
+
+            // Fire-and-forget; EnsureMetaAsync now uses a non-blocking lock acquisition
+            _ = EnsureMetaAsync();
+
+            // Refresh logs but don't block rendering of the page on the kernel-fetch path.
+            _ = RefreshLogsAsync();
         }
     }
 
     private async Task EnsureMetaAsync(bool force = false)
     {
+        // Fast path: fresh cache
         if (!force &&
             cachedKernelInfos != null &&
             cachedKernelInfos.Count > 0 &&
@@ -182,9 +193,19 @@
             return;
         }
 
-        await metaLock.WaitAsync();
+        // Try to acquire lock immediately to avoid queuing on the Semaphore.
+        // If we can't acquire instantly, someone else is already fetching and we return
+        // immediately to avoid blocking other requests.
+        var acquired = await metaLock.WaitAsync(TimeSpan.Zero);
+        if (!acquired)
+        {
+            // Another operation is in progress — avoid waiting and return.
+            return;
+        }
+
         try
         {
+            // Double-check cache after acquiring
             if (!force &&
                 cachedKernelInfos != null &&
                 cachedKernelInfos.Count > 0 &&
@@ -196,8 +217,10 @@
             isMetaLoading = true;
             StateHasChanged();
 
+            // Lightweight status fetch
             cachedOpenClServiceInfo = await Api.GetOpenClServiceInfoAsync();
 
+            // If not initialized, try to initialize once. This may be slow on first startup.
             if (cachedOpenClServiceInfo != null && !cachedOpenClServiceInfo.Initialized)
             {
                 try
@@ -205,10 +228,22 @@
                     await Api.InitializeOpenClIndexAsync(0);
                     cachedOpenClServiceInfo = await Api.GetOpenClServiceInfoAsync();
                 }
-                catch { }
+                catch
+                {
+                    // ignore init errors here; we still try to fetch kernels (server may still provide none)
+                }
             }
 
-            cachedKernelInfos = (await Api.GetOpenClKernelsAsync()).ToList();
+            // Fetch kernels (this may be the expensive part on first-run)
+            try
+            {
+                cachedKernelInfos = (await Api.GetOpenClKernelsAsync()).ToList();
+            }
+            catch
+            {
+                cachedKernelInfos = new List<OpenClKernelInfo>();
+            }
+
             lastMetaFetchUtc = DateTime.UtcNow;
         }
         finally
@@ -230,7 +265,7 @@
         isDark = !isDark;
         Config.DefaultDarkMode = isDark;
         await JS.InvokeVoidAsync("theme.set", isDark);
-        await RefreshLogsAsync();
+        _ = RefreshLogsAsync();
         StateHasChanged();
     }
 
@@ -262,6 +297,7 @@
 
     private async Task RefreshLogsAsync()
     {
+        // run in parallel but don't throw
         await Task.WhenAll(RefreshAppLog(), RefreshApiLog());
     }
 
