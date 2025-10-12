@@ -222,6 +222,7 @@ namespace OOCL.Image.WebApp.Pages
 			if (this.RequestTestMode)
 			{
 				await this.RequestFftTestAsync();
+				return;
 			}
 
 			// generate synthetic test data
