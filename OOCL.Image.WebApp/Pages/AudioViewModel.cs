@@ -188,10 +188,21 @@ namespace OOCL.Image.WebApp.Pages
         {
             try
             {
-                await this.api.RemoveAudioAsync(id);
-                var e = this.AudioEntries.FirstOrDefault(a => a.Id == id);
-                if (e != null) this.AudioEntries.Remove(e);
-            }
+                bool serverSidedData = await this.api.IsServersidedDataAsync();
+                if (serverSidedData)
+                {
+					await this.api.RemoveAudioAsync(id);
+					var e = this.AudioEntries.FirstOrDefault(a => a.Id == id);
+					if (e != null) this.AudioEntries.Remove(e);
+				}
+                else
+                {
+                    var e = this.ClientAudioCollection.FirstOrDefault(a => a.Info.Id == id);
+                    if (e != null) this.ClientAudioCollection.Remove(e);
+                    var e2 = this.AudioEntries.FirstOrDefault(a => a.Id == id);
+                    if (e2 != null) this.AudioEntries.Remove(e2);
+				}
+			}
             catch (Exception ex)
             {
 				this.notifications?.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = $"Remove failed: {ex.Message}" });
