@@ -363,6 +363,7 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 		[HttpPost("execute-audio-timestretch")]
+		[DisableRequestSizeLimit]
 		[ProducesResponseType(typeof(AudioObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
