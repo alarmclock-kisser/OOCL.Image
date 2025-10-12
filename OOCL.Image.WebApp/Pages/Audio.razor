@@ -167,21 +167,21 @@ else
                     }
                 </RadzenCard>
             </div>
-            <div style="margin-bottom:12px;">
-                <RadzenCard>
-                    <div style="display:flex;align-items:center;gap:12px;">
-                        <div style="font-weight:600;">Upload & Exec</div>
-                        <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
-                            <RadzenButton Icon="upload" Text="Upload & Exec" Click="@ShowUploadAndExecDialog" Disabled="@(VM.IsUploading || VM.IsProcessing)" />
-                        </div>
-                    </div>
-                    <div style="margin-top:.6rem;color:gray;font-size:.9rem;">
-                        Directly sends your uploaded file to the API and returns a processed whole file (no Client serialization or caching needed).
-                    </div>
-                </RadzenCard>
-            </div>
         </div>
     </RadzenCard>
+     <div style="margin-bottom:12px;">
+        <RadzenCard>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="font-weight:600;">Upload & Exec</div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
+                    <RadzenButton Icon="upload" Text="Upload & Exec" Click="@ShowUploadAndExecDialog" Disabled="@(VM.IsUploading || VM.IsProcessing)" />
+                </div>
+            </div>
+            <div style="margin-top:.6rem;color:gray;font-size:.9rem;">
+                Directly sends your uploaded file to the API and returns a processed whole file (no Client serialization or caching needed).
+            </div>
+        </RadzenCard>
+    </div>
 }
 
 <!-- Hidden file input used by Upload button -->

@@ -186,7 +186,7 @@ namespace OOCL.Image.Client
 
 			try
 			{
-				var result = await this.internalClient.TimestretchAudioFileDownloadAsync(kernelName, stretchFactor, chunkSize, overlap, downloadFormat, downloadBits, forceOpenClDevice ?? "", file);
+				var result = await this.internalClient.TimestretchAudioFileDownloadAsync(kernelName, stretchFactor, chunkSize, overlap, downloadFormat, downloadBits, (forceOpenClDevice ?? this.apiConfigCache?.PreferredDevice), file);
 				return result;
 			}
 			catch (Exception ex)
