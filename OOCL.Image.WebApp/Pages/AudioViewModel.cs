@@ -28,9 +28,11 @@ namespace OOCL.Image.WebApp.Pages
         // Collections
         public List<AudioEntry> AudioEntries { get; private set; } = [];
         public List<AudioObjDto> ClientAudioCollection { get; private set; } = [];
+        public string DataLocation => this.api.IsServersidedDataAsync().GetAwaiter().GetResult() ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
+        public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Info.SizeInMb).Sum().ToString("F2") + " MB";
 
-        // Controls / State
-        public decimal InitialBpm { get; set; } = 0m;
+		// Controls / State
+		public decimal InitialBpm { get; set; } = 0m;
         public decimal TargetBpm { get; set; } = 0m;
         public decimal StretchFactor { get; set; } = 1.0m;
         public int ChunkSize { get; set; } = 8192;
@@ -249,6 +251,8 @@ namespace OOCL.Image.WebApp.Pages
             }
             else
             {
+                dto = this.ClientAudioCollection.FirstOrDefault(a => a.Id == id);
+
                 dto = await this.api.ExecuteTimestretchAsync(null, dto, this.SelectedKernelName, this.ChunkSize, (float) this.Overlap, (double) this.StretchFactor);
                 if (dto != null)
                 {
