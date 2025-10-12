@@ -28,7 +28,7 @@ namespace OOCL.Image.WebApp.Pages
         // Collections
         public List<AudioEntry> AudioEntries { get; private set; } = [];
         public List<AudioObjDto> ClientAudioCollection { get; private set; } = [];
-        public string DataLocation => this.api.IsServersidedDataAsync().GetAwaiter().GetResult() ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
+        public string DataLocation => this.isServerSidedData.HasValue && this.isServerSidedData.Value == true ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
         public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Info.SizeInMb).Sum().ToString("F2") + " MB";
 
 		// Controls / State
@@ -40,6 +40,7 @@ namespace OOCL.Image.WebApp.Pages
         public bool EnableStretchControls { get; set; } = true;
 
         // Optional cached meta
+        private bool? isServerSidedData;
         private OpenClServiceInfo? openClServiceInfo;
         private List<OpenClKernelInfo> kernelInfos = [];
         public string SelectedKernelName { get; set; } = "timestretch_double03";
@@ -87,7 +88,8 @@ namespace OOCL.Image.WebApp.Pages
         public async Task ReloadAsync()
         {
             bool serverSidedData = await this.api.IsServersidedDataAsync();
-            if (serverSidedData)
+            this.isServerSidedData = serverSidedData;
+			if (serverSidedData)
             {
                 try
                 {
