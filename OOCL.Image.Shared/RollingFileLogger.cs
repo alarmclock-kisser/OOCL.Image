@@ -4,7 +4,7 @@ namespace OOCL.Image.Shared
 {
 	public class RollingFileLogger
 	{
-		public string ResourcesPath { get; set; } = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "OOCL.Image.Core", "Resources"));
+		public string ResourcesPath { get; set; } = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "OOCL.Image.Shared", "Resources"));
 		public string LogDirName { get; set; } = "Logs";
 		public string LogPath { get; set; } = string.Empty;
 
@@ -40,58 +40,73 @@ namespace OOCL.Image.Shared
 				this.LogFilePrefix = logFileNamePrefix;
 			}
 
-			string logDirPath = this.GetLogDirectory();
-			string logFileName = $"{this.LogFilePrefix}{DateTime.Now:yyyyMMdd_HHmmss}{this.LogFileExtension}";
-			this.LogPath = Path.Combine(logDirPath, logFileName);
-
-			if (cleanupPrevLogFiles)
+			try
 			{
-				// Delete previous log files
-				var oldLogFiles = Directory.GetFiles(logDirPath, $"{this.LogFilePrefix}*{this.LogFileExtension}");
-				foreach (var oldFile in oldLogFiles)
+				string logDirPath = this.GetLogDirectory();
+				string logFileName = $"{this.LogFilePrefix}{DateTime.Now:yyyyMMdd_HHmmss}{this.LogFileExtension}";
+				this.LogPath = Path.Combine(logDirPath, logFileName);
+
+				if (cleanupPrevLogFiles)
 				{
-					try
+					// Delete previous log files
+					var oldLogFiles = Directory.GetFiles(logDirPath, $"{this.LogFilePrefix}*{this.LogFileExtension}");
+					foreach (var oldFile in oldLogFiles)
 					{
-						File.Delete(oldFile);
-					}
-					catch
-					{
-						// Ignore exceptions during cleanup
+						try
+						{
+							File.Delete(oldFile);
+						}
+						catch
+						{
+							// Ignore exceptions during cleanup
+						}
 					}
 				}
-			}
 
-			// Create initial log file
-			if (!File.Exists(this.LogPath))
+				// Create initial log file
+				if (!File.Exists(this.LogPath))
+				{
+					using var fs = File.Create(this.LogPath);
+
+					// Create and write intro
+					string intro = $"Log started at {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\n";
+					byte[] info = new UTF8Encoding(true).GetBytes(intro);
+					fs.Write(info, 0, info.Length);
+				}
+			}
+			catch
 			{
-				using var fs = File.Create(this.LogPath);
-				
-				// Create and write intro
-				string intro = $"Log started at {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\n";
-				byte[] info = new UTF8Encoding(true).GetBytes(intro);
-				fs.Write(info, 0, info.Length);
+				// Ignore exceptions during log file creation
+				this.LogPath = Path.Combine(Path.GetTempPath(), "temp_log.txt");
 			}
 		}
 
 		public string GetLogDirectory()
 		{
-			// Ensure the resources path exists
-			if (!Directory.Exists(this.ResourcesPath))
+			try
 			{
-				this.ResourcesPath = AppDomain.CurrentDomain.BaseDirectory;
+				// Ensure the resources path exists
 				if (!Directory.Exists(this.ResourcesPath))
 				{
-					Directory.CreateDirectory(this.ResourcesPath);
+					this.ResourcesPath = AppDomain.CurrentDomain.BaseDirectory;
+					if (!Directory.Exists(this.ResourcesPath))
+					{
+						Directory.CreateDirectory(this.ResourcesPath);
+					}
 				}
-			}
 
-			string logDir = Path.Combine(this.ResourcesPath, this.LogDirName);
-			if (!Directory.Exists(logDir))
+				string logDir = Path.Combine(this.ResourcesPath, this.LogDirName);
+				if (!Directory.Exists(logDir))
+				{
+					logDir = Path.GetTempPath();
+				}
+
+				return logDir;
+			}
+			catch
 			{
-				logDir = Path.GetTempPath();
+				return Path.GetTempPath();
 			}
-
-			return logDir;
 		}
 
 
@@ -99,24 +114,32 @@ namespace OOCL.Image.Shared
 
 		public async Task<IEnumerable<string>> GetRecentLogsAsync(int numberOfLines)
 		{
-			// If cache is empty, load from file
-			if (this.logCache.Count == 0 && File.Exists(this.LogPath))
+			try
+
 			{
-				var lines = await File.ReadAllLinesAsync(this.LogPath);
-				long tick = DateTime.Now.Ticks - lines.Length;
-				foreach (var line in lines)
+				// If cache is empty, load from file
+				if (this.logCache.Count == 0 && File.Exists(this.LogPath))
 				{
-					this.logCache[tick++] = line;
+					var lines = await File.ReadAllLinesAsync(this.LogPath);
+					long tick = DateTime.Now.Ticks - lines.Length;
+					foreach (var line in lines)
+					{
+						this.logCache[tick++] = line;
+					}
 				}
-			}
 
-			if (numberOfLines <= 0)
+				if (numberOfLines <= 0)
+				{
+					return this.logCache.Values;
+				}
+
+				// Return the most recent lines from cache
+				return this.logCache.Values.TakeLast(numberOfLines);
+			}
+			catch
 			{
-				return this.logCache.Values;
+				return [];
 			}
-
-			// Return the most recent lines from cache
-			return this.logCache.Values.TakeLast(numberOfLines);
 		}
 
 		public async Task<string?> LogAsync(string? message = null, string? sender = null)
@@ -130,27 +153,35 @@ namespace OOCL.Image.Shared
 
 			string logEntry = $"[{timestamp}] [{sender}] {message}";
 
-			this.logCache[DateTime.Now.Ticks] = logEntry;
+			try
 
-			if (this.MaxLogLines <= 0)
 			{
-				return null;
+				this.logCache[DateTime.Now.Ticks] = logEntry;
+
+				if (this.MaxLogLines <= 0)
+				{
+					return null;
+				}
+
+				// Get lines
+				var lines = await File.ReadAllLinesAsync(this.LogPath);
+
+				// Check if exceeds max lines
+				if (lines.LongLength >= this.MaxLogLines)
+				{
+					// Remove first lines
+					lines = lines.Skip(lines.Length - (int) this.MaxLogLines + 1).ToArray();
+				}
+
+				// Append new log entry
+				var updatedLines = lines.Append(logEntry);
+
+				await File.WriteAllLinesAsync(this.LogPath, updatedLines);
 			}
-
-			// Get lines
-			var lines = await File.ReadAllLinesAsync(this.LogPath);
-
-			// Check if exceeds max lines
-			if (lines.LongLength >= this.MaxLogLines)
+			catch
 			{
-				// Remove first lines
-				lines = lines.Skip(lines.Length - (int)this.MaxLogLines + 1).ToArray();
+				// Ignore logging errors
 			}
-
-			// Append new log entry
-			var updatedLines = lines.Append(logEntry);
-
-			await File.WriteAllLinesAsync(this.LogPath, updatedLines);
 
 			return logEntry;
 		}
