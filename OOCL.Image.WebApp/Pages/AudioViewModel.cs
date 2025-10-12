@@ -52,6 +52,7 @@ namespace OOCL.Image.WebApp.Pages
 
         // Indicates a download is in progress
         public bool IsDownloading { get; set; } = false;
+        public bool IsProcessing { get; set; } = false;
 
 		// Optional cached meta
 		private bool? isServerSidedData;
@@ -175,6 +176,14 @@ namespace OOCL.Image.WebApp.Pages
 			this.TargetBpm = Math.Round(this.InitialBpm / this.StretchFactor, 3);
 		}
 
+        public void ToggleChunkSize(decimal value)
+        {
+            int intValue = (int) value;
+            if (intValue < 256) intValue = 256;
+            if (intValue > 65536) intValue = 65536;
+            this.ChunkSize = 1 << (int) Math.Round(Math.Log(intValue, 2), MidpointRounding.AwayFromZero);
+		}
+
         public async Task EnforceTracksLimit()
         {
             bool serverSidedData = await this.api.IsServersidedDataAsync();
@@ -259,8 +268,9 @@ namespace OOCL.Image.WebApp.Pages
         {
             AudioObjDto? dto = null;
             bool serverSidedData = await this.api.IsServersidedDataAsync();
+            this.IsProcessing = true;
 
-            if (serverSidedData)
+			if (serverSidedData)
             {
                 dto = await this.api.ExecuteTimestretchAsync(id, null, this.SelectedKernelName, this.ChunkSize, (float) this.Overlap, (double) this.StretchFactor);
             }
@@ -275,6 +285,7 @@ namespace OOCL.Image.WebApp.Pages
                 }
 			}
 
+            this.IsProcessing = false;
 			await this.ReloadAsync();
 		}
 

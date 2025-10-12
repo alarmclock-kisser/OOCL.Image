@@ -34,7 +34,7 @@ else
             <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
             <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
             <span style="margin-left:auto;font-size:.9rem;color:gray;">
-                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks}) ca. {VM.DataLocation} (max. API request size: {VM.MaxUploadSizeMb} MB)")
+                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks}) ca. {VM.DataLocation}" + Environment.NewLine + $"(max. API request size: {VM.MaxUploadSizeMb} MB)")
             </span>
         </div>
 
@@ -83,6 +83,28 @@ else
                                            Step="0.000000000001"
                                            Style="width:260px;" />
                         </div>
+
+                        <div style="min-width:120px;">
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
+                            <RadzenNumeric TValue="int"
+                                           Value="VM.ChunkSize"
+                                           Change="@( (int v) => OnChunkSizeChanged(v) )"
+                                           Min="128"
+                                           Max="65536"
+                                           Step="1"
+                                           Style="width:120px;" />
+                        </div>
+
+                        <div style="min-width:100px;">
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
+                            <RadzenNumeric TValue="decimal"
+                                           Value="VM.ChunkSize"
+                                           Change="@( (decimal v) => OnOverlapChanged(v) )"
+                                           Min="0.0m"
+                                           Max="0.9m"
+                                           Step="0.01"
+                                           Style="width:100px;" />
+                        </div>
                     </div>
                 }
             </RadzenCard>
@@ -99,10 +121,10 @@ else
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem;">
                             <div>
                                 <div style="font-weight:600;">@item.Name</div>
-                                <div style="font-size:.85rem;color:gray;">Bpm: @item.Bpm</div>
-                                <div style="font-size:.85rem;color:gray;">Duration: @item.DurationSeconds s</div>
-                                <div style="font-size:.85rem;color:gray;">Bytes: @item.BytesCount</div>
-                                <div style="font-size:.85rem;color:gray;">Exec: @item.LastExecTime</div>
+                                <div style="font-size:.85rem;">Bpm: @item.Bpm</div>
+                                <div style="font-size:.85rem;">Duration: @item.DurationSeconds s</div>
+                                <div style="font-size:.85rem;">Bytes: @item.BytesCount</div>
+                                <div style="font-size:.85rem;">Exec: @item.LastExecTime</div>
                             </div>
                             <div style="display:flex;gap:.35rem;">
                                 <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
@@ -123,18 +145,18 @@ else
                             <div><b>Original BPM:</b> @selected.Bpm.ToString("F3")</div>
                             <div style="margin-top:.5rem;">
                                 <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
-                                <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />
-                                <RadzenButton Size="ButtonSize.Small" Icon="download" Click="@(async () => await OnDownloadClick())" Disabled="@(isDownloading || VM.IsDownloading || selected == null)" />
+                                <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" Disabled="@(VM.IsProcessing || selected == null)" />
+                                <RadzenButton Icon="download" Click="@(async () => await OnDownloadClick())" Disabled="@(isDownloading || VM.IsDownloading || selected == null)" />
                                 <RadzenDropDown TValue="string"
                                                 Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
                                                 Value="@VM.DownloadAudioType"
                                                 Change="@((args) => OnFormatChanged(args as string))"
-                                                Style="width:120px;"
+                                                Style="width:100px;"
                                                 Placeholder="Format" />
                                 <RadzenDropDown TValue="int"
                                                 Data="@( GetBitsForSelected() )"
                                                 @bind-Value="VM.DownloadAudioBits"
-                                                Style="width:140px;"
+                                                Style="width:100px;"
                                                 Placeholder="Bits" />
                             </div>
                         </div>
@@ -162,6 +184,7 @@ else
 
     // Local UI flag to reflect download in progress immediately
     private bool isDownloading = false;
+    private bool isProcessing = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -229,6 +252,18 @@ else
         StateHasChanged();
     }
 
+    private void OnChunkSizeChanged(int value)
+    {
+        VM.ToggleChunkSize(value);
+        StateHasChanged();
+    }
+
+    private void OnOverlapChanged(decimal value)
+    {
+        VM.Overlap = value;
+        StateHasChanged();
+    }
+
     private async Task OnDownloadClick()
     {
         if (selectedId == Guid.Empty) return;
@@ -260,7 +295,7 @@ else
         VM.DownloadAudioType = value ?? string.Empty;
         if (VM.AvailableDownloadFormats != null && VM.AvailableDownloadFormats.TryGetValue(value ?? "", out var bits) && bits.Length > 0)
         {
-            VM.DownloadAudioBits = bits[0];
+            VM.DownloadAudioBits = bits[2];
         }
         else
         {
