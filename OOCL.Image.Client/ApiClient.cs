@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using OOCL.Image.Shared;
+using OpenTK.Graphics.ES20;
 using OpenTK.Mathematics;
 using System.Data;
 using System.Net.Http.Headers;
@@ -777,7 +778,7 @@ namespace OOCL.Image.Client
 		}
 
 
-		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>dataChunks, bool inverse, string? forceDeviceName = null)
+		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>dataChunks, bool inverse, string? forceDeviceName = null, string? preferredClientApiUrl = null)
 		{
 			try
 			{
@@ -796,9 +797,16 @@ namespace OOCL.Image.Client
 					DataBase64Chunks = []
 				};
 
-				//var result = await this.internalClient.cuda
+				var result = await this.internalClient.RequestCufftAsync(preferredClientApiUrl ?? "", req);
+				if (result == null)
+				{
+					return new CuFftResult()
+					{
+						ErrorMessage = "Result was null: " + forceDeviceName + " @ " + preferredClientApiUrl
+					};
+				}
 
-				return new();
+				return result;
 			}
 			catch (Exception ex)
 			{
@@ -807,6 +815,19 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task<CuFftResult> TestRequestCuFftAsync(int fftSize = 1024, int batchSize = 4, bool doInverseAfterwards = false, string? preferredClientApiUrl = null, string? forceDeviceName = null)
+		{
+			try
+			{
+				CuFftResult result = await this.internalClient.TestRequestCufftAsync(fftSize, batchSize, doInverseAfterwards, preferredClientApiUrl, forceDeviceName);
+				return result;
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return new CuFftResult();
+			}
+		}
 
 		// Helpers
 		public async Task<bool> GetBrowserSettingDarkMode(IJSRuntime js)

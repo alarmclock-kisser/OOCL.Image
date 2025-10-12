@@ -549,7 +549,7 @@ namespace OOCL.Image.Api.Controllers
 			var floats = new float[len];
 			for (int i = 0; i < len; i++)
 			{
-				floats[i] = (float)(rnd.NextDouble() * 199.998 - 99.999);
+				floats[i] = (float) (rnd.NextDouble() * 199.998 - 99.999);
 			}
 
 			string inputBase64 = Convert.ToBase64String(floats.SelectMany(BitConverter.GetBytes).ToArray());
@@ -672,6 +672,116 @@ namespace OOCL.Image.Api.Controllers
 			}
 
 			return this.Ok(result);
+		}
+
+		[HttpGet("test-request-cufft")]
+		[ProducesResponseType(typeof(CuFftResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<CuFftResult>> TestRequestCufft([FromQuery] int? fftSize = 4096, [FromQuery] int? batchSize = 8,  [FromQuery] bool? doInverseAfterwards = false, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
+		{
+			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
+
+			int size = fftSize.GetValueOrDefault(4096);
+			int batches = batchSize.GetValueOrDefault(8);
+
+			// Validate fft size (power of two)
+			if (size <= 0 || (size & (size - 1)) != 0)
+			{
+				return this.BadRequest(new ProblemDetails { Title = "Invalid request.", Detail = "fftSize must be a power of two and greater than zero.", Status = 400 });
+			}
+			if (batches <= 0)
+			{
+				return this.BadRequest(new ProblemDetails { Title = "Invalid request.", Detail = "batchSize must be greater than zero.", Status = 400 });
+			}
+
+			// Generate test data: batches of sine waves
+			var rnd = new Random();
+			var inputFloatChunks = new List<float[]>();
+			for (int b = 0; b < batches; b++)
+			{
+				var chunk = new float[size];
+				double freq1 = 5.0 + b; // vary per batch
+				double freq2 = 20.0 + b * 0.3;
+				double freq3 = 50.0 + b * 0.1;
+				for (int i = 0; i < size; i++)
+				{
+					double t = (double)i / (double)size;
+					chunk[i] = (float)(Math.Sin(2.0 * Math.PI * freq1 * t) + 0.5 * Math.Sin(2.0 * Math.PI * freq2 * t) + 0.25 * Math.Sin(2.0 * Math.PI * freq3 * t));
+				}
+				inputFloatChunks.Add(chunk);
+			}
+
+			// Build CuFftRequest (use object[] for DataChunks so serialization creates nested arrays)
+			var dataChunksAsObjects = inputFloatChunks.Select(c => (object)c).ToArray();
+
+			var req = new CuFftRequest
+			{
+				Size = size,
+				Batches = batches,
+				DataChunks = (IEnumerable<Object[]>) dataChunksAsObjects,
+				DataLength = inputFloatChunks.Select(ch => ch.Length).Sum().ToString(),
+				DataForm = "f",
+				DataType = "float",
+				DeviceName = specificCudaDevice ?? string.Empty,
+				Inverse = false
+			};
+
+			// Forward FFT request to worker (reuse existing RequestCufftDtoAsync which forwards)
+			var fftResponse = await this.RequestCufftDtoAsync(req, specificClientApiUrl);
+			CuFftResult? fftResult = fftResponse.Value;
+			if (fftResult == null)
+			{
+				// Try to return inner problem if present
+				if (fftResponse.Result is ObjectResult orRes && orRes.Value is ProblemDetails pd)
+				{
+					return this.StatusCode(pd.Status ?? 500, pd);
+				}
+				return this.StatusCode(500, this.Problem("FFT forwarding failed", "FFT worker returned no result.", 500));
+			}
+
+			// If requested, perform inverse by forwarding the worker's output back as an inverse request
+			if (doInverseAfterwards.HasValue && doInverseAfterwards.Value)
+			{
+				try
+				{
+					var inverseReq = new CuFftRequest
+					{
+						Size = fftResult.DataChunks.FirstOrDefault()?.Length ?? 0,
+						Batches = fftResult.DataChunks.Count(),
+						DataChunks = (IEnumerable<Object[]>) (fftResult.DataChunks?.ToArray() ?? Array.Empty<object>()),
+						DataLength = fftResult.DataLength ?? string.Empty,
+						DataForm = "c", // result from FFT is complex
+						DataType = "complex",
+						DeviceName = specificCudaDevice ?? string.Empty,
+						Inverse = true
+					};
+
+					var ifftResponse = await this.RequestCufftDtoAsync(inverseReq, specificClientApiUrl);
+					CuFftResult? ifftResult = ifftResponse.Value;
+					if (ifftResult == null)
+					{
+						if (ifftResponse.Result is ObjectResult orRes2 && orRes2.Value is ProblemDetails pd2)
+						{
+							return this.StatusCode(pd2.Status ?? 500, pd2);
+						}
+						return this.StatusCode(500, this.Problem("Inverse FFT failed", "iFFT worker returned no result.", 500));
+					}
+
+					return this.Ok(ifftResult);
+				}
+				catch (Exception ex)
+				{
+					return this.StatusCode(500, this.Problem("Inverse processing error", ex.Message, 500));
+				}
+			}
+
+			return this.Ok(fftResult);
 		}
 
 
