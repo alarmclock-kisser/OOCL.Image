@@ -609,6 +609,10 @@ namespace OOCL.Image.OpenCl
 						return obj;
 					}
 				}
+
+				// Set new stretch factor & bpm
+				obj.StretchFactor *= factor;
+				await obj.UpdateBpm((float) (obj.Bpm / factor));
 			}
 			catch (Exception ex)
 			{
