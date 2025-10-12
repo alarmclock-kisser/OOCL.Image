@@ -91,7 +91,7 @@ namespace OOCL.Image.WebApp.Pages
 			}
 			if (kernels != null && kernels.Count > 0)
 			{
-				this.KernelInfos = kernels.Where(k => k.NeedsImage == false && k.MediaType == "Image").Where(ki => ki.NeedsImage == false).ToList();
+				this.KernelInfos = kernels.Where(k => k.NeedsImage == false && k.MediaType == "IMG").Where(ki => ki.NeedsImage == false).ToList();
 				this.SelectedKernelName = this.Config?.DefaultKernel ??
 					this.KernelInfos.FirstOrDefault(k => k.FunctionName.ToLower().Contains("mandelbrot"))?.FunctionName ??
 					this.KernelInfos.FirstOrDefault()?.FunctionName ??
