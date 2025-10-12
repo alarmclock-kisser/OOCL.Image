@@ -459,40 +459,19 @@ namespace OOCL.Image.OpenCl
 				{ "len", obj.Length.ToString()   }
 			};
 
-			if (progress == null)
-			{
-				obj.Pointer = this.Executioner.ExecuteAudioKernel(
-					(nint) obj.Pointer,
-					out factor, // Hier wird der 'out' Parameter für die synchrone Methode verwendet
-					obj.Length,
-					kernelName,
-					version,
-					chunkSize,
-					overlap,
-					obj.SampleRate,
-					obj.BitDepth,
-					obj.Channels,
-					providedArguments
-				);
-			}
-			else
-			{
-				// Die asynchrone Methode gibt ein Tupel zurück, das wir direkt entpacken.
-				// Das 'out' Keyword wird hier entfernt.
-				(obj.Pointer, factor) = await this.Executioner.ExecuteAudioKernelAsync(
-					(nint) obj.Pointer,
-					obj.Length,
-					kernelName,
-					version,
-					chunkSize,
-					overlap,
-					obj.SampleRate,
-					obj.BitDepth,
-					obj.Channels,
-					providedArguments,
-					progress
-				);
-			}
+			(obj.Pointer, factor) = await this.Executioner.ExecuteAudioKernelAsync(
+				(nint) obj.Pointer,
+				obj.Length,
+				kernelName,
+				version,
+				chunkSize,
+				overlap,
+				obj.SampleRate,
+				obj.BitDepth,
+				obj.Channels,
+				providedArguments,
+				progress
+			);
 
 			sw.Stop();
 			obj["stretch"] = sw.Elapsed.TotalMilliseconds;

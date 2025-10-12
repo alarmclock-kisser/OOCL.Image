@@ -85,7 +85,7 @@ namespace OOCL.Image.Core
 			return this.tracks.Values.FirstOrDefault(t => string.Equals(t.ContentHash, hash, StringComparison.OrdinalIgnoreCase));
 		}
 
-		public async Task<AudioObj?> ImportAsync(string filePath, bool linearLoad = true)
+		public async Task<AudioObj?> ImportAsync(string filePath, string? overwriteName = null, bool linearLoad = true)
 		{
 			if (!File.Exists(filePath))
 			{
@@ -109,7 +109,7 @@ namespace OOCL.Image.Core
 			AudioObj? obj = null;
 			if (linearLoad)
 			{
-				await Task.Run(() => { obj = new AudioObj(filePath, true); });
+				await Task.Run(() => { obj = new AudioObj(filePath, overwriteName, true); });
 			}
 			else
 			{
@@ -312,7 +312,7 @@ namespace OOCL.Image.Core
 			// Reihenfolge bleibt erhalten (keine Race Conditions, da jeder Index exklusiv beschrieben wird)
 			var obj = new AudioObj(floats, sampleRate, channels, bitdepth);
 
-			await Task.CompletedTask;
+			await Task.Yield();
 			return obj;
 		}
 

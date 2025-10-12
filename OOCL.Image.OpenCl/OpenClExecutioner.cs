@@ -754,15 +754,17 @@ namespace OOCL.Image.OpenCl
 				string kernelPath = this.compiler.KernelFiles.FirstOrDefault(f => f.ToLower().Contains((kernelName + version).ToLower())) ?? "";
 				if (string.IsNullOrEmpty(kernelPath))
 				{
+					Console.WriteLine("EXEC-Error: kernelPath was null or empty (not found).");
 					return (IntPtr.Zero, factor);
 				}
 
 				// Lade Kernel, falls nicht geladen
-				if (this.Kernel == null || this.KernelFile != kernelPath)
+				if (this.Kernel == null)
 				{
 					this.compiler.LoadKernel("", kernelPath);
-					if (this.Kernel == null || this.KernelFile == null || !this.KernelFile.Contains("\\Audio\\"))
+					if (this.Kernel == null || kernelPath == null || !kernelPath.ToLowerInvariant().Contains("\\audio\\"))
 					{
+						Console.WriteLine("EXEC-Error: kernelPath does not contain /Audio/ (subdir) (" + kernelPath + ")");
 						return (IntPtr.Zero, factor);
 					}
 				}
@@ -771,6 +773,7 @@ namespace OOCL.Image.OpenCl
 				OpenClMem? inputMem = this.register.GetBuffer(objPointer);
 				if (inputMem == null || inputMem.GetCount() <= 0 || inputMem.GetLengths().Any(l => l < 1))
 				{
+					Console.WriteLine("EXEC-Error: inputMem was null or empty.");
 					return (IntPtr.Zero, factor);
 				}
 
@@ -783,22 +786,32 @@ namespace OOCL.Image.OpenCl
 				{
 					if (providedArguments != null && providedArguments.ContainsKey("factor"))
 					{
-						string factorArgMatch = providedArguments.Keys.FirstOrDefault(k => k.ToLower().Contains("f")) ?? "factor";
-						if (float.TryParse(providedArguments[factorArgMatch], NumberStyles.Float, CultureInfo.InvariantCulture, out float fFactor))
+						string? factorArgMatch = providedArguments.Keys.FirstOrDefault(k => k.ToLower().Contains("f"));
+						if (string.IsNullOrEmpty(factorArgMatch))
+						{
+							Console.WriteLine($"EXEC-Error: No factor args match found.");
+							return (IntPtr.Zero, factor);
+						}
+
+						Console.WriteLine("EXEC-Info: Found factor argument: " + providedArguments[factorArgMatch]);
+
+						if (float.TryParse(providedArguments[factorArgMatch].Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out float fFactor))
 						{
 							factor = fFactor;
 						}
-						else if (double.TryParse(providedArguments[factorArgMatch], NumberStyles.Float, CultureInfo.InvariantCulture, out double dFactor))
+						else if (double.TryParse(providedArguments[factorArgMatch].Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double dFactor))
 						{
 							factor = dFactor;
 						}
 						else
 						{
+							Console.WriteLine($"EXEC-Error: Factor was neither float nor double (Type: {factor.GetType().Name}: {factor:F9})");
 							return (IntPtr.Zero, factor);
 						}
 					}
 					else
 					{
+						Console.WriteLine($"EXEC-Warning: No factor for kernel (no time-stretching method was requested)");
 						factor = 1.000d;
 					}
 
@@ -806,6 +819,7 @@ namespace OOCL.Image.OpenCl
 					IntPtr fftPointer = await this.ExecuteFFTAsync(objPointer, "01", 'f', chunkSize, overlap, true, progress);
 					if (fftPointer == IntPtr.Zero)
 					{
+						Console.WriteLine("EXEC-Error: FFT returned zero-pointer.");
 						return (IntPtr.Zero, factor);
 					}
 
@@ -818,6 +832,7 @@ namespace OOCL.Image.OpenCl
 						this.compiler.LoadKernel("", kernelPath);
 						if (this.Kernel == null || this.KernelFile == null || !this.KernelFile.Contains("\\Audio\\"))
 						{
+							Console.WriteLine("EXEC-Error: KernelFile does not contain Audio (subdir) ((2))");
 							return (IntPtr.Zero, factor);
 						}
 					}
@@ -827,27 +842,45 @@ namespace OOCL.Image.OpenCl
 				inputMem = this.register.GetBuffer(objPointer);
 				if (inputMem == null || inputMem.GetCount() <= 0 || inputMem.GetLengths().Any(l => l < 1))
 				{
+					Console.WriteLine("EXEC-Error: inputMem was null or empty ((2)). DidFft: " + didFft.ToString());
 					return (IntPtr.Zero, factor);
 				}
 
 				// Ausgabepuffer abrufen
 				OpenClMem? outputMem = null;
-				if (this.compiler.PointerInputType == typeof(float*).Name)
+				if (inputMem.elementType == typeof(float))
 				{
 					outputMem = this.register.AllocateGroup<float>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
 				}
-				else if (this.compiler.PointerOutputType == typeof(OpenTK.Mathematics.Vector2*).Name)
+				else if (inputMem.elementType == typeof(OpenTK.Mathematics.Vector2))
 				{
 					outputMem = this.register.AllocateGroup<OpenTK.Mathematics.Vector2>(inputMem.GetCount(), (nint) inputMem.GetLengths().FirstOrDefault());
 				}
 				else
 				{
+					Console.WriteLine("EXEC-Error: outputMem is null since inputMem Type was " + $"{inputMem.elementType.Name}" + $"");
 					return (IntPtr.Zero, factor);
 				}
 
 				if (outputMem == null || outputMem.GetCount() == 0 || outputMem.GetLengths().Any(l => l < 1))
 				{
+					Console.WriteLine("EXEC-Error: outputMem was null or empty or had any chunk with a length of < 1.");
 					return (IntPtr.Zero, factor);
+				}
+
+				if (providedArguments == null)
+				{
+					providedArguments = new Dictionary<string, string>();
+				}
+
+				if (chunkSize > 0)
+				{
+					providedArguments["chunkSize"] = chunkSize.ToString();
+				}
+				if (overlap >= 0f && overlap < 1f)
+				{
+					providedArguments["overlap"] = overlap.ToString("F4", CultureInfo.InvariantCulture);
+					providedArguments["overlapSize"] = ((int) (overlap * chunkSize)).ToString();
 				}
 
 				// Schleife durch Eingabepuffer
@@ -862,6 +895,7 @@ namespace OOCL.Image.OpenCl
 					object[] arguments = this.MergeAudioKernelArgumentsDynamic(kernelName + version, inputBuffer, outputBuffer, providedArguments);
 					if (arguments == null || arguments.Length <= 0)
 					{
+						Console.WriteLine($"EXEC-Error: Aborting on processing audio chunk [{i} / {count}] since merged argumens were null or empty.");
 						return (IntPtr.Zero, factor);
 					}
 
@@ -873,6 +907,7 @@ namespace OOCL.Image.OpenCl
 						if (error != CLResultCode.Success)
 						{
 							this.lastError = error;
+							Console.WriteLine($"EXEC-CL-Error: " + this.lastError);
 							return (IntPtr.Zero, factor);
 						}
 					}
@@ -902,6 +937,7 @@ namespace OOCL.Image.OpenCl
 					error = CL.WaitForEvents(1, [evt]);
 					if (error != CLResultCode.Success)
 					{
+						Console.WriteLine($"EXEC-CL-Error: " + this.lastError);
 						this.lastError = error;
 					}
 
@@ -909,6 +945,7 @@ namespace OOCL.Image.OpenCl
 					error = CL.ReleaseEvent(evt);
 					if (error != CLResultCode.Success)
 					{
+						Console.WriteLine($"EXEC-CL-Warning: " + this.lastError);
 						this.lastError = error;
 					}
 
@@ -934,6 +971,7 @@ namespace OOCL.Image.OpenCl
 					IntPtr ifftPointer = await this.ExecuteFFTAsync(outputMem[0].Handle, "01", 'c', chunkSize, overlap, true, progress);
 					if (ifftPointer == IntPtr.Zero)
 					{
+						Console.WriteLine("EXEC-Error: I-FFT returned zero-pointer.");
 						return (IntPtr.Zero, factor);
 					}
 
@@ -1267,6 +1305,8 @@ namespace OOCL.Image.OpenCl
 				// Check if provided
 				if (providedArguments != null && providedArguments.TryGetValue(argName, out string? value))
 				{
+					value = value.Replace(',', '.');
+
 					try
 					{
 						if (value != null)
@@ -1807,6 +1847,32 @@ namespace OOCL.Image.OpenCl
 
 			Console.WriteLine("CL-EXEC | Kernel execution completed. Retrieved " + result.LongLength + " elements.");
 			return result;
+		}
+
+
+
+
+
+		private static bool TryParseDoubleFlexible(string? raw, out double result)
+		{
+			result = 0d;
+			if (string.IsNullOrWhiteSpace(raw)) return false;
+			raw = raw.Trim();
+			// 1) Invariant (Punkt)
+			if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result))
+				return true;
+			// 2) Ersetze Komma durch Punkt
+			var alt = raw.Replace(',', '.');
+			if (double.TryParse(alt, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result))
+				return true;
+			// 3) Aktuelle Kultur (falls caller lokal formatiert)
+			if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out result))
+				return true;
+			// 4) Entferne umschließende Quotes und nochmal versuchen
+			var unq = raw.Trim('\'', '"');
+			if (double.TryParse(unq, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result))
+				return true;
+			return false;
 		}
 	}
 }

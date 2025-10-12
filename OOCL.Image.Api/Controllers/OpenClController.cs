@@ -400,16 +400,16 @@ namespace OOCL.Image.Api.Controllers
 					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp audio" });
 				}
 
-				var result = await this.openClService.TimeStretch(audio, request.KernelName, "", request.SpeedFactor, request.ChunkSize, request.Overlap);
-				if (result == null)
+				audio = await this.openClService.TimeStretch(audio, request.KernelName, "", request.SpeedFactor, request.ChunkSize, request.Overlap);
+				if (audio == null)
 				{
 					await this.logger.LogAsync("[500] api/opencl/execute-audio-timestretch: OpenCL returned null audio", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
 				}
 
-				var dto = new AudioObjDto(result, request.OptionalAudio != null);
+				var dto = new AudioObjDto(audio, request.OptionalAudio != null);
 
-				await this.logger.LogAsync($"Stretched audio successfully. {dto.Data.Length} bytes will be transferred. (Actual: {audio.Length} -> {result.Length} f32, {audio.Bpm} -> {audio.Bpm:F3} BPM now)", nameof(OpenClController));
+				await this.logger.LogAsync($"Stretched audio successfully. {dto.Data.Length} bytes will be transferred. (Actual: {audio.Length} f32, {audio.Bpm:F3} BPM now)", nameof(OpenClController));
 				return this.Ok(dto);
 			}
 			catch (Exception ex)
@@ -515,16 +515,21 @@ namespace OOCL.Image.Api.Controllers
 			chunkSize = (int) Math.Pow(2, power);
 			chunkSize = Math.Clamp(chunkSize, 128, 65536);
 
+			string tempFilePath = string.Empty;
+			string tempOutDir = string.Empty;
+			string? outFile = null;
+			string originalFileName = Path.GetFileName(audioFile.FileName) ?? audioFile.Name ?? "upload";
+
 			try
 			{
-				// Temp file
-				string tempFilePath = Path.GetTempFileName();
+				// Temp upload file
+				tempFilePath = Path.GetTempFileName();
 				using (var stream = System.IO.File.Create(tempFilePath))
 				{
 					await audioFile.CopyToAsync(stream);
 				}
 
-				var audio = await this.audioCollection.ImportAsync(tempFilePath);
+				var audio = await this.audioCollection.ImportAsync(tempFilePath, originalFileName);
 				if (audio == null || audio.Data.LongLength <= 0)
 				{
 					await this.logger.LogAsync("[400] api/opencl/timestretch-audio-file: Failed to import uploaded audio file", nameof(OpenClController));
@@ -560,17 +565,22 @@ namespace OOCL.Image.Api.Controllers
 					baseName = "audio";
 				}
 
-				string? outFile = null;
+				// WICHTIG: AudioExporter erwartet ein Verzeichnis als outPath. Erzeuge ein temporäres Verzeichnis statt eine Datei.
+				tempOutDir = Path.Combine(Path.GetTempPath(), "oocl_audio_" + Guid.NewGuid().ToString("N"));
+				Directory.CreateDirectory(tempOutDir);
+
 				if (format.Contains("3"))
 				{
-					outFile = await AudioExporter.ExportMp3Async(result, tempFilePath, bits);
+					outFile = await AudioExporter.ExportMp3Async(result, tempOutDir, bits);
 				}
 				else
 				{
-					outFile = await AudioExporter.ExportWavAsync(result, tempFilePath, bits);
+					outFile = await AudioExporter.ExportWavAsync(result, tempOutDir, bits);
 				}
+
 				if (string.IsNullOrWhiteSpace(outFile) || !System.IO.File.Exists(outFile))
 				{
+					await this.logger.LogAsync("[500] api/opencl/timestretch-audio-file: Export failed, outFile path invalid: " + (outFile ?? "null"), nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails
 					{
 						Title = "Error exporting audio as " + format,
@@ -578,8 +588,9 @@ namespace OOCL.Image.Api.Controllers
 						Status = 500
 					});
 				}
+
 				byte[] fileBytes = await System.IO.File.ReadAllBytesAsync(outFile);
-				string fileName = Path.GetFileName(outFile) ?? $"{baseName}.{format}";
+				string fileName = Path.GetFileName(outFile) ?? $"{baseName} [{result.Bpm:F2}].{format}";
 				string contentType = format.Contains("3") ? "audio/mpeg" : "audio/wav";
 				return this.File(fileBytes, contentType, fileName);
 			}
@@ -587,6 +598,33 @@ namespace OOCL.Image.Api.Controllers
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(OpenClController));
 				return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to process uploaded audio", Detail = ex.Message });
+			}
+			finally
+			{
+				// Aufräumen temporärer Dateien/Verzeichnisse (best effort)
+				try
+				{
+					if (!string.IsNullOrEmpty(tempFilePath) && System.IO.File.Exists(tempFilePath))
+					{
+						System.IO.File.Delete(tempFilePath);
+					}
+				}
+				catch { }
+
+				try
+				{
+					if (!string.IsNullOrEmpty(outFile) && System.IO.File.Exists(outFile))
+					{
+						System.IO.File.Delete(outFile);
+					}
+
+					if (!string.IsNullOrEmpty(tempOutDir) && Directory.Exists(tempOutDir))
+					{
+						// Versuche, das Verzeichnis zu löschen (nur wenn leer)
+						try { Directory.Delete(tempOutDir, true); } catch { /* ignore */ }
+					}
+				}
+				catch { }
 			}
 		}
 

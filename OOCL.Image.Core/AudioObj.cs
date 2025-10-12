@@ -222,7 +222,7 @@ namespace OOCL.Image.Core
 
 		public bool RemoveAfterPlayback { get; set; } = false;
 
-		internal AudioObj(string filePath, bool linearLoad = true)
+		internal AudioObj(string filePath, string? overwriteName = null,  bool linearLoad = true)
 		{
 			this.Id = Guid.NewGuid();
 			this.FilePath = filePath;
@@ -232,6 +232,11 @@ namespace OOCL.Image.Core
 			if (this.Data.LongLength <= 0 && linearLoad)
 			{
 				this.LoadAudioFile();
+			}
+
+			if (!string.IsNullOrEmpty(overwriteName))
+			{
+				this.FilePath = Path.Combine(Path.GetDirectoryName(filePath) ?? "", overwriteName);
 			}
 		}
 
@@ -337,7 +342,7 @@ namespace OOCL.Image.Core
 				return null;
 			}
 
-			var obj = new AudioObj(filePath, false);
+			var obj = new AudioObj(filePath, null, false);
 			Stopwatch sw = Stopwatch.StartNew();
 
 			try
