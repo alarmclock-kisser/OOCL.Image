@@ -679,7 +679,7 @@ namespace OOCL.Image.Api.Controllers
 					kernelName = "benchmark00";
 				}
 				
-				string? kernelFile = this.openClService.Compiler?.KernelFiles.FirstOrDefault(kf => string.Equals(kf, kernelName, StringComparison.OrdinalIgnoreCase));
+				string? kernelFile = this.openClService.Compiler?.KernelFiles.FirstOrDefault(kf => kf.Contains(kernelName, StringComparison.OrdinalIgnoreCase));
 				if (string.IsNullOrWhiteSpace(kernelFile))
 				{
 					await this.logger.LogAsync($"[404] api/opencl/run-benchmark: Kernel '{kernelName}' not found", nameof(OpenClController));
