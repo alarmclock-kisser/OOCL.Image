@@ -137,9 +137,11 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task UploadAudioAsync(IBrowserFile browserFile)
         {
-            try
+            bool serverSidedData = await this.api.IsServersidedDataAsync();
+
+			try
             {
-                var dto = await this.api.UploadAudioAsync(browserFile, includeData: false);
+                var dto = await this.api.UploadAudioAsync(browserFile, !serverSidedData);
                 if (dto != null && dto.Info != null)
                 {
 					this.ClientAudioCollection.Insert(0, dto);
