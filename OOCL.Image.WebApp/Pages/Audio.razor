@@ -1,304 +1,132 @@
 ﻿@page "/audio"
+@using System.Linq
 @using Microsoft.AspNetCore.Components
-@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Components.Forms
-@using OOCL.Image.WebApp.Components.Layout
-@using Radzen
-@using Radzen.Blazor
-@using OOCL.Image.Shared
+@using Microsoft.AspNetCore.Components.Web
 @using OOCL.Image.Client
+@using OOCL.Image.Shared
+@using Radzen.Blazor
+@using Radzen
+@using Microsoft.JSInterop
+@using System.Globalization
 @inject ApiClient Api
 @inject WebAppConfig Config
 @inject NotificationService Notifications
 @inject IJSRuntime JS
 @inject DialogService DialogService
 
-<PageTitle>OOCL: Audio Processing</PageTitle>
+<PageTitle>Audio</PageTitle>
 
-@if (VM == null)
-{
-    <div style="padding:1rem;">Loading...</div>
-}
-else
-{
-    <!-- Waveform Box: Resizable (Bottom-Right Handle) -> Breite 100-4096px, Höhe 40-2048px.
-         Resize triggert Redraw der Waveform über VM.GenerateWaveformAsync(...) -->
-    <div class="waveform-wrapper"
-         @ref="waveformBoxRef"
-         style="position:relative;display:inline-block;
-                width:@waveformWidthPx;max-width:100%;
-                height:@waveformHeightPx;
-                border:1px solid #777;
-                background:#111;
-                user-select:none;
-                overflow:hidden;">
-        <img src="@VM.CurrentWaveformBase64"
-             alt="Waveform"
-             style="width:100%;height:100%;object-fit:contain;pointer-events:none;" />
+<link rel="stylesheet" href="~/css/site.css" />
 
-        <!-- Resize Handle -->
-        <div class="resize-handle"
-             style="position:absolute;right:0;bottom:0;width:14px;height:14px;
-                    background:linear-gradient(135deg,#666,#aaa);
-                    cursor:nwse-resize;border-top:1px solid #999;border-left:1px solid #999;"
-             @onpointerdown="BeginResize"></div>
+<RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+    <h3>Audio</h3>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+        <RadzenButton Icon="add" Text="Add sample" Click="@AddSample" />
+        <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
+        <span style="margin-left:auto;font-size:.9rem;color:gray;">@VM.AudioEntries.Count audio objects</span>
     </div>
 
-    <!-- Full width offset slider -->
-    <RadzenSlider @bind-Value="waveformSeekDecimal"
-                  TValue="decimal"
-                  Min="0m"
-                  Max="@(VM.CurrentAudioTotalSamples > 0 ? (decimal)VM.CurrentAudioTotalSamples : 1m)"
-                  Step="@(VM.CurrentAudioScrollStep.ToString())"
-                  Change="@(async (decimal _) => await SeekWaveformAsync())"
-                  Style="width:100%"
-                  Disabled="@(VM.CurrentAudioTotalSamples <= 0)" />
+    <div style="display:flex;gap:12px;">
+        <div style="flex:1 1 300px;">
+            <RadzenListBox Data="@VM.AudioEntries"
+                           @bind-Value="selectedId"
+                           ValueProperty="Id"
+                           Style="width:100%;min-height:200px;"
+                           Change="@OnSelectionChanged">
+                <Template Context="item">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem;">
+                        <div>
+                            <div style="font-weight:600;">@item.Name</div>
+                            <div style="font-size:.85rem;color:gray;">@item.Description</div>
+                        </div>
+                        <div style="display:flex;gap:.35rem;">
+                            <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
+                            <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
+                        </div>
+                    </div>
+                </Template>
+            </RadzenListBox>
+        </div>
 
-    <!-- Optional direkte Dimensionseingabe -->
-    <div style="display:flex;gap:.75rem;align-items:flex-end;margin-top:.35rem;flex-wrap:wrap;">
-        <RadzenNumeric @bind-Value="waveformWidth"
-                       TValue="int"
-                       Min="100" Max="4096" Step="50"
-                       Change="@(async (int _) => await ApplyWaveformResizeAsync())"
-                       Style="width:100px"
-                       Name="wfWidth"
-                       Placeholder="Breite" />
-        <RadzenNumeric @bind-Value="waveformHeight"
-                       TValue="int"
-                       Min="40" Max="2048" Step="20"
-                       Change="@(async (int _) => await ApplyWaveformResizeAsync())"
-                       Style="width:100px"
-                       Name="wfHeight"
-                       Placeholder="Höhe" />
-        <RadzenNumeric @bind-Value="waveformSamplesPerPixel"
-                       TValue="int"
-                       Min="1" Max="65536" Step="32"
-                       Change="@(async (int _) => await RedrawWaveformAsync())"
-                       Style="width:100px"
-                       Name="wfSPP"
-                       Placeholder="Samples/Pixel" />
-        <span style="font-size:.7rem;opacity:.7;">
-            Offset: @waveformSeek / @VM.CurrentAudioTotalSamples
-        </span>
+        <div style="flex:2 1 500px;">
+            <RadzenCard>
+                <h4>Selected audio</h4>
+                @if (selected != null)
+                {
+                    <div>
+                        <div><b>Name:</b> @selected.Name</div>
+                        <div><b>Duration:</b> @selected.DurationSeconds s</div>
+                        <div style="margin-top:.5rem;">
+                            <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
+                            <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div style="color:gray;">No selection</div>
+                }
+            </RadzenCard>
+        </div>
     </div>
-
-    <!-- Hauptbereich: I/O Panel + Trackliste -->
-    <div style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;">
-        <!-- I/O Panel -->
-        <RadzenCard Style="width:230px;min-width:230px;">
-            <ChildContent>
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span style="font-weight:600;">Audio I/O</span>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:.6rem;">
-                    <InputFile OnChange="UploadAudioAsync" multiple />
-                    <RadzenButton ButtonStyle="ButtonStyle.Secondary"
-                                  Disabled="@(VM.CurrentAudioId == Guid.Empty)"
-                                  Icon="download"
-                                  Text="Download"
-                                  Size="ButtonSize.Small"
-                                  Click="DownloadCurrentAsync" />
-                    <RadzenButton ButtonStyle="ButtonStyle.Warning"
-                                  Disabled="@(VM.CurrentAudioId == Guid.Empty)"
-                                  Icon="delete"
-                                  Text="Remove"
-                                  Size="ButtonSize.Small"
-                                  Click="RemoveCurrentAsync" />
-                    <RadzenButton ButtonStyle="ButtonStyle.Danger"
-                                  Disabled="@(VM.ClientAudioCollection.Count == 0)"
-                                  Icon="clear_all"
-                                  Text="Clear All"
-                                  Size="ButtonSize.Small"
-                                  Click="ClearAllAsync" />
-                    <RadzenNumeric @bind-Value="tracksLimitLocal"
-                                   TValue="int"
-                                   Min="0" Max="256" Step="1"
-                                   Change="@(async (int _) => await ApplyTracksLimitAsync())"
-                                   Style="width:100%;"
-                                   Name="tracksLimit"
-                                   Placeholder="Tracks Limit (0=∞)" />
-                    <RadzenButton ButtonStyle="ButtonStyle.Secondary"
-                                  Icon="refresh"
-                                  Text="Redraw"
-                                  Size="ButtonSize.Small"
-                                  Click="@(async () => await RedrawWaveformAsync())" />
-                </div>
-            </ChildContent>
-        </RadzenCard>
-
-        <!-- Trackliste -->
-        <RadzenCard Style="flex:1 1 350px;min-width:300px;">
-            <ChildContent>
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span style="font-weight:600;">Tracks (@VM.ClientAudioCollection.Count)</span>
-                    <span style="font-size:.65rem;opacity:.6;">Limit: @(tracksLimitLocal == 0 ? "∞" : tracksLimitLocal)</span>
-                </div>
-                <RadzenDataGrid Data="@VM.ClientAudioCollection"
-                                TItem="AudioObjDto"
-                                RowSelect="@(async (item) => await SelectTrackAsync(item))"
-                                Style="width:100%;font-size:.75rem;"
-                                AllowPaging="false"
-                                AllowSorting="true">
-                    <Columns>
-                        <RadzenDataGridColumn TItem="AudioObjDto" Title="Name" Property="Data.MetaName" />
-                        <RadzenDataGridColumn TItem="AudioObjDto" Title="Id" Property="Data.Id" Width="120px" />
-                        <RadzenDataGridColumn TItem="AudioObjDto" Title="Sek" Property="Data.DurationSeconds" />
-                        <RadzenDataGridColumn TItem="AudioObjDto" Title="MB" Property="Data.SizeInMb" />
-                    </Columns>
-                </RadzenDataGrid>
-            </ChildContent>
-        </RadzenCard>
-    </div>
-}
+</RadzenCard>
 
 @code {
     [CascadingParameter] public OpenClServiceInfo? LayoutOpenClInfo { get; set; }
     [CascadingParameter] public List<OpenClKernelInfo>? LayoutKernelInfos { get; set; }
 
-    private AudioViewModel? VM;
-
-    // Waveform UI State
-    private ElementReference waveformBoxRef;
-    private bool resizing = false;
-    private double startX;
-    private double startY;
-    private int startW;
-    private int startH;
-
-    private int waveformWidth = 800;
-    private int waveformHeight = 200;
-    private int waveformSamplesPerPixel = 128;
-    private long waveformSeek = 0;
-
-    private int tracksLimitLocal = 0;
-
-    private string waveformWidthPx => $"{waveformWidth}px";
-    private string waveformHeightPx => $"{waveformHeight}px";
-
-    // Bridge Property für Slider (RadzenSlider unterstützt long nicht direkt)
-    private decimal waveformSeekDecimal
-    {
-        get => waveformSeek;
-        set => waveformSeek = (long)value;
-    }
+    private AudioViewModel VM = null!;
+    private Guid selectedId = Guid.Empty;
+    private AudioViewModel.AudioEntry? selected;
 
     protected override async Task OnInitializedAsync()
     {
         VM = new AudioViewModel(Api, Config, Notifications, JS, DialogService);
-        tracksLimitLocal = Config.TracksLimit ?? 0;
 
         if (LayoutKernelInfos != null && LayoutKernelInfos.Count > 0)
         {
             VM.InjectPreloadedMeta(LayoutOpenClInfo, LayoutKernelInfos);
         }
+
         await VM.InitializeAsync();
-        await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
-    }
-
-    private async Task SelectTrackAsync(AudioObjDto dto)
-    {
-        if (VM == null || dto == null) return;
-        await VM.SelectTrackAsync(dto);
-        waveformSeek = 0;
-        await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
-        StateHasChanged();
-    }
-
-    private async Task ApplyWaveformResizeAsync()
-    {
-        waveformWidth = Math.Clamp(waveformWidth, 100, 4096);
-        waveformHeight = Math.Clamp(waveformHeight, 40, 2048);
-        if (VM != null)
+        if (VM.AudioEntries.Count > 0)
         {
-            await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
+            selectedId = VM.AudioEntries.FirstOrDefault()?.Id ?? Guid.Empty;
+            selected = VM.AudioEntries.FirstOrDefault();
         }
     }
 
-    private async Task RedrawWaveformAsync()
+    private async Task AddSample()
     {
-        if (VM != null)
+        VM.AddSampleAudio();
+        StateHasChanged();
+
+        await Task.CompletedTask;
+    }
+
+    private async Task Reload()
+    {
+        await VM.InitializeAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnSelectionChanged(object value)
+    {
+        if (value is Guid g)
         {
-            await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
+            selectedId = g;
+            selected = VM.AudioEntries.FirstOrDefault(a => a.Id == g);
+            StateHasChanged();
         }
+
+        await Task.CompletedTask;
     }
 
-    private async Task SeekWaveformAsync()
+    private async Task Remove(Guid id)
     {
-        if (VM == null) return;
-        waveformSeek = Math.Max(0, Math.Min(waveformSeek, VM.CurrentAudioTotalSamples));
-        await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
-    }
-
-    private async Task UploadAudioAsync(InputFileChangeEventArgs e)
-    {
-        if (VM == null || e.FileCount == 0) return;
-        foreach (var f in e.GetMultipleFiles())
-        {
-            await VM.UploadAudioAsync(f);
-        }
-        await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
+        await VM.RemoveAsync(id);
+        if (selectedId == id) { selectedId = Guid.Empty; selected = null; }
         StateHasChanged();
-    }
-
-    private async Task DownloadCurrentAsync()
-    {
-        if (VM == null) return;
-        await VM.DownloadCurrentAsync();
-    }
-
-    private async Task RemoveCurrentAsync()
-    {
-        if (VM == null) return;
-        await VM.RemoveCurrentAsync();
-        await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, waveformSeek);
-        StateHasChanged();
-    }
-
-    private async Task ClearAllAsync()
-    {
-        if (VM == null) return;
-        await VM.ClearAllAsync();
-        await VM.GenerateWaveformAsync(waveformWidth, waveformHeight, waveformSamplesPerPixel, 0);
-        waveformSeek = 0;
-        StateHasChanged();
-    }
-
-    private async Task ApplyTracksLimitAsync()
-    {
-        if (VM == null) return;
-        await VM.ApplyTracksLimitAsync(tracksLimitLocal);
-        StateHasChanged();
-    }
-
-    // --- Resize via Handle (reines Blazor ohne zusätzliches JS) ---
-    private void BeginResize(PointerEventArgs e)
-    {
-        resizing = true;
-        startX = e.ClientX;
-        startY = e.ClientY;
-        startW = waveformWidth;
-        startH = waveformHeight;
-        // Globale Events abonnieren
-        _ = JS.InvokeVoidAsync("document.addEventListener", "pointermove",
-            DotNetObjectReference.Create(this), "waveformPointerMove");
-        _ = JS.InvokeVoidAsync("document.addEventListener", "pointerup",
-            DotNetObjectReference.Create(this), "waveformPointerUp");
-    }
-
-    [JSInvokable("waveformPointerMove")]
-    public async Task OnPointerMove(double x, double y)
-    {
-        if (!resizing) return;
-        waveformWidth = Math.Clamp(startW + (int)(x - startX), 100, 4096);
-        waveformHeight = Math.Clamp(startH + (int)(y - startY), 40, 2048);
-        await InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable("waveformPointerUp")]
-    public async Task OnPointerUp()
-    {
-        if (!resizing) return;
-        resizing = false;
-        await ApplyWaveformResizeAsync();
     }
 }

@@ -68,6 +68,20 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task<IEnumerable<AudioObjInfo>> GetAudioListAsync(bool includeData = false)
+		{
+			await this.logger.LogAsync($"Called GetAudioListAsync()", nameof(ApiClient));
+			try
+			{
+				return (await this.internalClient.TracksAsync(includeData)).ToList();
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return [];
+			}
+		}
+
 		public async Task<ImageObjDto> UploadImageAsync(FileParameter file)
 		{
 			await this.logger.LogAsync($"Called UploadImageAsync()", nameof(ApiClient));

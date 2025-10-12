@@ -104,7 +104,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			if (this.KernelInfos.Count == 0)
 			{
-				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "IMG")).ToList(); } catch { }
+				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "IMG")).Where(ki => ki.NeedsImage == false).ToList(); } catch { }
 			}
 
 			if (this.openClServiceInfo?.Initialized != true)

@@ -2,7 +2,7 @@
 using OOCL.Image.Core;
 using OOCL.Image.Shared;
 
-namespace OOCL.Audio.Api.Controllers
+namespace OOCL.Image.Api.Controllers
 {
 	[ApiController]
 	[Route("api/[controller]")]

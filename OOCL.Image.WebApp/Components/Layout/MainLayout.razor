@@ -33,6 +33,14 @@
                     @if (navOpen) { <span>Explorer</span> }
                 </div>
             </NavLink>
+
+            <!-- Neu: Audio Tab -->
+            <NavLink href="/audio" class="nav-entry">
+                <div class="nav-link-inner @(IsActive("/audio") ? "active" : null)">
+                    <span class="icon">🎵</span>
+                    @if (navOpen) { <span>Audio</span> }
+                </div>
+            </NavLink>
         </div>
         <div style="padding:.5rem .7rem;font-size:.65rem;opacity:.55;">@DateTime.Now:HH:mm</div>
     </nav>

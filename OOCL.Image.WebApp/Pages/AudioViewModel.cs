@@ -1,283 +1,162 @@
-﻿using Microsoft.AspNetCore.Components.Forms;
+﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
+using OpenTK.Compute.OpenCL;
 using Radzen;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace OOCL.Image.WebApp.Pages
 {
-	public class AudioViewModel
-	{
-		private readonly ApiClient Api;
-		private readonly WebAppConfig Config;
-		private readonly NotificationService Notifications;
-		private readonly IJSRuntime JS;
-		private readonly DialogService DialogService;
+    public class AudioViewModel
+    {
+        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds);
 
-		public AudioViewModel(ApiClient api, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogService)
-		{
-			this.Api = api ?? throw new ArgumentNullException(nameof(api));
-			this.Config = config ?? throw new ArgumentNullException(nameof(config));
-			this.Notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
-			this.JS = js ?? throw new ArgumentNullException(nameof(js));
-			this.DialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
-			this.ClientAudioCollection = [];
-		}
+        private readonly ApiClient Api;
+        private readonly WebAppConfig config;
+        private readonly NotificationService notifications;
+        private readonly IJSRuntime js;
+        private readonly DialogService dialogs;
 
-		public OpenClServiceInfo openClServiceInfo { get; private set; } = new();
-		public List<OpenClKernelInfo> KernelInfos { get; private set; } = [];
-		public OpenClKernelInfo? SelectedKernel { get; private set; }
-		public string SelectedKernelName { get; private set; } = string.Empty;
-		public bool IsRendering => this.isRendering;
+        public WebApiConfig? ApiConfig { get; private set; }
+        public int MaxTracksToKeepNumeric { get; set; } = 0;
 
-		public string StatusSummary => this.openClServiceInfo?.Initialized == true
-			? $"{this.openClServiceInfo.DeviceName} [{this.openClServiceInfo.DeviceId}]"
-			: "Device not initialized";
+		public List<AudioEntry> AudioEntries => this.tracks.Select(t => new AudioEntry(t.Id, t.Name, t.Bpm, t.DurationSeconds)).ToList();
+		public List<AudioObjDto> ClientAudioCollection { get; private set; } = [];
+		public List<AudioObjInfo> tracks { get; private set; } = [];
 
-		public Guid CurrentAudioId { get; private set; }
-		public AudioObjData? CurrentAudioData { get; private set; }
-		public AudioObjInfo? CurrentAudioInfo => this.CurrentAudioData != null ? this.ClientAudioCollection.Where(d => d.Data.Id == this.CurrentAudioData.Id).Select(d => new AudioObjInfo(null)).FirstOrDefault() : null; // Placeholder
-		public Dictionary<Guid, string> AudioCache { get; } = [];
+		private OpenClServiceInfo? openClServiceInfo;
+        private List<OpenClKernelInfo> kernelInfos = [];
+        private List<string> kernelNames = [];
+		private List<OpenClDeviceInfo> devices = [];
 
-		public List<AudioObjDto> ClientAudioCollection { get; set; } = [];
-		public string DownloadFormat { get; set; } = "wav";
-		public int DownloadBits { get; set; } = 24;
+		public string selectedKernelName { get; set; }	= string.Empty;
 
-		private bool isServerSideData = false;
-		private bool isRendering = false;
-		private int clientTracksLimit = 0;
+		public AudioViewModel(ApiClient api, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogs)
+        {
+            this.Api = api;
+            this.config = config;
+            this.notifications = notifications;
+            this.js = js;
+            this.dialogs = dialogs;
+        }
 
-		// Waveform Anzeige (Base64 Data-URL)
-		public string CurrentWaveformBase64 { get; private set; } = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4Xw8AAoMBgVwFpI0AAAAASUVORK5CYII=";
-		public int WaveformWidth { get; set; } = 800;
-		public int WaveformHeight { get; set; } = 200;
-		public long WaveformOffset { get; set; } = 0;
-		public int WaveformSamplesPerPixel { get; set; } = 128;
-		public string GraphColor { get; set; } = "#000000";
-		public string BackgroundColor { get; set; } = "#FFFFFF";
-		public string WaveformImageType { get; set; } = "jpg";
-
-		// Fallback für Samples (für Seek / Anzeige)
-		public long CurrentAudioTotalSamples { get; private set; } = 0;
-		public int CurrentAudioScrollStep => this.CurrentAudioTotalSamples > 0 ? Math.Max(1, (int)(this.CurrentAudioTotalSamples / 1000)) : 0;
-
-		public void InjectPreloadedMeta(OpenClServiceInfo? info, List<OpenClKernelInfo>? kernels)
-		{
-			if (info != null)
+        public void InjectPreloadedMeta(OpenClServiceInfo? openClInfo, List<OpenClKernelInfo>? kernelInfos)
+        {
+			if (openClInfo != null)
 			{
-				this.openClServiceInfo = info;
+				this.openClServiceInfo = openClInfo;
 			}
-			if (kernels != null && kernels.Count > 0)
+
+			if (kernelInfos != null && kernelInfos.Count > 0)
 			{
-				this.KernelInfos = kernels.Where(k => k.NeedsImage == false && k.MediaType == "Audio").ToList();
-				this.SelectedKernelName = this.Config?.DefaultKernel ??
-					this.KernelInfos.FirstOrDefault(k => k.FunctionName.ToLower().Contains("timestretch"))?.FunctionName ??
-					this.KernelInfos.FirstOrDefault()?.FunctionName ??
-					string.Empty;
-				this.SelectedKernel = this.KernelInfos.FirstOrDefault(k => k.FunctionName == this.SelectedKernelName);
+				this.kernelInfos = kernelInfos.Where(k => k.MediaType == "AUD").ToList();
+				this.kernelNames = kernelInfos.Select(k => k.FunctionName).ToList();
 			}
 		}
 
-		public async Task InitializeAsync()
+        public async Task InitializeAsync()
+        {
+			this.ApiConfig = await this.Api.GetApiConfigAsync();
+
+			await this.LoadTracks();
+
+			if (this.openClServiceInfo == null || string.IsNullOrEmpty(this.openClServiceInfo.DeviceName))
+			{
+				await this.LoadOpenClStatus();
+			}
+
+			if (this.kernelInfos == null || this.kernelInfos.Count == 0)
+			{
+				await this.LoadKernels();
+			}
+
+			this.MaxTracksToKeepNumeric = this.config?.TracksLimit ?? 1;
+		}
+
+		private async Task LoadTracks()
 		{
-			this.clientTracksLimit = this.Config?.TracksLimit ?? 0;
-
-			if (this.KernelInfos.Count == 0)
+			if (await this.Api.IsServersidedDataAsync())
 			{
-				try { this.KernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "AUD")).ToList(); } catch { }
+				this.tracks = this.ClientAudioCollection.Select(dto => dto.Info).ToList();
 			}
-
-			if (this.openClServiceInfo?.Initialized != true)
+			else
 			{
-				try
-				{
-					this.openClServiceInfo = await this.Api.GetOpenClServiceInfoAsync();
-					if (!this.openClServiceInfo.Initialized)
-					{
-						await this.Api.InitializeOpenClIndexAsync(0);
-						this.openClServiceInfo = await this.Api.GetOpenClServiceInfoAsync();
-					}
-				}
-				catch { }
-
-				this.isServerSideData = await this.Api.IsServersidedDataAsync();
-			}
-
-			if (string.IsNullOrEmpty(this.SelectedKernelName))
-			{
-				this.SelectedKernelName = this.Config?.DefaultKernel ??
-					this.KernelInfos.FirstOrDefault(k => k.FunctionName.ToLower().Contains("timestretch"))?.FunctionName ??
-					this.KernelInfos.FirstOrDefault()?.FunctionName ??
-					string.Empty;
-			}
-			this.SelectedKernel = this.KernelInfos.FirstOrDefault(k => k.FunctionName == this.SelectedKernelName);
-
-			if (string.IsNullOrEmpty(this.SelectedKernelName))
-			{
-				this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "No kernel found", Duration = 3000 });
-				return;
+				this.tracks = (await this.Api.GetAudioListAsync(false)).ToList() ?? [];
 			}
 		}
 
-		public async Task EnsureDeviceInitializedAsync()
+		public async Task LoadDevices() => this.devices = (await this.Api.GetOpenClDevicesAsync()).ToList();
+
+		public async Task LoadOpenClStatus()
 		{
-			if (!this.openClServiceInfo.Initialized)
-			{
-				try
-				{
-					await this.Api.InitializeOpenClIndexAsync(0);
-					this.openClServiceInfo = await this.Api.GetOpenClServiceInfoAsync();
-				}
-				catch { }
-			}
+			this.openClServiceInfo = await this.Api.GetOpenClServiceInfoAsync();
 		}
 
-		public async Task SelectTrackAsync(AudioObjDto dto)
-		{
-			if (dto == null)
-			{
-				return;
-			}
-
-			this.CurrentAudioId = dto.Data.Id;
-			this.CurrentAudioData = dto.Data;
-			this.CurrentAudioTotalSamples = long.TryParse(dto.Data.Length.ToString(), out long len) ? len : 0;
-			await this.GenerateWaveformAsync(800, 200, 128, 0);
-		}
-
-		public async Task UploadAudioAsync(IBrowserFile file)
+		public async Task LoadKernels()
 		{
 			try
 			{
-				if (this.isServerSideData)
+				this.kernelInfos = (await this.Api.GetOpenClKernelsAsync(true, "AUD")).ToList();
+				this.kernelNames = this.kernelInfos.Select(k => k.FunctionName).ToList();
+				if (this.kernelNames.Count > 0)
 				{
-					// Upload & store in ClientAudioCollection
-					var dto = await this.Api.UploadAudioAsync(file, true);
-					if (dto != null && dto.Data != null)
+					// Try Select default kernel from config
+					if (!string.IsNullOrEmpty(this.config?.DefaultKernel) && this.kernelNames.Contains(this.config.DefaultKernel))
 					{
-						this.ClientAudioCollection.Add(dto);
-						this.TrimLimit();
-						this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Upload erfolgreich", Detail = $"{file.Name} ({file.Size / 1024} KB)", Duration = 3000 });
+						this.selectedKernelName = this.config.DefaultKernel;
 					}
-				}
-				else
-				{
-					// Upload & get raw data (limited size)
-					var dto = await this.Api.UploadAudioAsync(file, false);
-					if (dto?.Info != null)
+					else
 					{
-						this.ClientAudioCollection.Add(dto);
-						this.TrimLimit();
-						this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Upload erfolgreich", Detail = $"{file.Name} ({file.Size / 1024} KB)", Duration = 3000 });
-					}
-				}
-			}
-			catch (Exception ex)
-			{
-				this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Upload fehlgeschlagen", Detail = ex.Message, Duration = 4000 });
-			}
-		}
-
-		public async Task DownloadCurrentAsync()
-		{
-			if (this.CurrentAudioId == Guid.Empty)
-			{
-				return;
-			}
-
-			try
-			{
-				if (this.isServerSideData)
-				{
-					var resp = await this.Api.DownloadAudioDataAsync(this.ClientAudioCollection.FirstOrDefault(c => c.Data.Id == this.CurrentAudioId), this.DownloadFormat, this.DownloadBits);
-				}
-				else
-				{
-					var resp = await this.Api.DownloadAudioAsync(this.CurrentAudioId, "wav", 24);
-					if (resp != null && resp.Stream != null)
-					{
-						// Browser Download via JS (Stream->Base64) wäre hier nötig; ausgelassen für Kürze
-						this.Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Download gestartet", Duration = 2500 });
+						this.selectedKernelName = this.kernelNames[0];
 					}
 				}
 			}
 			catch { }
+			finally
+			{
+				await Task.Yield();
+			}
 		}
 
-		public async Task RemoveCurrentAsync()
-		{
-			if (this.CurrentAudioId == Guid.Empty)
+		public void AddSampleAudio()
+        {
+			
+        }
+
+        public async Task RemoveAsync(Guid id)
+        {
+            var info = this.tracks.FirstOrDefault(t => t.Id == id);
+			
+			if (await this.Api.IsServersidedDataAsync())
+			{
+				var dto = this.ClientAudioCollection.FirstOrDefault(d => d.Id == id);
+				if (dto != null)
+				{
+					this.ClientAudioCollection.Remove(dto);
+				}
+			}
+			else
+			{
+				await this.Api.RemoveAudioAsync(id);
+			}
+		}
+
+        public async Task PlayAsync(Guid id)
+        {
+            var info = this.tracks.FirstOrDefault(t => t.Id == id);
+			if (info == null)
 			{
 				return;
 			}
-
-			try
-			{
-				await this.Api.RemoveAudioAsync(this.CurrentAudioId);
-				this.ClientAudioCollection.RemoveAll(c => c.Data.Id == this.CurrentAudioId);
-				this.CurrentAudioId = Guid.Empty;
-				this.CurrentAudioData = null;
-				this.CurrentWaveformBase64 = TransparentPixel;
-				this.CurrentAudioTotalSamples = 0;
-			}
-			catch { }
 		}
 
-		public async Task ClearAllAsync()
-		{
-			try
-			{
-				await this.Api.ClearAudiosAsync();
-				this.ClientAudioCollection.Clear();
-				this.CurrentAudioId = Guid.Empty;
-				this.CurrentAudioData = null;
-				this.CurrentWaveformBase64 = TransparentPixel;
-				this.CurrentAudioTotalSamples = 0;
-			}
-			catch { }
-		}
-
-		public async Task ApplyTracksLimitAsync(int limit)
-		{
-			this.clientTracksLimit = limit < 0 ? 0 : limit;
-			this.TrimLimit();
-			await Task.CompletedTask;
-		}
-
-		private void TrimLimit()
-		{
-			if (this.clientTracksLimit > 0 && this.ClientAudioCollection.Count > this.clientTracksLimit)
-			{
-				int removeCount = this.ClientAudioCollection.Count - this.clientTracksLimit;
-
-				// Sort by CreatedAt ascending to remove oldest first
-				this.ClientAudioCollection = this.ClientAudioCollection.OrderBy(c => c.Info.CreatedAt).ToList();
-
-				this.ClientAudioCollection.RemoveRange(0, removeCount);
-			}
-		}
-
-		public async Task GenerateWaveformAsync(int width, int height, int samplesPerPixel, long offset)
-		{
-			// Platzhalter: Ohne Rohdaten / API für Waveform wird ein Dummy-Bild verwendet.
-			// Hier könnte später eine API für /audio/{id}/waveform genutzt werden.
-			this.CurrentWaveformBase64 = await this.Api.GetWaveformBase64Async(this.isServerSideData ? this.CurrentAudioId : null, this.isServerSideData ? this.ClientAudioCollection.Where(t => t.Id == this.CurrentAudioId).FirstOrDefault() : null, this.WaveformWidth, this.WaveformHeight, this.WaveformOffset, this.WaveformSamplesPerPixel, this.GraphColor, this.BackgroundColor, this.WaveformImageType);
-		}
-
-		public async Task<(List<string> app, List<string> api)> LoadLogsAsync()
-		{
-			List<string> app = [];
-			List<string> api = [];
-			try { api = (await this.Api.GetApiLogsAsync()).ToList(); } catch { }
-			try { app = (await this.Api.GetWebAppLogs(this.Config.MaxLogLines ?? 500)).ToList(); } catch { }
-			return (app, api);
-		}
-
-		private string PlaceholderWave(int w, int h)
-		{
-			return TransparentPixel;
-		}
-
-		private const string TransparentPixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4Xw8AAoMBgVwFpI0AAAAASUVORK5CYII=";
-	}
+        public async Task ProcessAsync(Guid id)
+        {
+            
+        }
+    }
 }

@@ -141,7 +141,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (kernelInfos != null && kernelInfos.Count > 0)
 			{
-				this.kernelInfos = kernelInfos;
+				this.kernelInfos = kernelInfos.Where(k => k.MediaType == "IMG").ToList();
 				this.kernelNames = kernelInfos.Select(k => k.FunctionName).ToList();
 			}
 		}

@@ -24,16 +24,16 @@ namespace OOCL.Image.Shared
 
 		public override string ToString()
 		{
-			return $"{Width} x {Height}";
+			return $"{this.Width} x {this.Height}";
 		}
 
 		public float AspectRatio()
 		{
-			if (Height == 0)
+			if (this.Height == 0)
 			{
 				return 0.0f;
 			}
-			return (float)Width / (float)Height;
+			return (float) this.Width / (float) this.Height;
 		}
 	}
 
