@@ -108,16 +108,6 @@ else
                                 <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
                                 <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
                                 <RadzenButton Size="ButtonSize.Small" Icon="download" Click="@(async () => await OnDownloadClick())" />
-                                <RadzenDropDown TValue="string"
-                                    Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
-                                    @bind-Value="VM.DownloadAudioType"
-                                    Style="width:120px;"
-                                    Placeholder="Format" />
-                                <RadzenDropDown TValue="int"
-                                    Data="@( GetBitsForSelected() )"
-                                    @bind-Value="VM.DownloadAudioBits"
-                                    Style="width:140px;"
-                                    Placeholder="Bits" />
                             </div>
                         </div>
                     </Template>
@@ -136,6 +126,17 @@ else
                             <div style="margin-top:.5rem;">
                                 <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
                                 <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />
+                                <RadzenDropDown TValue="string"
+                                                Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
+                                                Value="@VM.DownloadAudioType"
+                                                Change="@((args) => OnFormatChanged(args as string))"
+                                                Style="width:120px;"
+                                                Placeholder="Format" />
+                                <RadzenDropDown TValue="int"
+                                                Data="@( GetBitsForSelected() )"
+                                                @bind-Value="VM.DownloadAudioBits"
+                                                Style="width:140px;"
+                                                Placeholder="Bits" />
                             </div>
                         </div>
                     }
@@ -238,11 +239,11 @@ else
         return VM.AvailableDownloadFormats.TryGetValue(VM.DownloadAudioType, out var arr) ? arr : Enumerable.Empty<int>();
     }
 
-    private void OnFormatChanged(string value)
+    private void OnFormatChanged(string? value)
     {
         if (VM == null) return;
-        VM.DownloadAudioType = value;
-        if (VM.AvailableDownloadFormats != null && VM.AvailableDownloadFormats.TryGetValue(value, out var bits) && bits.Length > 0)
+        VM.DownloadAudioType = value ?? string.Empty;
+        if (VM.AvailableDownloadFormats != null && VM.AvailableDownloadFormats.TryGetValue(value ?? "", out var bits) && bits.Length > 0)
         {
             VM.DownloadAudioBits = bits[0];
         }
