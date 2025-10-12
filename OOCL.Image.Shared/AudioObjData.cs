@@ -196,7 +196,11 @@ namespace OOCL.Image.Shared
 						for (int i = 0; i + 2 < data.Length; i += 3)
 						{
 							int v = data[i] | (data[i + 1] << 8) | (data[i + 2] << 16);
-							if ((v & 0x800000) != 0) v |= unchecked((int) 0xFF000000);
+							if ((v & 0x800000) != 0)
+							{
+								v |= unchecked((int) 0xFF000000);
+							}
+
 							floats[idx++] = v / 8388607f;
 						}
 						break;
@@ -283,7 +287,11 @@ namespace OOCL.Image.Shared
 		/// </summary>
 		private static async Task<byte[]> DecompressGzipAsync(byte[] gzipped)
 		{
-			if (gzipped == null || gzipped.Length == 0) return Array.Empty<byte>();
+			if (gzipped == null || gzipped.Length == 0)
+			{
+				return Array.Empty<byte>();
+			}
+
 			try
 			{
 				using var inMs = new MemoryStream(gzipped);
@@ -309,14 +317,21 @@ namespace OOCL.Image.Shared
 			int exponent = (mulaw & 0x70) >> 4;
 			int mantissa = mulaw & 0x0F;
 			int sample = ((mantissa << 3) + 0x84) << exponent;
-			if (sign != 0) sample = -sample;
+			if (sign != 0)
+			{
+				sample = -sample;
+			}
+
 			return (short) sample;
 		}
 
 		private async Task<byte[]> GetBytesGzip(int? compromiseBits = null, bool useMuLaw = false, CompressionLevel level = CompressionLevel.Fastest)
 		{
 			var raw = this.Samples;
-			if (raw == null || raw.Length == 0) return [];
+			if (raw == null || raw.Length == 0)
+			{
+				return [];
+			}
 
 			using var ms = new MemoryStream();
 			using (var gz = new GZipStream(ms, level, leaveOpen: true))
@@ -346,12 +361,18 @@ namespace OOCL.Image.Shared
 			}
 
 			pcm += BIAS;
-			if (pcm > CLIP) pcm = CLIP;
+			if (pcm > CLIP)
+			{
+				pcm = CLIP;
+			}
 
 			// Segments
 			int[] seg_end = { 0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF };
 			int seg = 0;
-			while (seg < 8 && pcm > seg_end[seg]) seg++;
+			while (seg < 8 && pcm > seg_end[seg])
+			{
+				seg++;
+			}
 
 			int aval = seg << 4 | ((pcm >> (seg + 3)) & 0xF);
 			byte uval = (byte) (aval ^ mask);

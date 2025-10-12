@@ -82,9 +82,16 @@ namespace OOCL.Image.WebApp.Pages
 
         public void InjectPreloadedMeta(OpenClServiceInfo? openClInfo, List<OpenClKernelInfo>? kernels)
         {
-            if (openClInfo != null) this.openClServiceInfo = openClInfo;
-            if (kernels != null) this.kernelInfos = kernels;
-        }
+            if (openClInfo != null)
+			{
+				this.openClServiceInfo = openClInfo;
+			}
+
+			if (kernels != null)
+			{
+                this.kernelInfos = kernels.Where(ki => ki.MediaType == "AUD").ToList();
+			}
+		}
 
         public async Task InitializeAsync()
         {
@@ -191,16 +198,30 @@ namespace OOCL.Image.WebApp.Pages
             const int MaxChunk = 65536;
 
             int intValue = (int)value;
-            if (intValue < MinChunk) intValue = MinChunk;
-            if (intValue > MaxChunk) intValue = MaxChunk;
+            if (intValue < MinChunk)
+			{
+				intValue = MinChunk;
+			}
 
-            // Aktuellen ChunkSize in gültigen Bereich bringen
-            int current = this.ChunkSize;
-            if (current < MinChunk) current = MinChunk;
-            if (current > MaxChunk) current = MaxChunk;
+			if (intValue > MaxChunk)
+			{
+				intValue = MaxChunk;
+			}
 
-            // Sicherstellen, dass current eine Zweierpotenz ist (ansonsten auf nächstkleinere potenz setzen)
-            if (!IsPowerOfTwo(current))
+			// Aktuellen ChunkSize in gültigen Bereich bringen
+			int current = this.ChunkSize;
+            if (current < MinChunk)
+			{
+				current = MinChunk;
+			}
+
+			if (current > MaxChunk)
+			{
+				current = MaxChunk;
+			}
+
+			// Sicherstellen, dass current eine Zweierpotenz ist (ansonsten auf nächstkleinere potenz setzen)
+			if (!IsPowerOfTwo(current))
             {
                 current = PrevPowerOfTwo(current);
             }
@@ -209,8 +230,12 @@ namespace OOCL.Image.WebApp.Pages
             if (intValue > current)
             {
                 long next = (long)current * 2;
-                if (next > MaxChunk) next = MaxChunk;
-                this.ChunkSize = (int)next;
+                if (next > MaxChunk)
+				{
+					next = MaxChunk;
+				}
+
+				this.ChunkSize = (int)next;
                 return;
             }
 
@@ -218,8 +243,12 @@ namespace OOCL.Image.WebApp.Pages
             if (intValue < current)
             {
                 int prev = current / 2;
-                if (prev < MinChunk) prev = MinChunk;
-                this.ChunkSize = prev;
+                if (prev < MinChunk)
+				{
+					prev = MinChunk;
+				}
+
+				this.ChunkSize = prev;
                 return;
             }
 
@@ -230,10 +259,18 @@ namespace OOCL.Image.WebApp.Pages
 
         private static int PrevPowerOfTwo(int x)
         {
-            if (x < 1) return 1;
-            int p = 1;
-            while ((p << 1) <= x) p <<= 1;
-            return p;
+            if (x < 1)
+			{
+				return 1;
+			}
+
+			int p = 1;
+            while ((p << 1) <= x)
+			{
+				p <<= 1;
+			}
+
+			return p;
         }
 
         public async Task EnforceTracksLimit()
@@ -254,9 +291,12 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task OnUploadAndStretch(InputFileChangeEventArgs e)
         {
-            if (e == null) return;
+            if (e == null)
+			{
+				return;
+			}
 
-            string execTimes = "";
+			string execTimes = "";
             Stopwatch sw = Stopwatch.StartNew();
 
             this.IsUploading = true;
@@ -331,14 +371,24 @@ namespace OOCL.Image.WebApp.Pages
                 {
 					await this.api.RemoveAudioAsync(id);
 					var e = this.AudioEntries.FirstOrDefault(a => a.Id == id);
-					if (e != null) this.AudioEntries.Remove(e);
+					if (e != null)
+					{
+						this.AudioEntries.Remove(e);
+					}
 				}
                 else
                 {
                     var e = this.ClientAudioCollection.FirstOrDefault(a => a.Info.Id == id);
-                    if (e != null) this.ClientAudioCollection.Remove(e);
-                    var e2 = this.AudioEntries.FirstOrDefault(a => a.Id == id);
-                    if (e2 != null) this.AudioEntries.Remove(e2);
+                    if (e != null)
+					{
+						this.ClientAudioCollection.Remove(e);
+					}
+
+					var e2 = this.AudioEntries.FirstOrDefault(a => a.Id == id);
+                    if (e2 != null)
+					{
+						this.AudioEntries.Remove(e2);
+					}
 				}
 			}
             catch (Exception ex)
@@ -389,8 +439,12 @@ namespace OOCL.Image.WebApp.Pages
         public async Task DownloadAudio(Guid id)
         {
             // Ensure only one download at a time by setting flag
-            if (this.IsDownloading) return;
-            this.IsDownloading = true;
+            if (this.IsDownloading)
+			{
+				return;
+			}
+
+			this.IsDownloading = true;
             try
             {
                 AudioObjDto? dto = null;

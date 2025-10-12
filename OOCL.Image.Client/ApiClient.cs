@@ -734,7 +734,11 @@ namespace OOCL.Image.Client
 		// Helpers
 		public async Task<bool> GetBrowserSettingDarkMode(IJSRuntime js)
 		{
-			if (js == null) return false;
+			if (js == null)
+			{
+				return false;
+			}
+
 			try
 			{
 				await this.logger.LogAsync("Querying browser prefers-color-scheme", nameof(ApiClient));

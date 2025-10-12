@@ -628,7 +628,9 @@ namespace OOCL.Image.Api.Controllers
 			{
 				var trimmed = baseQuery.TrimStart('?');
 				if (!string.IsNullOrEmpty(trimmed))
+				{
 					fragments.Add(trimmed);
+				}
 			}
 
 			// Append argNames/argValues as repeated query params (paired)

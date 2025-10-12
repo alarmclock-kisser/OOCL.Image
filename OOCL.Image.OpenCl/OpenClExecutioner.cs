@@ -1856,22 +1856,35 @@ namespace OOCL.Image.OpenCl
 		private static bool TryParseDoubleFlexible(string? raw, out double result)
 		{
 			result = 0d;
-			if (string.IsNullOrWhiteSpace(raw)) return false;
+			if (string.IsNullOrWhiteSpace(raw))
+			{
+				return false;
+			}
+
 			raw = raw.Trim();
 			// 1) Invariant (Punkt)
 			if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result))
+			{
 				return true;
+			}
 			// 2) Ersetze Komma durch Punkt
 			var alt = raw.Replace(',', '.');
 			if (double.TryParse(alt, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result))
+			{
 				return true;
+			}
 			// 3) Aktuelle Kultur (falls caller lokal formatiert)
 			if (double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out result))
+			{
 				return true;
+			}
 			// 4) Entferne umschließende Quotes und nochmal versuchen
 			var unq = raw.Trim('\'', '"');
 			if (double.TryParse(unq, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result))
+			{
 				return true;
+			}
+
 			return false;
 		}
 	}
