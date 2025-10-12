@@ -152,7 +152,7 @@ namespace OOCL.Image.WebApp.Pages
 
             if (tracksLimit.HasValue && tracksLimit.Value > 0)
             {
-                if (serverSidedData)
+                if (!serverSidedData)
                 {
                     this.ClientAudioCollection = this.ClientAudioCollection.OrderByDescending(t => t.Info.CreatedAt).Take(tracksLimit.Value).ToList();
 				}
@@ -182,6 +182,10 @@ namespace OOCL.Image.WebApp.Pages
             {
 				this.notifications?.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = $"Upload failed: {ex.Message}" });
             }
+            finally
+            {
+                await this.EnforceTracksLimit();
+			}
         }
 
         public async Task RemoveAsync(Guid id)
