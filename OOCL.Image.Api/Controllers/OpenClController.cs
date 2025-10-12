@@ -416,7 +416,7 @@ namespace OOCL.Image.Api.Controllers
 				float newFactor = (float) (initialBpm / request.SpeedFactor);
 				await audio.UpdateBpm(newFactor);
 
-				var dto = new AudioObjDto(audio, request.OptionalAudio != null);
+				var dto = new AudioObjDto(audio, request.OptionalAudio != null, request.OptionalAudio?.Data.CompresionBits ?? 0, request.OptionalAudio?.Data.UsedMusLaw ?? false);
 				dto.Info.Name = (request.OptionalAudio?.Info.Name ?? dto.Info.Name) + "_stretched_" + request.SpeedFactor.ToString("F5");
 
 				await this.logger.LogAsync($"Stretched audio successfully. {dto.Data.Length} bytes will be transferred. (Actual: {audio.Length} f32, {audio.Bpm:F3} BPM now)", nameof(OpenClController));

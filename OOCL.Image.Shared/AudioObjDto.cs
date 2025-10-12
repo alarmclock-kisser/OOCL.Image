@@ -17,7 +17,7 @@ namespace OOCL.Image.Shared
 		}
 
 
-		public AudioObjDto(AudioObj? obj, bool includeData = false)
+		public AudioObjDto(AudioObj? obj, bool includeData = false, int compressionBits = 0, bool musLaw = true)
 		{
 			if (obj == null)
 			{
@@ -29,7 +29,7 @@ namespace OOCL.Image.Shared
 			
 			if (includeData)
 			{
-				this.Data = new AudioObjData(obj);
+				this.Data = new AudioObjData(obj, compressionBits, musLaw);
 			}
 		}
 

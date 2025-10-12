@@ -44,6 +44,9 @@ namespace OOCL.Image.WebApp
 			var cleanupPreviousLogs = builder.Configuration.GetValue("CleanupPreviousLogs", false);
 			var timeoutSec = builder.Configuration.GetValue<int>("TimeoutSeconds", 300);
 			timeoutSec = Math.Clamp(timeoutSec, 30, 600);
+			var defaultCompressionBits = builder.Configuration.GetValue<int>("DefaultCompressionBits", 0);
+			defaultCompressionBits = Math.Clamp(defaultCompressionBits, 0, 32);
+			var useCompressionMusLaw = builder.Configuration.GetValue<bool>("UseCompressionMuLaw");
 
 			builder.Services.AddSingleton(new ApiUrlConfig(effectiveBase));
 
@@ -62,7 +65,9 @@ namespace OOCL.Image.WebApp
 				defaultUnit,
 				maxLogLines,
 				cleanupPreviousLogs,
-				timeoutSec
+				timeoutSec,
+				defaultCompressionBits,
+				useCompressionMusLaw
 			);
 			builder.Services.AddSingleton(config);
 

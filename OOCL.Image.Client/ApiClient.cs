@@ -19,12 +19,21 @@ namespace OOCL.Image.Client
 		private bool? isServerSidedDataCache = null;
 		private WebApiConfig? apiConfigCache = null;
 
-		public ApiClient(RollingFileLogger? logger, HttpClient httpClient)
+		public ApiClient(RollingFileLogger? logger, HttpClient httpClient, bool initializeApiConfig = true)
 		{
 			this.logger = logger ?? new RollingFileLogger(1024, false, null, "log_client_");
 			this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 			this.baseUrl = httpClient.BaseAddress?.ToString().TrimEnd('/') ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.");
 			this.internalClient = new InternalClient(this.baseUrl, this.httpClient);
+
+			if (initializeApiConfig)
+			{
+				_ = Task.Run(async () =>
+				{
+					this.apiConfigCache = await this.GetApiConfigAsync(true);
+					this.isServerSidedDataCache = this.apiConfigCache?.ServerSidedData ?? false;
+				});
+			}
 		}
 
 
@@ -152,7 +161,7 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<AudioObjDto> UploadAudioAsync(FileParameter file, bool includeData = false)
+		public async Task<AudioObjDto> UploadAudioAsync(FileParameter file, bool includeData = false, int compressionBits = 0, bool useMusLaw = true)
 		{
 			await this.logger.LogAsync($"Called UploadAudioAsync(FileParameter file: {(file != null)}, bool includeData: {includeData.ToString()})", nameof(ApiClient));
 			if (file == null || file.Data == null || string.IsNullOrWhiteSpace(file.FileName))
@@ -161,7 +170,7 @@ namespace OOCL.Image.Client
 			}
 			try
 			{
-				return await this.internalClient.LoadAudioAsync(includeData, file);
+				return await this.internalClient.LoadAudioAsync(includeData, compressionBits, useMusLaw, file);
 			}
 			catch (Exception ex)
 			{
@@ -170,7 +179,7 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<AudioObjDto> UploadAudioAsync(IBrowserFile browserFile, bool includeData = false)
+		public async Task<AudioObjDto> UploadAudioAsync(IBrowserFile browserFile, bool includeData = false, int compressionBits = 0, bool useMusLaw = true)
 		{
 			await this.logger.LogAsync($"Called UploadAudioAsync(IBrowserFile browserFile: {(browserFile != null)}, bool includeData: {includeData.ToString()})", nameof(ApiClient));
 			if (browserFile == null)

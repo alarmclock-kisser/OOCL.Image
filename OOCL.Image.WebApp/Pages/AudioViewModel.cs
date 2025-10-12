@@ -258,7 +258,7 @@ namespace OOCL.Image.WebApp.Pages
 
             bool isServerSidedData = await this.api.IsServersidedDataAsync();
 
-			var dto = await this.api.UploadAudioAsync(fileParameter, !isServerSidedData);
+			var dto = await this.api.UploadAudioAsync(fileParameter, !isServerSidedData, this.config.DefaultCompressionBits, this.config.UseCompressionMusLaw);
 
             if (dto != null && dto.Info != null)
             {

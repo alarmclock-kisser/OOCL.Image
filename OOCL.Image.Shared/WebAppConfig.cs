@@ -23,6 +23,9 @@ namespace OOCL.Image.Shared
 		public bool? CleanupPreviousLogFiles { get; set; } = null;
 		public int MaxTimeoutSeconds { get; set; } = 30;
 
+		public int DefaultCompressionBits { get; set; } = 0;
+		public bool UseCompressionMusLaw { get; set; } = true;
+
 		public WebAppConfig()
 		{
 
@@ -31,7 +34,7 @@ namespace OOCL.Image.Shared
 		[JsonConstructor]
 		public WebAppConfig(string environment, string applicationName = "Blazor WebApp using dotnet8",
 			bool? defaultDarkMode = null, string? preferredDevice = null, int? imagesLimit = null, int? tracksLimit = null, string? apiBaseUrl = null, string? kestelEndpointHttp = null, string? kestelEndpointHttps = null,
-			string? defaultKernel = null, string? defaultFormat = null, string? defaultUnit = null, int? maxLogLines = null, bool? cleanupPrevLogs = null, int timeoutSeconds = 30)
+			string? defaultKernel = null, string? defaultFormat = null, string? defaultUnit = null, int? maxLogLines = null, bool? cleanupPrevLogs = null, int timeoutSeconds = 30, int compressionBits = 0, bool musLaw = true)
 		{
 			this.Environment = environment;
 			this.ApplicationName = applicationName;
@@ -48,6 +51,8 @@ namespace OOCL.Image.Shared
 			this.MaxLogLines = maxLogLines;
 			this.CleanupPreviousLogFiles = cleanupPrevLogs;
 			this.MaxTimeoutSeconds = timeoutSeconds;
+			this.DefaultCompressionBits = compressionBits;
+			this.UseCompressionMusLaw = musLaw;
 		}
 	}
 }

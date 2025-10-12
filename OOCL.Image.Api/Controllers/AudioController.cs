@@ -72,7 +72,7 @@ namespace OOCL.Image.Api.Controllers
 		[ProducesResponseType(typeof(AudioObjDto), 200)]
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<AudioObjDto>> AudioLoadAsync(IFormFile file, [FromQuery] bool includeData = false)
+		public async Task<ActionResult<AudioObjDto>> AudioLoadAsync(IFormFile file, [FromQuery] bool includeData = false, [FromQuery] int compressionBits = 0, [FromQuery] bool useMusLaw = true)
 		{
 			if (file == null)
 			{
@@ -123,7 +123,7 @@ namespace OOCL.Image.Api.Controllers
 				var info = await Task.Run(async () =>
 				{
 					var audioObj = await this.audioCollection.ImportAsync(destPath);
-					return new AudioObjDto(audioObj, includeData);
+					return new AudioObjDto(audioObj, includeData,compressionBits, useMusLaw);
 				});
 
 				// Optionally delete the temp file after loading

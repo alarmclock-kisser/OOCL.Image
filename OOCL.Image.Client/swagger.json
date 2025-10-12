@@ -160,6 +160,23 @@
               "type": "boolean",
               "default": false
             }
+          },
+          {
+            "name": "compressionBits",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "useMusLaw",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           }
         ],
         "requestBody": {
@@ -5565,21 +5582,21 @@
             "type": "string",
             "format": "uuid"
           },
-          "samples": {
-            "type": "string",
-            "format": "byte",
-            "nullable": true
-          },
           "length": {
             "type": "string",
             "nullable": true
           },
-          "chunks": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "byte"
-            },
+          "sizeInMb": {
+            "type": "number",
+            "format": "double"
+          },
+          "compresionBits": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "usedMusLaw": {
+            "type": "boolean",
             "nullable": true
           },
           "chunkSize": {
@@ -5590,9 +5607,18 @@
             "type": "number",
             "format": "float"
           },
-          "sizeInMb": {
-            "type": "number",
-            "format": "double"
+          "samples": {
+            "type": "string",
+            "format": "byte",
+            "nullable": true
+          },
+          "chunks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "byte"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -5707,6 +5733,11 @@
             "type": "integer",
             "format": "int32"
           },
+          "lastExecutionTime": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "metrics": {
             "type": "array",
             "items": {
@@ -5746,6 +5777,10 @@
           "speedFactor": {
             "type": "number",
             "format": "double"
+          },
+          "initialBpm": {
+            "type": "number",
+            "format": "float"
           },
           "optionalAudio": {
             "$ref": "#/components/schemas/AudioObjDto"
