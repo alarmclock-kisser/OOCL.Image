@@ -95,7 +95,7 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task InitializeAsync()
         {
-            this.apiConfig = await api.GetApiConfigAsync();
+            this.apiConfig = await this.api.GetApiConfigAsync();
 
             // Lade Track-Infos vom ApiClient falls möglich, sonst belasse Placeholders
             try
@@ -301,7 +301,7 @@ namespace OOCL.Image.WebApp.Pages
 
             this.IsUploading = true;
 			var file = e.File;
-			var apiConfig = await api.GetApiConfigAsync();
+			var apiConfig = await this.api.GetApiConfigAsync();
 			using var stream = file.OpenReadStream((long) (apiConfig.MaxUploadSizeMb ?? 32) * 1024 * 1024);
 			using var ms = new MemoryStream();
 			await stream.CopyToAsync(ms);
@@ -337,7 +337,7 @@ namespace OOCL.Image.WebApp.Pages
             this.IsUploading = true;
 
 			var file = e.File;
-			var apiConfig = await api.GetApiConfigAsync();
+			var apiConfig = await this.api.GetApiConfigAsync();
 			using var stream = file.OpenReadStream((long) (apiConfig.MaxUploadSizeMb ?? 32) * 1024 * 1024);
 			using var ms = new MemoryStream();
 			await stream.CopyToAsync(ms);

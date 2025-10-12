@@ -53,18 +53,23 @@ else
                 <h4>CuFFT Test</h4>
                 <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                     <div>
-                        <label>FFT Size (power of two)</label>
+                        <label>FFT Size (32 - 256M)</label>
                         <RadzenNumeric TValue="int" @bind-Value="VM.FftSize" Change="@( (int v) => { VM.SetFftSize(v); StateHasChanged(); } )" Min="32" Max="65536" Style="width:160px;" />
                     </div>
 
                     <div>
-                        <label>Batch Size</label>
+                        <label>Batch Size (1 - 1024)</label>
                         <RadzenNumeric TValue="int" @bind-Value="VM.BatchSize" Min="1" Max="1024" Style="width:120px;" />
                     </div>
 
                     <div style="display:flex;align-items:center;gap:6px;">
                         <label>Do inverse afterwards</label>
                         <RadzenCheckBox @bind-Value="VM.DoInverseAfterwards" />
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <label>Serialize as base64</label>
+                        <RadzenCheckBox @bind-Value="VM.SerializeAsBase64" />
                     </div>
 
                     <div style="min-width:220px;">
@@ -74,7 +79,24 @@ else
 
                     <div style="min-width:360px;">
                         <label>Preferred Client API Url</label>
-                        <input style="width:100%;padding:.4rem;" @bind="VM.PreferredClientApiUrl" />
+                        <div style="display:flex;gap:.5rem;align-items:center;">
+                            <input style="flex:1 1 auto;padding:.4rem;" @bind="VM.PreferredClientApiUrl" />
+
+                            @if (!string.IsNullOrWhiteSpace(VM.PreferredClientSwaggerLink))
+                            {
+                                <a href="@VM.PreferredClientSwaggerLink"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   title="@VM.PreferredClientSwaggerLink"
+                                   style="color:var(--link-color, #0a66c2);text-decoration:underline;margin-left:.25rem;">
+                                    Swagger
+                                </a>
+                            }
+                            else
+                            {
+                                <span style="color:gray;margin-left:.25rem;">Swagger</span>
+                            }
+                        </div>
                     </div>
 
                     <div style="display:flex;gap:8px;align-items:center;">

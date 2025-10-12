@@ -4,7 +4,6 @@ using OOCL.Image.Shared;
 using Radzen;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Globalization;
 
 namespace OOCL.Image.WebApp.Pages
 {
@@ -17,6 +16,7 @@ namespace OOCL.Image.WebApp.Pages
 		private readonly DialogService dialogs;
 
 		private WebApiConfig? apiConfig = null;
+		private DateTime lastConfigFetch = DateTime.MinValue;
 
 		public List<string> RegisteredWorkers { get; set; } = new();
 
@@ -33,6 +33,11 @@ namespace OOCL.Image.WebApp.Pages
 		public string PreferredClientApiUrl { get; set; } = string.Empty;
 		public double ExecutionTimeMs { get; private set; } = 0.0;
 		public string PreviewText { get; private set; } = string.Empty;
+		public bool SerializeAsBase64 { get; set; } = true;
+		public bool RequestTestMode { get; set; } = true;
+		public string? PreferredClientSwaggerLink => this.RegisteredWorkers != null && this.RegisteredWorkers.Count > 0
+			? (this.PreferredClientApiUrl.TrimEnd('/') + ":32141/api/swagger")
+			: null;
 
 		private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
@@ -47,7 +52,7 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task InitializeAsync()
 		{
-			this.apiConfig = await api.GetApiConfigAsync();
+			this.apiConfig = await this.api.GetApiConfigAsync();
 
 			var workers = (await this.api.RefreshCudaWorkersAsync());
 			this.RegisteredWorkers = workers.ToList();
@@ -102,15 +107,26 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
-		private static int SnapToPowerOfTwo(int v)
+		private static int SnapToPowerOfTwo(int value)
 		{
-			if (v < 32) return 32;
-			if (v > 65536) return 65536;
-			// round to nearest power of two
+			const int MinFftSize = 32;
+			const int MaxFftSize = 256 * 1024 * 1024;
+
+			int v = value;
+			if (v < MinFftSize) v = MinFftSize;
+			if (v > MaxFftSize) v = MaxFftSize;
+
+			if (IsPowerOfTwo(v)) return v;
+			return PrevPowerOfTwo(v);
+		}
+
+		private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
+
+		private static int PrevPowerOfTwo(int x)
+		{
+			if (x < 1) return 1;
 			int p = 1;
-			while (p < v) p <<= 1;
-			// if overshoot, pick previous
-			if (p > v) p >>= 1;
+			while ((p << 1) <= x) p <<= 1;
 			return p;
 		}
 
@@ -119,48 +135,118 @@ namespace OOCL.Image.WebApp.Pages
 			this.FftSize = SnapToPowerOfTwo(v);
 		}
 
+		public async Task RequestFftTestAsync()
+		{
+			try
+			{
+				// Use ACTUAL ApiClient Accessor pls
+				var result = await this.api.TestRequestCuFftAsync(this.FftSize, this.BatchSize, this.DoInverseAfterwards, this.PreferredClientApiUrl, this.ForceDeviceName);
+				if (result == null)
+				{
+					return;
+				}
+
+				this.ExecutionTimeMs = result.ExecutionTimeMs ?? 0.0;
+				this.PreviewText = JsonSerializer.Serialize(result, this.jsonOptions);
+				
+				// If more than 48 elements, split and short middle entries with [...]
+				this.PreviewText = result.DataChunks.FirstOrDefault()?.Length <= 48 ? string.Join(", ", result.DataChunks) : string.Join(", ", result.DataChunks.Select(c => c.Take(47) + ", ..."));
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+				this.PreviewText = "Error (test-request-cufft): " + ex.Message;
+			}
+		}
+
 		public async Task RunCufftTestAsync()
 		{
 			this.ExecutionTimeMs = 0;
 			this.PreviewText = string.Empty;
 
-			int size = SnapToPowerOfTwo(this.FftSize);
-			int batches = Math.Clamp(this.BatchSize, 1, 1024);
+			this.FftSize = SnapToPowerOfTwo(this.FftSize);
+			this.BatchSize = Math.Clamp(this.BatchSize, 1, 1024);
 
-			// generate data
-			var inputFloatChunks = new List<float[]>();
-			for (int b = 0; b < batches; b++)
+			if (this.RequestTestMode)
 			{
-				var chunk = new float[size];
+				await this.RequestFftTestAsync();
+			}
+
+			// generate synthetic test data
+			var inputFloatChunks = new List<float[]>();
+			for (int b = 0; b < this.BatchSize; b++)
+			{
+				var chunk = new float[this.FftSize];
 				double freq1 = 5.0 + b;
 				double freq2 = 20.0 + b * 0.3;
 				double freq3 = 50.0 + b * 0.1;
-				for (int i = 0; i < size; i++)
+
+				for (int i = 0; i < this.FftSize; i++)
 				{
-					double t = (double)i / (double)size;
-					chunk[i] = (float)(Math.Sin(2.0 * Math.PI * freq1 * t) + 0.5 * Math.Sin(2.0 * Math.PI * freq2 * t) + 0.25 * Math.Sin(2.0 * Math.PI * freq3 * t));
+					double t = (double) i / (double) this.FftSize;
+					chunk[i] = (float) (
+						Math.Sin(2.0 * Math.PI * freq1 * t) +
+						0.5 * Math.Sin(2.0 * Math.PI * freq2 * t) +
+						0.25 * Math.Sin(2.0 * Math.PI * freq3 * t)
+					);
 				}
+
 				inputFloatChunks.Add(chunk);
 			}
 
-			// convert to object[][] where each row is an object[] of floats
-			IEnumerable<object[]> dataChunksAsObjects = inputFloatChunks.Select(ch => ch.Cast<object>().ToArray()).ToArray();
-
 			try
 			{
-				var fftResult = await this.api.RequestCuFfftAsync(dataChunksAsObjects, false, string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.ForceDeviceName, string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.PreferredClientApiUrl);
+				IEnumerable<object[]>? dataChunksAsObjects = null;
+				IEnumerable<string>? dataChunksAsBase64 = null;
+
+				if (this.SerializeAsBase64)
+				{
+					// serialize each float[] into a Base64 string (raw bytes)
+					dataChunksAsBase64 = inputFloatChunks.Select(chunk =>
+					{
+						byte[] bytes = new byte[chunk.Length * sizeof(float)];
+						Buffer.BlockCopy(chunk, 0, bytes, 0, bytes.Length);
+						return Convert.ToBase64String(bytes);
+					}).ToList();
+				}
+				else
+				{
+					// normal JSON-safe float[] → object[] conversion
+					dataChunksAsObjects = inputFloatChunks
+						.Select(ch => ch.Cast<object>().ToArray())
+						.ToArray();
+				}
+
+				// call FFT API
+				var fftResult = await this.api.RequestCuFfftAsync(
+					dataChunksAsObjects,
+					dataChunksAsBase64,
+					inverse: this.DoInverseAfterwards,
+					forceDeviceName: string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.ForceDeviceName,
+					preferredClientApiUrl: string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.PreferredClientApiUrl
+				);
+
 				this.ExecutionTimeMs = fftResult?.ExecutionTimeMs ?? 0.0;
 				this.PreviewText = JsonSerializer.Serialize(fftResult, this.jsonOptions);
-				if (this.PreviewText.Length > 48) this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+				if (this.PreviewText.Length > 48)
+					this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
 
-				if (this.DoInverseAfterwards && fftResult != null && fftResult.DataChunks != null)
+				// optionally do inverse FFT
+				if (this.DoInverseAfterwards && fftResult?.DataChunks != null)
 				{
-					// forward result.DataChunks back as inverse request
-					IEnumerable<object[]> complexChunks = fftResult.DataChunks.Cast<object[]>().ToArray();
-					var ifftResult = await this.api.RequestCuFfftAsync(complexChunks, true, string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.ForceDeviceName, string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.PreferredClientApiUrl);
+					var complexChunks = fftResult.DataChunks.Cast<object[]>().ToArray();
+
+					var ifftResult = await this.api.RequestCuFfftAsync(
+						complexChunks,
+						inverse: this.DoInverseAfterwards,
+						forceDeviceName: string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.ForceDeviceName,
+						preferredClientApiUrl: string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.PreferredClientApiUrl
+					);
+
 					this.ExecutionTimeMs = ifftResult?.ExecutionTimeMs ?? this.ExecutionTimeMs;
 					this.PreviewText = JsonSerializer.Serialize(ifftResult, this.jsonOptions);
-					if (this.PreviewText.Length > 48) this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+					if (this.PreviewText.Length > 48)
+						this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
 				}
 			}
 			catch (Exception ex)
@@ -168,5 +254,6 @@ namespace OOCL.Image.WebApp.Pages
 				this.PreviewText = "Error: " + ex.Message;
 			}
 		}
+
 	}
 }

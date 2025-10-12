@@ -778,23 +778,23 @@ namespace OOCL.Image.Client
 		}
 
 
-		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>dataChunks, bool inverse, string? forceDeviceName = null, string? preferredClientApiUrl = null)
+		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>? dataChunks = null, IEnumerable<string>? dataChunksBase64 = null, bool inverse = false, string? forceDeviceName = null, string? preferredClientApiUrl = null)
 		{
 			try
 			{
-				Type? dataFormType = dataChunks.FirstOrDefault()?.FirstOrDefault()?.GetType();
+				Type? dataFormType = dataChunks?.FirstOrDefault()?.FirstOrDefault()?.GetType();
 
 				CuFftRequest req = new()
 				{
-					DataChunks = dataChunks,
+					DataBase64Chunks = dataChunksBase64 ?? [],
+					DataChunks = dataChunks ?? [],
 					Inverse = inverse,
-					Batches = dataChunks.Count(),
-					Size = dataChunks.FirstOrDefault()?.Length ?? 0,
-					DataLength = dataChunks.Select(c => c.Length).Sum().ToString(),
+					Batches = dataChunks?.Count() ?? dataChunksBase64?.Count() ?? -1,
+					Size = dataChunks?.FirstOrDefault()?.Length ?? 0,
+					DataLength = dataChunks?.Select(c => c.Length).Sum().ToString() ?? "-1",
 					DataForm = dataFormType == typeof(float) ? "f" : "c",
 					DataType = dataFormType?.GetType().Name ?? "float",
-					DeviceName = forceDeviceName,
-					DataBase64Chunks = []
+					DeviceName = forceDeviceName
 				};
 
 				var result = await this.internalClient.RequestCufftAsync(preferredClientApiUrl ?? "", req);
