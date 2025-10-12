@@ -408,6 +408,8 @@ namespace OOCL.Image.Api.Controllers
 				}
 
 				var dto = new AudioObjDto(result, request.OptionalAudio != null);
+
+				await this.logger.LogAsync($"Stretched audio successfully. {dto.Data.Length} bytes will be transferred. (Actual: {audio.Length} -> {result.Length} f32, {audio.Bpm} -> {audio.Bpm:F3} BPM now)", nameof(OpenClController));
 				return this.Ok(dto);
 			}
 			catch (Exception ex)
@@ -523,7 +525,7 @@ namespace OOCL.Image.Api.Controllers
 				}
 
 				var audio = await this.audioCollection.ImportAsync(tempFilePath);
-				if (audio == null)
+				if (audio == null || audio.Data.LongLength <= 0)
 				{
 					await this.logger.LogAsync("[400] api/opencl/timestretch-audio-file: Failed to import uploaded audio file", nameof(OpenClController));
 					return this.BadRequest(new ProblemDetails { Status = 400, Title = "Failed to import uploaded audio file" });
@@ -532,7 +534,7 @@ namespace OOCL.Image.Api.Controllers
 				var result = await this.openClService.TimeStretch(audio, kernelName, "", speedFactor, chunkSize, overlap);
 				if (result == null || result.Data.LongLength <= 0)
 				{
-					await this.logger.LogAsync("[500] api/opencl/timestretch-audio-file: OpenCL returned null or empty audio", nameof(OpenClController));
+					await this.logger.LogAsync("[500] api/opencl/timestretch-audio-file: OpenCL returned null or empty audio. " + $"Data length is {result?.Data.Length}", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed", Detail = result?.ErrorMessage ?? "No result object returned." });
 				}
 
