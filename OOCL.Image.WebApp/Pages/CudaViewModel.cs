@@ -41,6 +41,9 @@ namespace OOCL.Image.WebApp.Pages
 			? (this.PreferredClientApiUrl.TrimEnd('/') + ":32141/api/swagger")
 			: null;
 
+		public List<string> WorkerApiLog { get; private set; } = [];
+		public bool HasWorkerApi => this.workerApi != null;
+
 		private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
 		public CudaViewModel(ApiClient api, WorkerApiClient? workerApi, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogs)
@@ -73,6 +76,17 @@ namespace OOCL.Image.WebApp.Pages
 				await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
 				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
 			}
+		}
+
+		public async Task RefreshWorkerApiLog()
+		{
+			if (this.workerApi == null)
+			{
+				this.WorkerApiLog = [];
+				return;
+			}
+
+			this.WorkerApiLog = (await this.workerApi.GetWorkerLogAsync(256)).ToList();
 		}
 
 		public async Task CreateWorkerApiClient(string workerUrl)
