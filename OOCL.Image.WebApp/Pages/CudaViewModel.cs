@@ -1,4 +1,5 @@
-﻿using Microsoft.JSInterop;
+﻿using alarmclockkisser.KernelDtos;
+using Microsoft.JSInterop;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
 using Radzen;
@@ -10,6 +11,7 @@ namespace OOCL.Image.WebApp.Pages
 	public class CudaViewModel
 	{
 		private readonly ApiClient api;
+		private WorkerApiClient? workerApi;
 		private readonly WebAppConfig config;
 		private readonly NotificationService notifications;
 		private readonly IJSRuntime js;
@@ -41,9 +43,10 @@ namespace OOCL.Image.WebApp.Pages
 
 		private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
-		public CudaViewModel(ApiClient api, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogs)
+		public CudaViewModel(ApiClient api, WorkerApiClient? workerApi, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogs)
 		{
 			this.api = api ?? throw new ArgumentNullException(nameof(api));
+			this.workerApi = workerApi ?? null;
 			this.config = config ?? throw new ArgumentNullException(nameof(config));
 			this.notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
 			this.js = js ?? throw new ArgumentNullException(nameof(js));
@@ -59,6 +62,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			// default preferred client api url to first available
 			this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
+			await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
 		}
 
 		public async Task RefreshRegisteredWorkersAsync()
@@ -66,7 +70,32 @@ namespace OOCL.Image.WebApp.Pages
 			this.RegisteredWorkers = (await this.api.RefreshCudaWorkersAsync()).ToList();
 			if (string.IsNullOrWhiteSpace(this.PreferredClientApiUrl))
 			{
+				await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
 				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
+			}
+		}
+
+		public async Task CreateWorkerApiClient(string workerUrl)
+		{
+			try
+			{
+				var httpClient = new HttpClient
+				{
+					BaseAddress = new Uri(workerUrl)
+				};
+				this.workerApi = new WorkerApiClient(new RollingFileLogger(1024, false, null, "log_workerclient_"), httpClient, initializeApiConfig: true);
+
+				var status = await this.workerApi.GetStatusAsync();
+			}
+			catch (Exception ex)
+			{
+				this.notifications.Notify(new NotificationMessage
+				{
+					Summary = "Error",
+					Detail = "Creating WorkerApiClient failed: " + ex.Message,
+					Duration = 8000,
+					Severity = NotificationSeverity.Error
+				});
 			}
 		}
 
@@ -188,8 +217,117 @@ namespace OOCL.Image.WebApp.Pages
 			return p;
 		}
 
+		public async Task ExecuteTestFftWorkerApiAsync()
+		{
+			if (this.workerApi == null)
+			{
+				return;
+			}
+
+			bool inverted = false;
+			try
+			{
+				// create sine wave batch * fftsize → input data
+				var inputData = new List<float[]>()
+				{
+					Enumerable.Range(0, this.FftSize).Select(i => (float) Math.Sin(2.0 * Math.PI * 5.0 * (double) i / (double) this.FftSize)).ToArray()
+				};
+
+				for (int b = 1; b < this.BatchSize; b++)
+				{
+					double freq = 5.0 + b * 3.0;
+					var chunk = Enumerable.Range(0, this.FftSize).Select(i => (float) Math.Sin(2.0 * Math.PI * freq * (double) i / (double) this.FftSize)).ToArray();
+					inputData.Add(chunk);
+				}
+				IEnumerable<object[]> dataChunksAsObjects = inputData
+					.Select(ch => ch.Cast<object>().ToArray())
+					.ToArray();
+
+
+				var request = new CuFftRequest()
+				{
+					DataChunks = dataChunksAsObjects,
+					DataForm = "f",
+					DataType = "float",
+					DataLength = (this.FftSize * this.BatchSize).ToString(),
+					DataBase64Chunks = [],
+					Size = this.FftSize,
+					Batches = this.BatchSize,
+					Inverse = inverted,
+					DeviceName = string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.apiConfig?.PreferredDevice,
+				};
+				var result = await this.workerApi.RequestCuFftAsync(request);
+				if (result == null)
+				{
+					return;
+				}
+
+				inverted = result.DataForm == "c";
+				this.ExecutionTimeMs = result.ExecutionTimeMs ?? 0.0;
+				this.PreviewText = JsonSerializer.Serialize(result, this.jsonOptions);
+				if (this.PreviewText.Length > 48)
+					this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+
+				// If more than 48 elements, split and short middle entries with [...]
+				this.PreviewText = result.DataChunks.FirstOrDefault()?.Length <= 48 ? string.Join(", ", result.DataChunks) : string.Join(", ", result.DataChunks.Select(c => c.Take(47) + ", ..."));
+
+				this.notifications.Notify(new NotificationMessage
+				{
+					Summary = "Success",
+					Detail = $"Test FFT executed on worker (inverse: {inverted}).",
+					Duration = 4000,
+					Severity = NotificationSeverity.Success
+				});
+
+				// If DoInverseAfterwards is set, do it now
+				if (this.DoInverseAfterwards && inverted)
+				{
+					request = new CuFftRequest()
+					{
+						DataChunks = result.DataChunks,
+						DataForm = "c",
+						DataType = "float",
+						DataLength = (this.FftSize * this.BatchSize).ToString(),
+						DataBase64Chunks = [],
+						Size = this.FftSize,
+						Batches = this.BatchSize,
+						Inverse = true,
+						DeviceName = string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.apiConfig?.PreferredDevice,
+					};
+					
+					var ifftResult = await this.workerApi.RequestCuFftAsync(request);
+					if (ifftResult == null)
+					{
+						return;
+					}
+
+					this.ExecutionTimeMs = ifftResult.ExecutionTimeMs ?? this.ExecutionTimeMs;
+					this.PreviewText = JsonSerializer.Serialize(ifftResult, this.jsonOptions);
+					if (this.PreviewText.Length > 48)
+						this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+					this.notifications.Notify(new NotificationMessage
+					{
+						Summary = "Success",
+						Detail = $"Test inverse FFT executed on worker.",
+						Duration = 4000,
+						Severity = NotificationSeverity.Success
+					});
+				}
+
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+			}
+		}
+
 		public async Task RequestFftTestAsync()
 		{
+			if (this.workerApi != null)
+			{
+				await this.ExecuteTestFftWorkerApiAsync();
+				return;
+			}
 			try
 			{
 				// Use ACTUAL ApiClient Accessor pls
@@ -214,6 +352,12 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task RunCufftTestAsync()
 		{
+			if (this.workerApi != null)
+			{
+				await this.ExecuteTestFftWorkerApiAsync();
+				return;
+			}
+
 			this.ExecutionTimeMs = 0;
 			this.PreviewText = string.Empty;
 

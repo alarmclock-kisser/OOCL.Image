@@ -8,13 +8,17 @@
 
   <ItemGroup>
     <None Remove="swagger.json" />
+    <None Remove="swaggerworker.json" />
   </ItemGroup>
 
   <ItemGroup>
     <OpenApiReference Include="swagger.json" Options="/generateDtoTypes:false /additionalNamespaceUsages:OOCL.Image.Shared,alarmclockkisser.KernelDtos,OpenTK.Mathematics,Microsoft.AspNetCore.Mvc" ClassName="InternalClient" />
+    <OpenApiReference Include="swaggerworker.json" ClassName="internalWorkerClient" Options="/generateDtoTypes:false /additionalNamespaceUsages:OOCL.Image.Shared,OOCL.Image.Shared.CUDA,ManagedCuda.VectorTypes,alarmclockkisser.KernelDtos,Microsoft.AspNetCore.Mvc " />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ManagedCuda-12" Version="12.8.60" />
+    <PackageReference Include="ManagedCuda-CUFFT" Version="12.8.60" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.0" />
     <PackageReference Include="Microsoft.Extensions.ApiDescription.Client" Version="7.0.2">

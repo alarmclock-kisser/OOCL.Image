@@ -136,7 +136,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        VM = new CudaViewModel(Api, Config, Notifications, JS, DialogService);
+        VM = new CudaViewModel(Api, null, Config, Notifications, JS, DialogService);
 
         await VM.InitializeAsync();
     }

@@ -6,6 +6,8 @@ using OOCL.Image.Shared;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -679,7 +681,7 @@ namespace OOCL.Image.Api.Controllers
 		[ProducesResponseType(typeof(ProblemDetails), 400)]
 		[ProducesResponseType(typeof(ProblemDetails), 404)]
 		[ProducesResponseType(typeof(ProblemDetails), 500)]
-		public async Task<ActionResult<CuFftResult>> TestRequestCufft([FromQuery] int? fftSize = 4096, [FromQuery] int? batchSize = 8,  [FromQuery] bool? doInverseAfterwards = false, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
+		public async Task<ActionResult<CuFftResult>> TestRequestCufft([FromQuery] int? fftSize = 4096, [FromQuery] int? batchSize = 8,  [FromQuery] bool asBase64 = false,  [FromQuery] bool? doInverseAfterwards = false, [FromQuery] string? specificClientApiUrl = null, [FromQuery] string? specificCudaDevice = null)
 		{
 			var worker = await this.ResolveOrRegisterWorker(specificClientApiUrl);
 			if (worker == null)
@@ -717,15 +719,17 @@ namespace OOCL.Image.Api.Controllers
 				inputFloatChunks.Add(chunk);
 			}
 
-			// Build CuFftRequest (use object[] for DataChunks so serialization creates nested arrays)
-			var dataChunksAsObjects = inputFloatChunks.Select(c => (object)c).ToArray();
+			// KORREKT: jede float[] -> object[] (Element-weise)
+			var dataChunksAsObjects = inputFloatChunks
+    .Select(ch => ch.Cast<object>().ToArray())
+    .ToArray(); // object[][]
 
 			var req = new CuFftRequest
 			{
 				Size = size,
 				Batches = batches,
-				DataChunks = (IEnumerable<Object[]>) dataChunksAsObjects,
-				DataLength = inputFloatChunks.Select(ch => ch.Length).Sum().ToString(),
+				DataChunks = dataChunksAsObjects, // IEnumerable<object[]>
+				DataLength = inputFloatChunks.Sum(ch => ch.Length).ToString(),
 				DataForm = "f",
 				DataType = "float",
 				DeviceName = specificCudaDevice ?? string.Empty,
@@ -752,11 +756,11 @@ namespace OOCL.Image.Api.Controllers
 				{
 					var inverseReq = new CuFftRequest
 					{
-						Size = fftResult.DataChunks.FirstOrDefault()?.Length ?? 0,
-						Batches = fftResult.DataChunks.Count(),
-						DataChunks = (IEnumerable<Object[]>) (fftResult.DataChunks?.ToArray() ?? Array.Empty<object>()),
+						Size = fftResult.DataChunks?.FirstOrDefault()?.Length ?? 0,
+						Batches = fftResult.DataChunks?.Count() ?? 0,
+						DataChunks = (fftResult.DataChunks ?? Enumerable.Empty<object[]>()).Select(row => row.ToArray()).ToArray(),
 						DataLength = fftResult.DataLength ?? string.Empty,
-						DataForm = "c", // result from FFT is complex
+						DataForm = "c",
 						DataType = "complex",
 						DeviceName = specificCudaDevice ?? string.Empty,
 						Inverse = true
