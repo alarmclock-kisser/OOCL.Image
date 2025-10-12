@@ -107,88 +107,86 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
-		private int lastFftSize = 4096;
-
 		public void SetFftSize(decimal value)
-        {
-            const int MinFfiSize = 32;
-            const int MaxFftSize = 65536;
+		{
+			const int MinChunk = 128;
+			const int MaxChunk = 65536;
 
-            int intValue = (int)value;
-            if (intValue < MinFfiSize)
+			int intValue = (int) value;
+			if (intValue < MinChunk)
 			{
-				intValue = MinFfiSize;
+				intValue = MinChunk;
 			}
 
-			if (intValue > MaxFftSize)
+			if (intValue > MaxChunk)
 			{
-				intValue = MaxFftSize;
+				intValue = MaxChunk;
 			}
 
 			// Aktuellen ChunkSize in gültigen Bereich bringen
 			int current = this.FftSize;
-            if (current < MinFfiSize)
+			if (current < MinChunk)
 			{
-				current = MinFfiSize;
+				current = MinChunk;
 			}
 
-			if (current > MaxFftSize)
+			if (current > MaxChunk)
 			{
-				current = MaxFftSize;
+				current = MaxChunk;
 			}
 
 			// Sicherstellen, dass current eine Zweierpotenz ist (ansonsten auf nächstkleinere potenz setzen)
 			if (!IsPowerOfTwo(current))
-            {
-                current = PrevPowerOfTwo(current);
-            }
+			{
+				current = PrevPowerOfTwo(current);
+			}
 
-            // Benutzer hat inkrementiert -> eine Stufe (Faktor 2) nach oben
-            if (intValue > current)
-            {
-                long next = (long)current * 2;
-                if (next > MaxFftSize)
+			// Benutzer hat inkrementiert -> eine Stufe (Faktor 2) nach oben
+			if (intValue > current)
+			{
+				long next = (long) current * 2;
+				if (next > MaxChunk)
 				{
-					next = MaxFftSize;
+					next = MaxChunk;
 				}
 
-				this.FftSize = (int)next;
-                return;
-            }
+				this.FftSize = (int) next;
+				return;
+			}
 
-            // Benutzer hat dekrementiert -> eine Stufe (Faktor 2) nach unten
-            if (intValue < current)
-            {
-                int prev = current / 2;
-                if (prev < MinFfiSize)
+			// Benutzer hat dekrementiert -> eine Stufe (Faktor 2) nach unten
+			if (intValue < current)
+			{
+				int prev = current / 2;
+				if (prev < MinChunk)
 				{
-					prev = MinFfiSize;
+					prev = MinChunk;
 				}
 
 				this.FftSize = prev;
-                return;
-            }
+				return;
+			}
 
-            // unverändert: nichts tun
-        }
+			// unverändert: nichts tun
+		}
 
-        private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
+		private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
 
-        private static int PrevPowerOfTwo(int x)
-        {
-            if (x < 1)
+		private static int PrevPowerOfTwo(int x)
+		{
+			if (x < 1)
 			{
 				return 1;
 			}
 
 			int p = 1;
-            while ((p << 1) <= x)
+			while ((p << 1) <= x)
 			{
 				p <<= 1;
 			}
 
 			return p;
-        }
+		}
 
 		public async Task RequestFftTestAsync()
 		{
