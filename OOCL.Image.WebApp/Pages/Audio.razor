@@ -17,7 +17,7 @@
 
 <PageTitle>Audio</PageTitle>
 
-<link rel="stylesheet" href="~/css/site.css" />
+<link rel="stylesheet" href="/css/site.css" />
 
 <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
     <h3>Audio</h3>
@@ -25,7 +25,7 @@
         <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
         <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
         <span style="margin-left:auto;font-size:.9rem;color:gray;">
-            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Tracks loaded {VM.DataLocation}")
+            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Tracks loaded ON CLIENT")
         </span>
     </div>
 
