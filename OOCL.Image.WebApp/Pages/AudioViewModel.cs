@@ -17,7 +17,7 @@ namespace OOCL.Image.WebApp.Pages
     /// </summary>
     public class AudioViewModel
     {
-        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds, long BytesCount, double lastExecTime);
+        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds, long BytesCount, double LastExecTime);
 
         private readonly ApiClient api;
         private readonly WebAppConfig config;
