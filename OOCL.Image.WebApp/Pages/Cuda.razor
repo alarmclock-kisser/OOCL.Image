@@ -1,0 +1,51 @@
+﻿@page "/cuda"
+@using System.Linq
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using OOCL.Image.Client
+@using OOCL.Image.Shared
+@using Radzen.Blazor
+@using Radzen
+@using Microsoft.JSInterop
+@using System.Globalization
+@inject ApiClient Api
+@inject WebAppConfig Config
+@inject NotificationService Notifications
+@inject IJSRuntime JS
+@inject DialogService DialogService
+
+<PageTitle>OOCL.work: Audio</PageTitle>
+
+<link rel="stylesheet" href="/css/site.css" />
+
+@if (VM == null)
+{
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        <h3>api.OOCL.work: CUDA Worker</h3>
+        <div>Loading...</div>
+    </RadzenCard>
+}
+else
+{
+
+
+
+
+}
+
+
+@code
+{
+    private CudaViewModel VM = null!;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        VM = new CudaViewModel(Api, Config, Notifications, JS, DialogService);
+
+        await VM.InitializeAsync();
+    }
+
+
+}

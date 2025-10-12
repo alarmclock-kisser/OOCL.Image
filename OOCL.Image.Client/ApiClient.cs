@@ -1,6 +1,8 @@
-﻿using Microsoft.AspNetCore.Components.Forms;
+﻿using alarmclockkisser.KernelDtos;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using OOCL.Image.Shared;
+using OpenTK.Mathematics;
 using System.Data;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -729,6 +731,81 @@ namespace OOCL.Image.Client
 			}
 		}
 
+
+		public async Task<string> RegisterCudaWorkerUrlAsync(string workerUrl)
+		{
+			try
+			{
+				var result = await this.internalClient.RegisterAsync(workerUrl);
+				string resultString = result ? "Successfully registered!" : "Failed to register CudaWorker (" + workerUrl + ")";
+				return resultString;
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return "Error registering CudaWorker (" + workerUrl + ")";
+			}
+		}
+
+		public async Task<string> UnregisterCudaWorkerAsync(string workerUrl)
+		{
+			try
+			{
+				var result = await this.internalClient.UnregisterAsync(workerUrl);
+				string resultString = result ? "Successfully un-registered!" : "Failed to register CudaWorker (" + workerUrl + ")";
+				return resultString;
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return "Error un-registering CudaWorker (" + workerUrl + ")";
+			}
+		}
+
+		public async Task<IEnumerable<string>> RefreshCudaWorkersAsync()
+		{
+			try
+			{
+				var results = await this.internalClient.RefreshWorkersAsync();
+				return results ?? Enumerable.Empty<string>();
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return [];
+			}
+		}
+
+
+		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>dataChunks, bool inverse, string? forceDeviceName = null)
+		{
+			try
+			{
+				Type? dataFormType = dataChunks.FirstOrDefault()?.FirstOrDefault()?.GetType();
+
+				CuFftRequest req = new()
+				{
+					DataChunks = dataChunks,
+					Inverse = inverse,
+					Batches = dataChunks.Count(),
+					Size = dataChunks.FirstOrDefault()?.Length ?? 0,
+					DataLength = dataChunks.Select(c => c.Length).Sum().ToString(),
+					DataForm = dataFormType == typeof(float) ? "f" : "c",
+					DataType = dataFormType?.GetType().Name ?? "float",
+					DeviceName = forceDeviceName,
+					DataBase64Chunks = []
+				};
+
+				//var result = await this.internalClient.cuda
+
+				return new();
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return new CuFftResult();
+			}
+		}
 
 
 		// Helpers

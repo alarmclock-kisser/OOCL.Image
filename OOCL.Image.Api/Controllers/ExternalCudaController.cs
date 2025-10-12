@@ -293,6 +293,99 @@ namespace OOCL.Image.Api.Controllers
 		}
 
 
+		// ---------- Cuda (I-) FFT
+		[HttpPost("request-cufft")]
+		[ProducesResponseType(typeof(CuFftResult), 200)]
+		[ProducesResponseType(typeof(ProblemDetails), 400)]
+		[ProducesResponseType(typeof(ProblemDetails), 404)]
+		[ProducesResponseType(typeof(ProblemDetails), 500)]
+		public async Task<ActionResult<CuFftResult>> RequestCufftDtoAsync([FromBody] CuFftRequest request, [FromQuery] string? preferredClientApiUrl = null)
+		{
+			var worker = await this.ResolveOrRegisterWorker(preferredClientApiUrl);
+			if (worker == null)
+			{
+				return this.NotFound(this.Problem("No CUDA worker registered", "No reachable CUDA worker.", 404));
+			}
+
+			if (request == null || request.Size <= 0 || request.Batches <= 0 || request.DataChunks == null || !request.DataChunks.Any())
+			{
+				return this.BadRequest(new ProblemDetails
+				{
+					Title = "Invalid request",
+					Detail = "Request must include valid Size, Batches, and non-empty DataChunks.",
+					Status = 400
+				});
+			}
+
+			// Serialize request once (we will create StringContent per attempt)
+			string jsonBody;
+			try
+			{
+				jsonBody = JsonSerializer.Serialize(request);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogAsync($"Failed to serialize CuFftRequest: {ex.Message}", nameof(ExternalCudaController));
+				return this.StatusCode(500, this.Problem("Serialization failed", ex.Message, 500));
+			}
+
+			var candidateUrls = BuildCandidateUrls(NormalizeWorkerBase(worker), "api/Cuda/request-cufft", "Cuda/request-cufft");
+
+			using var http = this.CreateInsecureHttpClient();
+			foreach (var baseUrl in candidateUrls)
+			{
+				var finalUrl = baseUrl;
+				await this.logger.LogAsync($"Forwarding CUFFT request -> {finalUrl}", nameof(ExternalCudaController));
+				try
+				{
+					using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+					var resp = await http.PostAsync(finalUrl, content);
+					if (resp.StatusCode == HttpStatusCode.NotFound)
+					{
+						// Try next candidate variant
+						continue;
+					}
+
+					var body = await resp.Content.ReadAsStringAsync();
+
+					if (resp.IsSuccessStatusCode)
+					{
+						CuFftResult? result = null;
+						try
+						{
+							result = JsonSerializer.Deserialize<CuFftResult>(body, new JsonSerializerOptions
+							{
+								PropertyNameCaseInsensitive = true
+							});
+						}
+						catch (Exception ex)
+						{
+							await this.logger.LogAsync($"Deserialize fail {finalUrl}: {ex.Message}", nameof(ExternalCudaController));
+							return this.StatusCode(500, this.Problem("Deserialization failed", ex.Message, 500));
+						}
+
+						if (result == null || result.DataChunks == null || !result.DataChunks.Any())
+						{
+							return this.StatusCode(500, this.Problem("Processing failed", "CUFFT worker returned empty or invalid result.", 500));
+						}
+
+						return this.Ok(result);
+					}
+
+					// Forward worker error
+					return this.StatusCode((int) resp.StatusCode, this.Problem("Error from CUDA worker", body, (int) resp.StatusCode));
+				}
+				catch (Exception ex)
+				{
+					await this.logger.LogAsync($"Forward EX {finalUrl}: {ex.Message}", nameof(ExternalCudaController));
+					// try next candidate
+					continue;
+				}
+			}
+
+			return this.StatusCode(404, this.Problem("All variants failed", "All candidate URLs returned 404 or errors.", 404));
+		}
+
 		// ---------- Test Endpoint (Generates Random Data & Calls Worker) ----------
 
 		[HttpGet("test-cuda-execute-single-base64")]
