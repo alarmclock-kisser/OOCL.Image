@@ -173,6 +173,7 @@
     {
         if (firstRender)
         {
+            isDark = await this.Api.GetBrowserSettingDarkMode(this.JS);
             await JS.InvokeVoidAsync("theme.set", isDark);
 
             // Fire-and-forget; EnsureMetaAsync now uses a non-blocking lock acquisition

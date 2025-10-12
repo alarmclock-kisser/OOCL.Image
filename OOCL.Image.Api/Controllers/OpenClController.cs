@@ -404,6 +404,7 @@ namespace OOCL.Image.Api.Controllers
 				}
 
 				await audio.UpdateBpm(initialBpm);
+				await this.logger.LogAsync("[000] api/opencl/execute-audio-timestretch: audio.Bpm original: " + audio.Bpm.ToString("F3") + $" (was updated to {initialBpm.ToString("F3")}).", nameof(OpenClController));
 
 				audio = await this.openClService.TimeStretch(audio, request.KernelName, "", request.SpeedFactor, request.ChunkSize, request.Overlap);
 				if (audio == null)
@@ -411,6 +412,10 @@ namespace OOCL.Image.Api.Controllers
 					await this.logger.LogAsync("[500] api/opencl/execute-audio-timestretch: OpenCL returned null audio", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Kernel execution failed" });
 				}
+
+				float newFactor = (float) (initialBpm * request.SpeedFactor);
+				await audio.UpdateBpm(newFactor);
+				await this.logger.LogAsync("[000] api/opencl/execute-audio-timestretch: audio.Bpm updated: " + audio.Bpm.ToString("F3") + $" (was updated to {newFactor.ToString("F3")}).", nameof(OpenClController));
 
 				var dto = new AudioObjDto(audio, request.OptionalAudio != null);
 				dto.Info.Name = (request.OptionalAudio?.Info.Name ?? dto.Info.Name) + "_stretched_" + request.SpeedFactor.ToString("F5");

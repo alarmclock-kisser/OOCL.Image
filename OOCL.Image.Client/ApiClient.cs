@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.JSInterop;
 using OOCL.Image.Shared;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -640,6 +641,7 @@ namespace OOCL.Image.Client
 				if (dto != null)
 				{
 					request.OptionalAudio = dto;
+					request.InitialBpm = dto.Info.Bpm;
 				}
 				else if (id.HasValue && id.Value != Guid.Empty)
 				{
@@ -698,6 +700,24 @@ namespace OOCL.Image.Client
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return [];
+			}
+		}
+
+
+
+		// Helpers
+		public async Task<bool> GetBrowserSettingDarkMode(IJSRuntime js)
+		{
+			if (js == null) return false;
+			try
+			{
+				await this.logger.LogAsync("Querying browser prefers-color-scheme", nameof(ApiClient));
+				return await js.InvokeAsync<bool>("browserHelpers.prefersDark");
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return false;
 			}
 		}
 	}
