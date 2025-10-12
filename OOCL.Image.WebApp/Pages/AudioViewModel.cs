@@ -41,8 +41,8 @@ namespace OOCL.Image.WebApp.Pages
 
 
 		// Controls / State
-		public decimal InitialBpm { get; set; } = 0m;
-        public decimal TargetBpm { get; set; } = 0m;
+		public decimal InitialBpm { get; set; } = 120m;
+        public decimal TargetBpm { get; set; } = 120m;
         public decimal StretchFactor { get; set; } = 1.0m;
         public int ChunkSize { get; set; } = 8192;
         public decimal Overlap { get; set; } = 0.5m;
@@ -137,8 +137,8 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (track == null)
             {
-				this.InitialBpm = 0m;
-				this.TargetBpm = 0m;
+				this.InitialBpm = 120m;
+				this.TargetBpm = 120m;
 				this.StretchFactor = 1.0m;
                 return;
             }
@@ -244,6 +244,37 @@ namespace OOCL.Image.WebApp.Pages
 
             await this.ReloadAsync();
 		}
+
+        public async Task OnUploadAndStretch(InputFileChangeEventArgs e)
+        {
+            if (e == null) return;
+
+            this.IsUploading = true;
+			var file = e.File;
+			var apiConfig = await api.GetApiConfigAsync();
+			using var stream = file.OpenReadStream((long) (apiConfig.MaxUploadSizeMb ?? 32) * 1024 * 1024);
+			using var ms = new MemoryStream();
+			await stream.CopyToAsync(ms);
+			var bytes = ms.ToArray();
+			var fileParameter = new FileParameter(new MemoryStream(bytes), file.Name, file.ContentType);
+
+            this.IsProcessing = true;
+            var result = await this.api.UploadAndStretchAndDownloadAudioAsync(fileParameter, this.SelectedKernelName, (double)this.StretchFactor, this.ChunkSize, (float)this.Overlap, this.DownloadAudioType, this.DownloadAudioBits);
+            this.IsProcessing = false;
+
+			this.IsUploading = false;
+            this.IsDownloading = true;
+
+            if (result == null)
+            {
+                this.IsDownloading = false;
+                return;
+            }
+
+            await this.DownloadFileResponseAsync(result, Guid.NewGuid().ToString() + $".{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
+
+            this.IsDownloading = false;
+        }
 
 		public async Task OnInputFileChange(InputFileChangeEventArgs e)
 		{

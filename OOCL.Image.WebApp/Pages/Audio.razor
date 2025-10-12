@@ -167,12 +167,27 @@ else
                     }
                 </RadzenCard>
             </div>
+            <div style="margin-bottom:12px;">
+                <RadzenCard>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div style="font-weight:600;">Upload & Exec</div>
+                        <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
+                            <RadzenButton Icon="upload" Text="Upload & Exec" Click="@ShowUploadAndExecDialog" Disabled="@(VM.IsUploading || VM.IsProcessing)" />
+                        </div>
+                    </div>
+                    <div style="margin-top:.6rem;color:gray;font-size:.9rem;">
+                        Directly sends your uploaded file to the API and returns a processed whole file (no Client serialization or caching needed).
+                    </div>
+                </RadzenCard>
+            </div>
         </div>
     </RadzenCard>
 }
 
 <!-- Hidden file input used by Upload button -->
 <InputFile id="fileInputHidden" style="display:none" OnChange="@OnInputFileChange" accept="audio/*" />
+<!-- Hidden file input used by Upload & Exec Card -->
+<InputFile id="fileInputExec" style="display:none" OnChange="@OnUploadAndStretchUI" accept="audio/*" />
 
 @code {
     [CascadingParameter] public OpenClServiceInfo? LayoutOpenClInfo { get; set; }
@@ -205,11 +220,33 @@ else
     }
 
     private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
+    private void ShowUploadAndExecDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputExec').click()");
+
     private async Task OnInputFileChange(InputFileChangeEventArgs e)
     {
         await VM.OnInputFileChange(e);
         await VM.ReloadAsync();
         StateHasChanged();
+    }
+
+    private async Task OnUploadAndStretchUI(InputFileChangeEventArgs e)
+    {
+        if (e == null) return;
+
+        // UI flags während des Upload+Exec
+        isProcessing = true;
+        StateHasChanged();
+        try
+        {
+            await VM.OnUploadAndStretch(e);
+            // Nach erfolgreichem Upload/Exec: neu laden
+            await VM.ReloadAsync();
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
     }
 
     private async Task Reload()

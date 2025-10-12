@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using OOCL.Image.Shared;
+using System.Data;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
@@ -176,6 +177,22 @@ namespace OOCL.Image.Client
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return new AudioObjDto();
+			}
+		}
+
+		public async Task<FileResponse?> UploadAndStretchAndDownloadAudioAsync(FileParameter file, string kernelName = "timestretch_double03", double stretchFactor = 1.000, int chunkSize = 8192, float overlap = 0.5f, string downloadFormat = "mp3", int downloadBits = 128, string? forceOpenClDevice = null)
+		{
+			await this.logger.LogAsync($"Called UploadAndStretchAndDownloadAudioAsync(FileParameter file: {(file != null)})", nameof(ApiClient));
+
+			try
+			{
+				var result = await this.internalClient.TimestretchAudioFileDownloadAsync(kernelName, stretchFactor, chunkSize, overlap, downloadFormat, downloadBits, forceOpenClDevice ?? "", file);
+				return result;
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return null;
 			}
 		}
 
