@@ -9,6 +9,7 @@ using OOCL.Image.Client;
 using OOCL.Image.Shared;
 using Microsoft.AspNetCore.Components.Forms;
 using System.IO;
+using System.Diagnostics;
 
 namespace OOCL.Image.WebApp.Pages
 {
@@ -54,6 +55,8 @@ namespace OOCL.Image.WebApp.Pages
         public string DownloadAudioType { get; set; } = "wav";
         public int DownloadAudioBits { get; set; } = 24;
         public string CompressionInfoText => this.config.DefaultCompressionBits > 0 ? $" (default {this.config.DefaultCompressionBits} bits{(this.config.UseCompressionMusLaw ? ", (mu-law)" : "")} compression)" : " (no compression)";
+        public string LastRequestDelay { get; set; } = "- ms";
+
 
 		// Indicates a download is in progress
 		public bool IsDownloading { get; set; } = false;
@@ -253,6 +256,9 @@ namespace OOCL.Image.WebApp.Pages
         {
             if (e == null) return;
 
+            string execTimes = "";
+            Stopwatch sw = Stopwatch.StartNew();
+
             this.IsUploading = true;
 			var file = e.File;
 			var apiConfig = await api.GetApiConfigAsync();
@@ -267,10 +273,13 @@ namespace OOCL.Image.WebApp.Pages
             this.IsProcessing = false;
 
 			this.IsUploading = false;
+            execTimes = execTimes + "Process: "+ sw.Elapsed.TotalMilliseconds.ToString("F1") + " ms";
             this.IsDownloading = true;
 
             if (result == null)
             {
+                sw.Stop();
+                execTimes = "Failed!";
                 this.IsDownloading = false;
                 return;
             }
@@ -278,7 +287,9 @@ namespace OOCL.Image.WebApp.Pages
             await this.DownloadFileResponseAsync(result, Guid.NewGuid().ToString() + $".{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
 
             this.IsDownloading = false;
-        }
+			execTimes = execTimes + ", Download: " + sw.Elapsed.TotalMilliseconds.ToString("F1") + " ms";
+            this.LastRequestDelay = execTimes;
+		}
 
 		public async Task OnInputFileChange(InputFileChangeEventArgs e)
 		{
@@ -370,6 +381,7 @@ namespace OOCL.Image.WebApp.Pages
 			}
 
             this.IsProcessing = false;
+            this.LastRequestDelay = $"{(dto?.Info.LastExecutionTime.ToString() ?? "- ")}  ms";
 			await this.ReloadAsync();
 		}
 
