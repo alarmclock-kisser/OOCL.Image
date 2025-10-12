@@ -144,9 +144,8 @@ namespace OOCL.Image.WebApp.Pages
                 var dto = await this.api.UploadAudioAsync(browserFile, !serverSidedData);
                 if (dto != null && dto.Info != null)
                 {
-					this.ClientAudioCollection.Insert(0, dto);
-					this.AudioEntries.Insert(0, new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds));
-                }
+					this.ClientAudioCollection.Add(dto);
+				}
             }
             catch (Exception ex)
             {
