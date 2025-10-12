@@ -157,7 +157,7 @@ namespace OOCL.Image.WebApp.Pages
         {
 			// StretchFactor assumed to be set
 			this.StretchFactor = Math.Round(this.StretchFactor, 12);
-			this.TargetBpm = Math.Round(this.InitialBpm * this.StretchFactor, 3);
+			this.TargetBpm = Math.Round(this.InitialBpm / this.StretchFactor, 3);
 		}
 
         public async Task EnforceTracksLimit()
