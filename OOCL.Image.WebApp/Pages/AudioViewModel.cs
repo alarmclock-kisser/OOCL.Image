@@ -33,13 +33,17 @@ namespace OOCL.Image.WebApp.Pages
         public decimal InitialBpm { get; set; } = 0m;
         public decimal TargetBpm { get; set; } = 0m;
         public decimal StretchFactor { get; set; } = 1.0m;
+        public int ChunkSize { get; set; } = 8192;
+        public decimal Overlap { get; set; } = 0.5m;
         public bool EnableStretchControls { get; set; } = true;
 
         // Optional cached meta
         private OpenClServiceInfo? openClServiceInfo;
         private List<OpenClKernelInfo> kernelInfos = [];
+        public string SelectedKernelName { get; set; } = "timestretch_double03";
+		private AudioEntry? selectedTrack;
 
-        public AudioViewModel(ApiClient api, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogs)
+		public AudioViewModel(ApiClient api, WebAppConfig config, NotificationService notifications, IJSRuntime js, DialogService dialogs)
         {
             this.api = api ?? throw new ArgumentNullException(nameof(api));
             this.config = config ?? new WebAppConfig();
@@ -98,11 +102,20 @@ namespace OOCL.Image.WebApp.Pages
                 // Client-seitige Collection
                 this.AudioEntries = this.ClientAudioCollection.Select(t => new AudioEntry(t.Info.Id, t.Info.Name ?? t.Info.Id.ToString(), t.Info.Bpm, t.Info.DurationSeconds)).ToList();
             }
+
+            if (this.selectedTrack == null)
+            {
+                this.InitialBpm = 120;
+                this.TargetBpm = 120;
+                this.StretchFactor = 1.0m;
+			}
 		}
 
 		public void SetSelectedTrack(AudioEntry? track)
         {
-            if (track == null)
+            this.selectedTrack = track;
+
+			if (track == null)
             {
 				this.InitialBpm = 0m;
 				this.TargetBpm = 0m;
@@ -227,11 +240,23 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task ProcessAsync(Guid id)
         {
-            // Placeholder: hier könnte OpenCL/Api-Processing erfolgen
-            var e = this.AudioEntries.FirstOrDefault(a => a.Id == id);
-            if (e == null) return;
-            await Task.Delay(200);
-			this.notifications?.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = $"Processed {e.Name}", Duration = 1400 });
-        }
+            AudioObjDto? dto = null;
+            bool serverSidedData = await this.api.IsServersidedDataAsync();
+
+            if (serverSidedData)
+            {
+                dto = await this.api.ExecuteTimestretchAsync(id, null, this.SelectedKernelName, this.ChunkSize, (float) this.Overlap, (double) this.StretchFactor);
+            }
+            else
+            {
+                dto = await this.api.ExecuteTimestretchAsync(null, dto, this.SelectedKernelName, this.ChunkSize, (float) this.Overlap, (double) this.StretchFactor);
+                if (dto != null)
+                {
+                    this.ClientAudioCollection.Add(dto);
+                }
+			}
+
+			await this.ReloadAsync();
+		}
     }
 }

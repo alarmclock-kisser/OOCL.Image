@@ -21,7 +21,7 @@ namespace OOCL.Image.Shared
 
     public class AudioTimestretchRequest
     {
-        public Guid AudioId { get; set; }
+        public Guid AudioId { get; set; } = Guid.Empty;
         public string KernelName { get; set; } = "timestretch_double03";
         public int ChunkSize { get; set; } = 16384;
         public float Overlap { get; set; } = 0.5f;
@@ -31,7 +31,7 @@ namespace OOCL.Image.Shared
 
 	public class ExecuteOnAudioRequest
     {
-        public Guid AudioId { get; set; }
+        public Guid AudioId { get; set; } = Guid.Empty;
         public string KernelName { get; set; } = string.Empty;
 		public int ChunkSize { get; set; } = 0;
 		public float Overlap { get; set; } = 0.0f;

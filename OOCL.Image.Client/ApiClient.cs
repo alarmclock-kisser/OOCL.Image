@@ -15,6 +15,9 @@ namespace OOCL.Image.Client
 
 		public string BaseUrl => this.baseUrl;
 
+		private bool? isServerSidedDataCache = null;
+		private WebApiConfig? apiConfigCache = null;
+
 		public ApiClient(RollingFileLogger? logger, HttpClient httpClient)
 		{
 			this.logger = logger ?? new RollingFileLogger(1024, false, null, "log_client_");
@@ -24,10 +27,14 @@ namespace OOCL.Image.Client
 		}
 
 
-		public async Task<WebApiConfig> GetApiConfigAsync()
+		public async Task<WebApiConfig> GetApiConfigAsync(bool forceReload = false)
 		{
 			// Logging
-			await this.logger.LogAsync($"Called GetApiConfigAsync()", nameof(ApiClient));
+			await this.logger.LogAsync($"Called GetApiConfigAsync(forceReload: {forceReload})", nameof(ApiClient));
+			if (this.apiConfigCache != null && !forceReload)
+			{
+				return this.apiConfigCache;
+			}
 
 			try
 			{
@@ -40,9 +47,15 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		public async Task<bool> IsServersidedDataAsync()
+		public async Task<bool> IsServersidedDataAsync(bool forceReload = false)
 		{
-			await this.logger.LogAsync($"Called IsServersidedDataAsync()", nameof(ApiClient));
+			await this.logger.LogAsync($"Called IsServersidedDataAsync(forceReload: {forceReload})", nameof(ApiClient));
+
+			if (this.isServerSidedDataCache.HasValue && !forceReload)
+			{
+				return this.isServerSidedDataCache.Value;
+			}
+
 			try
 			{
 				return await this.internalClient.ServerSidedDataAsync();
@@ -608,6 +621,38 @@ namespace OOCL.Image.Client
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return new ImageObjDto();
+			}
+		}
+
+		public async Task<AudioObjDto> ExecuteTimestretchAsync(Guid? id = null, AudioObjDto? dto = null, string kernelName = "timestretch_double00", int chunkSize = 2048, float overlap = 0.5f, double factor = 1.0)
+		{
+			try
+			{
+				AudioTimestretchRequest request = new()
+				{
+					ChunkSize = chunkSize,
+					Overlap = overlap,
+					KernelName = kernelName,
+					SpeedFactor = factor
+				};
+
+				if (dto != null)
+				{
+					request.OptionalAudio = dto;
+				}
+				else if (id.HasValue && id.Value != Guid.Empty)
+				{
+					request.AudioId = id.Value;
+				}
+
+				var result = await this.internalClient.ExecuteAudioTimestretchAsync(request);
+
+				return result ?? new AudioObjDto();
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return new AudioObjDto();
 			}
 		}
 
