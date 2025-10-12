@@ -72,6 +72,11 @@ else
                         <RadzenCheckBox @bind-Value="VM.SerializeAsBase64" />
                     </div>
 
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <label>RequestMode-Mode (off = RunMode)</label>
+                        <RadzenCheckBox @bind-Value="VM.RequestTestMode" />
+                    </div>
+
                     <div style="min-width:220px;">
                         <label>Force Device Name</label>
                         <input style="width:100%;padding:.4rem;" @bind="VM.ForceDeviceName" />
