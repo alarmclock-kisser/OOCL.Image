@@ -826,7 +826,7 @@ namespace OOCL.Image.Api.Controllers
 			return sb.ToString();
 		}
 
-		private HttpClient CreateInsecureHttpClient()
+		private HttpClient CreateInsecureHttpClient(int maxTimeout = 30)
 		{
 			// Gemeinsame Factory + spezieller Handler (nur solange self-signed)
 			var handler = new HttpClientHandler
@@ -835,7 +835,7 @@ namespace OOCL.Image.Api.Controllers
 			};
 			var client = new HttpClient(handler)
 			{
-				Timeout = TimeSpan.FromSeconds(30)
+				Timeout = TimeSpan.FromSeconds(maxTimeout)
 			};
 			client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 			return client;
@@ -849,14 +849,14 @@ namespace OOCL.Image.Api.Controllers
 				Status = status
 			};
 
-		private async Task<bool> IsWorkerOnline(string workerUrl)
+		private async Task<bool> IsWorkerOnline(string workerUrl, int maxTimeout = 5)
 		{
 			bool result = false;
 
 			try
 			{
 				// Via HttpClient GET /api/Cuda/status
-				using var http = this.CreateInsecureHttpClient();
+				using var http = this.CreateInsecureHttpClient(maxTimeout);
 				var resp = await http.GetAsync($"{workerUrl}/api/Cuda/status");
 				result = resp.IsSuccessStatusCode;
 			}
