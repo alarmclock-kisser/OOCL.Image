@@ -91,6 +91,8 @@
                         <div>
                             <div style="font-weight:600;">@item.Name</div>
                             <div style="font-size:.85rem;color:gray;">Bpm: @item.Bpm</div>
+                            <div style="font-size:.85rem;color:gray;">Duration: @item.DurationSeconds s</div>
+                            <div style="font-size:.85rem;color:gray;">Bytes: @item.BytesCount s</div>
                         </div>
                         <div style="display:flex;gap:.35rem;">
                             <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />

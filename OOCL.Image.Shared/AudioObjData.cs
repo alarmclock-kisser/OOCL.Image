@@ -28,12 +28,11 @@ namespace OOCL.Image.Shared
 			}
 
 			this.Id = obj.Id;
-			this.Samples = [];
-
+			this.ChunkSize = obj.ChunkSize;
+			this.Overlap = obj.OverlapSize / (obj.ChunkSize > 0 ? obj.ChunkSize : 1);
+			this.Samples = obj.GetBytes();
 			this.SizeInMb = obj.SizeInMb;
 		}
-
-
 
 
 		public static async Task<AudioObjData> FromObjectWithDataAsync(AudioObj? obj, bool keepData = true)

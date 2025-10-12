@@ -17,7 +17,7 @@ namespace OOCL.Image.WebApp.Pages
     /// </summary>
     public class AudioViewModel
     {
-        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds);
+        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds, long BytesCount);
 
         private readonly ApiClient api;
         private readonly WebAppConfig config;
@@ -69,7 +69,7 @@ namespace OOCL.Image.WebApp.Pages
             try
             {
                 var list = (await this.api.GetAudioListAsync(false))?.ToList() ?? [];
-				this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds)).ToList();
+				this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds, 0)).ToList();
             }
             catch
             {
@@ -92,7 +92,7 @@ namespace OOCL.Image.WebApp.Pages
                 try
                 {
                     var list = (await this.api.GetAudioListAsync(false))?.ToList() ?? [];
-                    this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds)).ToList();
+                    this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds, 0)).ToList();
                 }
                 catch
                 {
@@ -102,7 +102,7 @@ namespace OOCL.Image.WebApp.Pages
             else
             {
                 // Client-seitige Collection
-                this.AudioEntries = this.ClientAudioCollection.Select(t => new AudioEntry(t.Info.Id, t.Info.Name ?? t.Info.Id.ToString(), t.Info.Bpm, t.Info.DurationSeconds)).ToList();
+                this.AudioEntries = this.ClientAudioCollection.Select(t => new AudioEntry(t.Info.Id, t.Info.Name ?? t.Info.Id.ToString(), t.Info.Bpm, t.Info.DurationSeconds, (t.Data.Samples.LongLength > 0 ? t.Data.Samples.LongLength : -1))).ToList();
             }
 
             if (this.selectedTrack == null)
@@ -196,7 +196,7 @@ namespace OOCL.Image.WebApp.Pages
                 {
                     this.ClientAudioCollection.Add(dto);
                 }
-                this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds));
+                this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds, dto.Data.Samples.LongLength));
 			}
 
             await this.EnforceTracksLimit();
