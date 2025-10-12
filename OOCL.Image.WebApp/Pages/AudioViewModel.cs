@@ -78,11 +78,29 @@ namespace OOCL.Image.WebApp.Pages
 			this.SetSelectedTrack(first);
         }
 
-        /// <summary>
-        /// Wird aufgerufen, wenn in der UI ein Track selektiert wurde.
-        /// InitialBpm wird auf den Track-BPM gesetzt, TargetBpm und StretchFactor werden entsprechend initialisiert.
-        /// </summary>
-        public void SetSelectedTrack(AudioEntry? track)
+        public async Task ReloadAsync()
+        {
+            bool serverSidedData = await this.api.IsServersidedDataAsync();
+            if (serverSidedData)
+            {
+                try
+                {
+                    var list = (await this.api.GetAudioListAsync(false))?.ToList() ?? [];
+                    this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds)).ToList();
+                }
+                catch
+                {
+                    // swallow - View sollte nicht komplett abbrechen
+                }
+            }
+            else
+            {
+                // Client-seitige Collection
+                this.AudioEntries = this.ClientAudioCollection.Select(t => new AudioEntry(t.Info.Id, t.Info.Name ?? t.Info.Id.ToString(), t.Info.Bpm, t.Info.DurationSeconds)).ToList();
+            }
+		}
+
+		public void SetSelectedTrack(AudioEntry? track)
         {
             if (track == null)
             {
@@ -106,9 +124,6 @@ namespace OOCL.Image.WebApp.Pages
             }
         }
 
-        /// <summary>
-        /// Ziel-BPM wurde verändert -> StretchFactor neu berechnen (12 Dezimalstellen intern, TargetBpm gerundet auf 3).
-        /// </summary>
         public void UpdateStretchFromTarget()
         {
 			// TargetBpm erwartet bereits gesetzt zu sein
@@ -123,9 +138,6 @@ namespace OOCL.Image.WebApp.Pages
             }
         }
 
-        /// <summary>
-        /// StretchFactor wurde verändert -> TargetBpm neu berechnen (Target auf 3 Dezimalstellen).
-        /// </summary>
         public void UpdateTargetFromStretch()
         {
 			// StretchFactor assumed to be set
@@ -133,7 +145,21 @@ namespace OOCL.Image.WebApp.Pages
 			this.TargetBpm = Math.Round(this.InitialBpm * this.StretchFactor, 3);
         }
 
-        // --- Simple helper actions (placeholders or light implementations) ---
+        public async Task EnforceTracksLimit()
+        {
+            bool serverSidedData = await this.api.IsServersidedDataAsync();
+            int? tracksLimit = this.config.TracksLimit;
+
+            if (tracksLimit.HasValue && tracksLimit.Value > 0)
+            {
+                if (serverSidedData)
+                {
+                    this.ClientAudioCollection = this.ClientAudioCollection.OrderByDescending(t => t.Info.CreatedAt).Take(tracksLimit.Value).ToList();
+				}
+            }
+
+            await this.ReloadAsync();
+		}
 
         public async Task UploadAudioAsync(IBrowserFile browserFile)
         {
@@ -144,7 +170,12 @@ namespace OOCL.Image.WebApp.Pages
                 var dto = await this.api.UploadAudioAsync(browserFile, !serverSidedData);
                 if (dto != null && dto.Info != null)
                 {
-					this.ClientAudioCollection.Add(dto);
+					if (!serverSidedData)
+                    {
+						this.ClientAudioCollection.Add(dto);
+					}
+                    
+                    this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds));
 				}
             }
             catch (Exception ex)
