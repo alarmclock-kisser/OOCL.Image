@@ -1,6 +1,7 @@
-using Radzen;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
+using Radzen;
+using SixLabors.ImageSharp;
 
 namespace OOCL.Image.WebApp
 {
@@ -41,6 +42,8 @@ namespace OOCL.Image.WebApp
 			var defaultUnit     = defaults.GetValue<string>("Unit");
 			var maxLogLines    = builder.Configuration.GetValue("MaxLogLines", 1024);
 			var cleanupPreviousLogs = builder.Configuration.GetValue("CleanupPreviousLogs", false);
+			var timeoutSec = builder.Configuration.GetValue<int>("TimeoutSeconds", 300);
+			timeoutSec = Math.Clamp(timeoutSec, 30, 600);
 
 			builder.Services.AddSingleton(new ApiUrlConfig(effectiveBase));
 
@@ -58,7 +61,8 @@ namespace OOCL.Image.WebApp
 				defaultFormat,
 				defaultUnit,
 				maxLogLines,
-				cleanupPreviousLogs
+				cleanupPreviousLogs,
+				timeoutSec
 			);
 			builder.Services.AddSingleton(config);
 
@@ -71,9 +75,9 @@ namespace OOCL.Image.WebApp
 			builder.Services.AddHttpClient<ApiClient>((sp, client) =>
 			{
 				var cfg = sp.GetRequiredService<ApiUrlConfig>();
-				// BaseAddress = https://api.oocl.work/api/
 				client.BaseAddress = new Uri(cfg.BaseUrl.EndsWith("/") ? cfg.BaseUrl : (cfg.BaseUrl + "/"));
-				client.Timeout = TimeSpan.FromSeconds(24);
+				var configuration = sp.GetRequiredService<IConfiguration>();
+				client.Timeout = TimeSpan.FromSeconds(timeoutSec);
 			});
 
 			builder.Services.AddSignalR(o => o.MaximumReceiveMessageSize = 1024 * 1024 * 128);
