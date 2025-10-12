@@ -53,6 +53,7 @@ namespace OOCL.Image.WebApp.Pages
         // Indicates a download is in progress
         public bool IsDownloading { get; set; } = false;
         public bool IsProcessing { get; set; } = false;
+		public bool IsUploading { get; set; } = false;
 
 		// Optional cached meta
 		private bool? isServerSidedData;
@@ -178,11 +179,54 @@ namespace OOCL.Image.WebApp.Pages
 
         public void ToggleChunkSize(decimal value)
         {
-            int intValue = (int) value;
-            if (intValue < 256) intValue = 256;
-            if (intValue > 65536) intValue = 65536;
-            this.ChunkSize = 1 << (int) Math.Round(Math.Log(intValue, 2), MidpointRounding.AwayFromZero);
-		}
+            const int MinChunk = 128;
+            const int MaxChunk = 65536;
+
+            int intValue = (int)value;
+            if (intValue < MinChunk) intValue = MinChunk;
+            if (intValue > MaxChunk) intValue = MaxChunk;
+
+            // Aktuellen ChunkSize in gültigen Bereich bringen
+            int current = this.ChunkSize;
+            if (current < MinChunk) current = MinChunk;
+            if (current > MaxChunk) current = MaxChunk;
+
+            // Sicherstellen, dass current eine Zweierpotenz ist (ansonsten auf nächstkleinere potenz setzen)
+            if (!IsPowerOfTwo(current))
+            {
+                current = PrevPowerOfTwo(current);
+            }
+
+            // Benutzer hat inkrementiert -> eine Stufe (Faktor 2) nach oben
+            if (intValue > current)
+            {
+                long next = (long)current * 2;
+                if (next > MaxChunk) next = MaxChunk;
+                this.ChunkSize = (int)next;
+                return;
+            }
+
+            // Benutzer hat dekrementiert -> eine Stufe (Faktor 2) nach unten
+            if (intValue < current)
+            {
+                int prev = current / 2;
+                if (prev < MinChunk) prev = MinChunk;
+                this.ChunkSize = prev;
+                return;
+            }
+
+            // unverändert: nichts tun
+        }
+
+        private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
+
+        private static int PrevPowerOfTwo(int x)
+        {
+            if (x < 1) return 1;
+            int p = 1;
+            while ((p << 1) <= x) p <<= 1;
+            return p;
+        }
 
         public async Task EnforceTracksLimit()
         {
@@ -202,6 +246,8 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task OnInputFileChange(InputFileChangeEventArgs e)
 		{
+            this.IsUploading = true;
+
 			var file = e.File;
 			var apiConfig = await api.GetApiConfigAsync();
 			using var stream = file.OpenReadStream((long) (apiConfig.MaxUploadSizeMb ?? 32) * 1024 * 1024);
@@ -222,6 +268,8 @@ namespace OOCL.Image.WebApp.Pages
                 }
                 this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds, dto.Data.Samples.LongLength, 0));
 			}
+
+            this.IsUploading = false;
 
             await this.EnforceTracksLimit();
 		}

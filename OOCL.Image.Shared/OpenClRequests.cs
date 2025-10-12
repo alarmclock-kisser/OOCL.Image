@@ -26,6 +26,7 @@ namespace OOCL.Image.Shared
         public int ChunkSize { get; set; } = 16384;
         public float Overlap { get; set; } = 0.5f;
 		public double SpeedFactor { get; set; } = 1.0f;
+        public float InitialBpm { get; set; } = 0.0f;
         public AudioObjDto? OptionalAudio { get; set; }
 	}
 

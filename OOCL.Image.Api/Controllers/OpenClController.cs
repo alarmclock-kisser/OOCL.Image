@@ -379,11 +379,13 @@ namespace OOCL.Image.Api.Controllers
 				return this.BadRequest(new ProblemDetails { Status = 400, Title = "Either AudioId or OptionalAudio required" });
 			}
 
+			float initialBpm = 100.0f;
 			try
 			{
 				AudioObj? audio = null;
 				if (request.OptionalAudio != null)
 				{
+					initialBpm = request.InitialBpm;
 					await this.logger.LogAsync("Creating temp audio from OptionalAudio..." + $" ({request.OptionalAudio.Data.Samples.LongLength} bytes, sr: {request.OptionalAudio.Info.SampleRate}, ch: {request.OptionalAudio.Info.Channels}, bits: {request.OptionalAudio.Info.BitDepth})", nameof(OpenClController));
 					audio = await AudioCollection.CreateFromDataAsync(request.OptionalAudio.Data.Samples, request.OptionalAudio.Info.SampleRate, request.OptionalAudio.Info.Channels, request.OptionalAudio.Info.BitDepth);
 					await this.logger.LogAsync("Created temp audio from OptionalAudio: " + (audio != null ? "Yes" : "No"), nameof(OpenClController));
@@ -392,6 +394,7 @@ namespace OOCL.Image.Api.Controllers
 				{
 					audio = this.audioCollection[request.AudioId];
 					await this.logger.LogAsync($"Found audio {request.AudioId} in collection: " + (audio != null ? "Yes" : "No"), nameof(OpenClController));
+					initialBpm = audio?.Bpm ?? 100.0f;
 				}
 
 				if (audio == null)
@@ -399,6 +402,8 @@ namespace OOCL.Image.Api.Controllers
 					await this.logger.LogAsync("[500] api/opencl/execute-audio-timestretch: Failed to create temp audio from OptionalAudio", nameof(OpenClController));
 					return this.StatusCode(500, new ProblemDetails { Status = 500, Title = "Failed to create temp audio" });
 				}
+
+				await audio.UpdateBpm(initialBpm);
 
 				audio = await this.openClService.TimeStretch(audio, request.KernelName, "", request.SpeedFactor, request.ChunkSize, request.Overlap);
 				if (audio == null)
