@@ -35,8 +35,8 @@ namespace OOCL.Image.WebApp.Pages
         public double MaxUploadSizeMb => this.apiConfig?.MaxUploadSizeMb ?? 0;
 		public Dictionary<string, int[]> AvailableDownloadFormats { get; private set; } = new()
 		{
-			["wav"] = [8, 16, 24, 32],
-			["mp3"] = [64, 96, 128, 192, 256, 320]
+			["wav"] = [16, 24, 32],
+			["mp3"] = [96, 128, 192, 256, 320]
 		};
 
 

@@ -32,9 +32,11 @@
 
     <!-- Wichtig: _framework/ (nicht über Url.Content auflösen!) -->
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
-    <script src="_framework/blazor.server.js"></script>
 
+    <!-- browserHelpers muss vor blazor.server.js geladen werden, damit JS-Interop-Funktionen wie prefersDark verfügbar sind -->
     <script src="js/browserHelpers.js"></script>
+
+    <script src="_framework/blazor.server.js"></script>
 
     <script>
         window.setRadzenTheme = function(theme) {
