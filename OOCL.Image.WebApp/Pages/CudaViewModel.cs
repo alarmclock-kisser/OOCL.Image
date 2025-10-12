@@ -33,7 +33,7 @@ namespace OOCL.Image.WebApp.Pages
 		public string PreferredClientApiUrl { get; set; } = string.Empty;
 		public double ExecutionTimeMs { get; private set; } = 0.0;
 		public string PreviewText { get; private set; } = string.Empty;
-		public bool SerializeAsBase64 { get; set; } = true;
+		public bool SerializeAsBase64 { get; set; } = false;
 		public bool RequestTestMode { get; set; } = true;
 		public string? PreferredClientSwaggerLink => this.RegisteredWorkers != null && this.RegisteredWorkers.Count > 0
 			? (this.PreferredClientApiUrl.TrimEnd('/') + ":32141/api/swagger")
