@@ -415,7 +415,7 @@ namespace OOCL.Image.WebApp.Pages
             if (this.StretchFactor < 0.01m || this.StretchFactor > 10.0m || Math.Abs(this.StretchFactor - 1.00m) < 0.001m)
 			{
 				return;
-			})
+			}
 
             AudioObjDto? dto = null;
             bool serverSidedData = await this.api.IsServersidedDataAsync();
