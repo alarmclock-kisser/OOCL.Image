@@ -31,6 +31,7 @@ namespace OOCL.Image.WebApp.Pages
         public string DataLocation => this.isServerSidedData.HasValue && this.isServerSidedData.Value == true ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
         public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Info.SizeInMb).Sum().ToString("F2") + " MB";
         public int MaxTracks => this.config.TracksLimit ?? 0;
+        public int MaxUploadSizeMb => this.apiConfig?.MaxUploadSizeMb ?? 0;
 
 		// Controls / State
 		public decimal InitialBpm { get; set; } = 0m;
