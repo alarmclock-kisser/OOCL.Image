@@ -626,6 +626,7 @@ namespace OOCL.Image.Client
 
 		public async Task<AudioObjDto> ExecuteTimestretchAsync(Guid? id = null, AudioObjDto? dto = null, string kernelName = "timestretch_double00", int chunkSize = 2048, float overlap = 0.5f, double factor = 1.0)
 		{
+			await this.logger.LogAsync($"Called ExecuteTimestretchAsync(id: {(id.HasValue ? id.Value.ToString() : "null")}, dto: {(dto != null ? "provided" : "null")}, {kernelName}, {chunkSize}, {overlap}, {factor})", nameof(ApiClient));
 			try
 			{
 				AudioTimestretchRequest request = new()

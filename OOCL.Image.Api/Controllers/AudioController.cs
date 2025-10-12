@@ -139,7 +139,7 @@ namespace OOCL.Image.Api.Controllers
 					await this.logger.LogAsync($"[000] api/audio/load-audio: Temporary file '{destPath}' could not be deleted: {ex.Message}", nameof(AudioController));
 				}
 
-				await this.logger.LogAsync($"[200] api/audio/load: Successfully loaded audio '{safeFileName}' with ID {info.Id} ({info.Data.SizeInMb.ToString("F2")}).", nameof(AudioController));
+				await this.logger.LogAsync($"[200] api/audio/load: Successfully loaded audio '{safeFileName}' with ID {info.Id} ({info.Data.SizeInMb.ToString("F2")} MB data).", nameof(AudioController));
 				return this.Ok(info);
 			}
 			catch (Exception ex)

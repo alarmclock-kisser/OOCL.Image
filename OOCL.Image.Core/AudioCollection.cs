@@ -238,11 +238,11 @@ namespace OOCL.Image.Core
 			}
 		}
 
-		public static Task<AudioObj?> CreateFromDataAsync(byte[] samples, int sampleRate, int channels, int bitdepth)
+		public static async Task<AudioObj?> CreateFromDataAsync(byte[] samples, int sampleRate, int channels, int bitdepth)
 		{
-			if (samples == null || samples.Length == 0 || sampleRate <= 0 || channels <= 0)
+			if (samples.LongLength <= 0 || sampleRate <= 0 || channels <= 0)
 			{
-				return Task.FromResult<AudioObj?>(null);
+				return null;
 			}
 
 			// Unterstützte Bit-Tiefen (unkomprimiertes PCM oder 32-bit Float)
@@ -306,12 +306,14 @@ namespace OOCL.Image.Core
 					break;
 
 				default:
-					return Task.FromResult<AudioObj?>(null);
+					return null;
 			}
 
 			// Reihenfolge bleibt erhalten (keine Race Conditions, da jeder Index exklusiv beschrieben wird)
 			var obj = new AudioObj(floats, sampleRate, channels, bitdepth);
-			return Task.FromResult<AudioObj?>(obj);
+
+			await Task.CompletedTask;
+			return obj;
 		}
 
 		public async Task<IEnumerable<AudioObj>> LoadFromResources(string? resourcesPath = null)
