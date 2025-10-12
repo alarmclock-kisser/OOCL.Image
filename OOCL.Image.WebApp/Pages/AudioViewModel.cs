@@ -30,7 +30,7 @@ namespace OOCL.Image.WebApp.Pages
         public List<AudioEntry> AudioEntries { get; private set; } = [];
         public List<AudioObjDto> ClientAudioCollection { get; private set; } = [];
         public string DataLocation => this.isServerSidedData.HasValue && this.isServerSidedData.Value == true ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
-        public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Info.SizeInMb).Sum().ToString("F2") + " MB";
+        public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Data.SizeInMb).Sum().ToString("F2") + " MB";
         public int MaxTracks => this.config.TracksLimit ?? 0;
         public double MaxUploadSizeMb => this.apiConfig?.MaxUploadSizeMb ?? 0;
 		public Dictionary<string, int[]> AvailableDownloadFormats { get; private set; } = new()
@@ -49,9 +49,10 @@ namespace OOCL.Image.WebApp.Pages
         public bool EnableStretchControls { get; set; } = true;
         public string DownloadAudioType { get; set; } = "wav";
         public int DownloadAudioBits { get; set; } = 24;
+        public string CompressionInfoText => this.config.DefaultCompressionBits > 0 ? $" (default {this.config.DefaultCompressionBits} bits{(this.config.UseCompressionMusLaw ? ", (mu-law)" : "")})" : " (no compression)";
 
-        // Indicates a download is in progress
-        public bool IsDownloading { get; set; } = false;
+		// Indicates a download is in progress
+		public bool IsDownloading { get; set; } = false;
         public bool IsProcessing { get; set; } = false;
 		public bool IsUploading { get; set; } = false;
 

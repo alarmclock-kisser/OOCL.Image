@@ -34,7 +34,7 @@ else
             <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" Disabled="@(VM.IsUploading)" />
             <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
             <div style="margin-left:auto;font-size:.9rem;color:gray;white-space:pre-line;">
-                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks})\n{VM.DataLocation}\n(max. API request size: {VM.MaxUploadSizeMb} MB)")
+                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks})\n{VM.DataLocation}\n(max. API request size: {VM.MaxUploadSizeMb} MB)\n{VM.CompressionInfoText}")
             </div>
         </div>
 

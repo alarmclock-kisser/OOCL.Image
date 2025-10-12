@@ -721,7 +721,12 @@ namespace OOCL.Image.Client
 			try
 			{
 				await this.logger.LogAsync("Querying browser prefers-color-scheme", nameof(ApiClient));
-				return await js.InvokeAsync<bool>("browserHelpers.prefersDark");
+
+				var result = await js.InvokeAsync<bool>("browserHelpers.prefersDark");
+
+				await this.logger.LogAsync($"Browser prefers-color-scheme: {(result ? "dark" : "light")}", nameof(ApiClient));
+
+				return result;
 			}
 			catch (Exception ex)
 			{

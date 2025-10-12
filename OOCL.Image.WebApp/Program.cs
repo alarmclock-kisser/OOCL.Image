@@ -46,7 +46,7 @@ namespace OOCL.Image.WebApp
 			timeoutSec = Math.Clamp(timeoutSec, 30, 600);
 			var defaultCompressionBits = builder.Configuration.GetValue<int>("DefaultCompressionBits", 0);
 			defaultCompressionBits = Math.Clamp(defaultCompressionBits, 0, 32);
-			var useCompressionMusLaw = builder.Configuration.GetValue<bool>("UseCompressionMuLaw");
+			var useCompressionMusLaw = builder.Configuration.GetValue<bool>("UseCompressionMusLaw");
 
 			builder.Services.AddSingleton(new ApiUrlConfig(effectiveBase));
 
