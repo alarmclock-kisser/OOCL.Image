@@ -291,7 +291,7 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task OnUploadAndStretch(InputFileChangeEventArgs e)
         {
-            if (e == null)
+            if (e == null || this.StretchFactor < 0.01m || this.StretchFactor > 10.0m || Math.Abs(this.StretchFactor - 1.00m) < 0.001m)
 			{
 				return;
 			}
@@ -412,6 +412,11 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task ProcessAsync(Guid id)
         {
+            if (this.StretchFactor < 0.01m || this.StretchFactor > 10.0m || Math.Abs(this.StretchFactor - 1.00m) < 0.001m)
+			{
+				return;
+			})
+
             AudioObjDto? dto = null;
             bool serverSidedData = await this.api.IsServersidedDataAsync();
             this.IsProcessing = true;
