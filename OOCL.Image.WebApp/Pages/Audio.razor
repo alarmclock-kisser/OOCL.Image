@@ -33,9 +33,9 @@ else
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
             <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
             <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
-            <span style="margin-left:auto;font-size:.9rem;color:gray;">
-                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks}) ca. {VM.DataLocation}" + Environment.NewLine + $"(max. API request size: {VM.MaxUploadSizeMb} MB)")
-            </span>
+            <div style="margin-left:auto;font-size:.9rem;color:gray;white-space:pre-line;">
+                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks}) ca. {VM.DataLocation}\n(max. API request size: {VM.MaxUploadSizeMb} MB)")
+            </div>
         </div>
 
         <!-- Neu: Card mit BPM / Stretch Controls (Toggle + 3 Numerics) -->
@@ -85,7 +85,7 @@ else
                         </div>
 
                         <div style="min-width:120px;">
-                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Chunk Size</label>
                             <RadzenNumeric TValue="int"
                                            Value="VM.ChunkSize"
                                            Change="@( (int v) => OnChunkSizeChanged(v) )"
@@ -96,9 +96,9 @@ else
                         </div>
 
                         <div style="min-width:100px;">
-                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Overlap</label>
                             <RadzenNumeric TValue="decimal"
-                                           Value="VM.ChunkSize"
+                                           Value="VM.Overlap"
                                            Change="@( (decimal v) => OnOverlapChanged(v) )"
                                            Min="0.0m"
                                            Max="0.9m"
@@ -145,7 +145,7 @@ else
                             <div><b>Original BPM:</b> @selected.Bpm.ToString("F3")</div>
                             <div style="margin-top:.5rem;">
                                 <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
-                                <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" Disabled="@(VM.IsProcessing || selected == null)" />
+                                <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await OnProcessClick())" Style="margin-left:.5rem;" Disabled="@(isProcessing || VM.IsProcessing || selected == null)" />
                                 <RadzenButton Icon="download" Click="@(async () => await OnDownloadClick())" Disabled="@(isDownloading || VM.IsDownloading || selected == null)" />
                                 <RadzenDropDown TValue="string"
                                                 Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
@@ -182,7 +182,7 @@ else
     private Guid selectedId = Guid.Empty;
     private AudioViewModel.AudioEntry? selected;
 
-    // Local UI flag to reflect download in progress immediately
+    // Local UI flag to reflect download/process in progress immediately
     private bool isDownloading = false;
     private bool isProcessing = false;
 
@@ -254,13 +254,16 @@ else
 
     private void OnChunkSizeChanged(int value)
     {
+        // VM.ToggleChunkSize expects a numeric value; it snaps to nearest power of two
         VM.ToggleChunkSize(value);
         StateHasChanged();
     }
 
     private void OnOverlapChanged(decimal value)
     {
-        VM.Overlap = value;
+        // clamp to 0.0 - 0.9 and set on VM
+        var v = Math.Clamp((double)value, 0.0, 0.9);
+        VM.Overlap = (decimal)Math.Round(v, 2);
         StateHasChanged();
     }
 
@@ -282,6 +285,24 @@ else
         }
     }
 
+    private async Task OnProcessClick()
+    {
+        if (selected == null) return;
+        if (isProcessing) return;
+
+        isProcessing = true;
+        StateHasChanged();
+        try
+        {
+            await VM.ProcessAsync(selected.Id);
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
     private IEnumerable<int> GetBitsForSelected()
     {
         if (VM?.AvailableDownloadFormats == null) return Enumerable.Empty<int>();
@@ -295,7 +316,11 @@ else
         VM.DownloadAudioType = value ?? string.Empty;
         if (VM.AvailableDownloadFormats != null && VM.AvailableDownloadFormats.TryGetValue(value ?? "", out var bits) && bits.Length > 0)
         {
-            VM.DownloadAudioBits = bits[2];
+            // preserve current bit if valid, otherwise pick first available
+            if (!bits.Contains(VM.DownloadAudioBits))
+            {
+                VM.DownloadAudioBits = bits[0];
+            }
         }
         else
         {
