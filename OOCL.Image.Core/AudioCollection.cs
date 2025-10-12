@@ -20,7 +20,7 @@ namespace OOCL.Image.Core
 
 		public AudioObj? this[Guid guid]
 		{
-			get => this.tracks[guid];
+			get => this.tracks.TryGetValue(guid, out var obj) ? obj : null;
 		}
 
 		public AudioObj? this[string name]

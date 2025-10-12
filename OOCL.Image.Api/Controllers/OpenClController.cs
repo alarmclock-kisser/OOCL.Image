@@ -381,11 +381,16 @@ namespace OOCL.Image.Api.Controllers
 
 			try
 			{
-				AudioObj? audio = this.audioCollection[request.AudioId];
-				if (audio == null && request.OptionalAudio != null)
+				AudioObj? audio = null;
+				if (request.OptionalAudio != null)
 				{
 					audio = await AudioCollection.CreateFromDataAsync(request.OptionalAudio.Data.Samples, request.OptionalAudio.Info.SampleRate, request.OptionalAudio.Info.Channels, request.OptionalAudio.Info.BitDepth);
 				}
+				else if (request.AudioId != Guid.Empty)
+				{
+					audio = this.audioCollection[request.AudioId];
+				}
+
 				if (audio == null)
 				{
 					await this.logger.LogAsync("[500] api/opencl/execute-audio-timestretch: Failed to create temp audio from OptionalAudio", nameof(OpenClController));

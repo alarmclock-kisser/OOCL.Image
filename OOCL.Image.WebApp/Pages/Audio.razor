@@ -25,7 +25,7 @@
         <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
         <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
         <span style="margin-left:auto;font-size:.9rem;color:gray;">
-            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Tracks loaded ON CLIENT")
+            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Tracks loaded {VM.DataLocation}")
         </span>
     </div>
 

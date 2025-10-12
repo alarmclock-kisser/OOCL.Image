@@ -145,10 +145,10 @@ namespace OOCL.Image.WebApp.Pages
         {
 			// TargetBpm erwartet bereits gesetzt zu sein
 			this.TargetBpm = Math.Round(this.TargetBpm, 3);
-            if (this.InitialBpm != 0m)
+            if (this.InitialBpm < 0.001m)
             {
-				this.StretchFactor = Math.Round(this.TargetBpm / this.InitialBpm, 12);
-            }
+				this.StretchFactor = Math.Round(this.InitialBpm / this.TargetBpm, 12);
+			}
             else
             {
 				this.StretchFactor = 1.0m;
@@ -159,8 +159,8 @@ namespace OOCL.Image.WebApp.Pages
         {
 			// StretchFactor assumed to be set
 			this.StretchFactor = Math.Round(this.StretchFactor, 12);
-			this.TargetBpm = Math.Round(this.InitialBpm * this.StretchFactor, 3);
-        }
+			this.TargetBpm = Math.Round(this.StretchFactor * this.InitialBpm, 3);
+		}
 
         public async Task EnforceTracksLimit()
         {
