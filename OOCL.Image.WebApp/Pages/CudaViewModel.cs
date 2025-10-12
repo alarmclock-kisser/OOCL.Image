@@ -293,7 +293,7 @@ namespace OOCL.Image.WebApp.Pages
 						complexChunks,
 						inverse: this.DoInverseAfterwards,
 						forceDeviceName: string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.ForceDeviceName,
-						preferredClientApiUrl: string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.PreferredClientApiUrl
+						preferredClientApiUrl: string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.RegisteredWorkers.FirstOrDefault()
 					);
 
 					this.ExecutionTimeMs = ifftResult?.ExecutionTimeMs ?? this.ExecutionTimeMs;

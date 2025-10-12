@@ -780,6 +780,7 @@ namespace OOCL.Image.Client
 
 		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>? dataChunks = null, IEnumerable<string>? dataChunksBase64 = null, bool inverse = false, string? forceDeviceName = null, string? preferredClientApiUrl = null)
 		{
+			await this.logger.LogAsync($"Called RequestCuFfftAsync(dataChunks: {(dataChunks != null ? dataChunks.Count().ToString() : "null")}, dataChunksBase64: {(dataChunksBase64 != null ? dataChunksBase64.Count().ToString() : "null")}, inverse: {inverse}, forceDeviceName: {(forceDeviceName ?? "null")}, preferredClientApiUrl: {(preferredClientApiUrl ?? "null")})", nameof(ApiClient));
 			try
 			{
 				Type? dataFormType = dataChunks?.FirstOrDefault()?.FirstOrDefault()?.GetType();
@@ -817,6 +818,7 @@ namespace OOCL.Image.Client
 
 		public async Task<CuFftResult> TestRequestCuFftAsync(int fftSize = 1024, int batchSize = 4, bool doInverseAfterwards = false, string? preferredClientApiUrl = null, string? forceDeviceName = null)
 		{
+			await this.logger.LogAsync($"Called TestRequestCuFftAsync({fftSize}, {batchSize}, {doInverseAfterwards}, preferredClientApiUrl: {(preferredClientApiUrl ?? "null")}, forceDeviceName: {(forceDeviceName ?? "null")})", nameof(ApiClient));
 			try
 			{
 				CuFftResult result = await this.internalClient.TestRequestCufftAsync(fftSize, batchSize, doInverseAfterwards, preferredClientApiUrl, forceDeviceName);
