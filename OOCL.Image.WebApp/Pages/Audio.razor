@@ -31,7 +31,7 @@ else
     <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
         <h3>Audio</h3>
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
-            <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" Disabled="@(VM.IsDownloading)" />
+            <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" Disabled="@(VM.IsUploading)" />
             <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
             <div style="margin-left:auto;font-size:.9rem;color:gray;white-space:pre-line;">
                 @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks})\n{VM.DataLocation}\n(max. API request size: {VM.MaxUploadSizeMb} MB)")
@@ -123,8 +123,8 @@ else
                                 <div style="font-weight:600;">@item.Name</div>
                                 <div style="font-size:.85rem;">Bpm: @item.Bpm</div>
                                 <div style="font-size:.85rem;">Duration: @item.DurationSeconds s</div>
-                                <div style="font-size:.85rem;">Bytes: @item.BytesCount</div>
-                                <div style="font-size:.85rem;">Exec: @item.LastExecTime</div>
+                                <div style="font-size:.85rem;">Data: @item.BytesCount B</div>
+                                <div style="font-size:.85rem;">Exec: @item.LastExecTime ms</div>
                             </div>
                             <div style="display:flex;gap:.35rem;">
                                 <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
