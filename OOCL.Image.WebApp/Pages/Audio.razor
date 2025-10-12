@@ -27,6 +27,56 @@
         <span style="margin-left:auto;font-size:.9rem;color:gray;">@VM.AudioEntries.Count audio objects</span>
     </div>
 
+    <!-- Neu: Card mit BPM / Stretch Controls (Toggle + 3 Numerics) -->
+    <div style="margin-bottom:12px;">
+        <RadzenCard>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div style="font-weight:600;">Stretch / BPM</div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
+                    <label style="font-size:.9rem;margin:0;">Enable</label>
+                    <RadzenCheckBox @bind-Value="VM.EnableStretchControls" TValue="bool" />
+                </div>
+            </div>
+
+            @if (VM.EnableStretchControls)
+            {
+                <div style="display:flex;gap:12px;align-items:center;margin-top:.6rem;">
+                    <div style="min-width:140px;">
+                        <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Initial BPM</label>
+                        <RadzenNumeric TValue="decimal"
+                                       @bind-Value="VM.InitialBpm"
+                                       Min="0"
+                                       Max="360"
+                                       Step="0.001"
+                                       Style="width:140px;" Disabled="true" />
+                    </div>
+
+                    <div style="min-width:160px;">
+                        <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
+                        <RadzenNumeric TValue="decimal"
+                                       Value="VM.TargetBpm"
+                                       Change="@( (decimal v) => OnTargetBpmChanged(v) )"
+                                       Min="0"
+                                       Max="360"
+                                       Step="0.001"
+                                       Style="width:160px;" />
+                    </div>
+
+                    <div style="min-width:260px;">
+                        <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Stretch Factor</label>
+                        <RadzenNumeric TValue="decimal"
+                                       Value="VM.StretchFactor"
+                                       Change="@( (decimal v) => OnStretchFactorChanged(v) )"
+                                       Min="0.01m"
+                                       Max="10m"
+                                       Step="0.000000000001m"
+                                       Style="width:260px;" />
+                    </div>
+                </div>
+            }
+        </RadzenCard>
+    </div>
+
     <div style="display:flex;gap:12px;">
         <div style="flex:1 1 300px;">
             <RadzenListBox Data="@VM.AudioEntries"
@@ -38,7 +88,7 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem;">
                         <div>
                             <div style="font-weight:600;">@item.Name</div>
-                            <div style="font-size:.85rem;color:gray;">@item.Description</div>
+                            <div style="font-size:.85rem;color:gray;">@item.Bpm Freq: @item.Bpm</div>
                         </div>
                         <div style="display:flex;gap:.35rem;">
                             <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
@@ -72,6 +122,9 @@
     </div>
 </RadzenCard>
 
+<!-- Hidden file input used by Upload button -->
+<InputFile id="fileInputHidden" style="display:none" OnChange="@OnInputFileChange" accept="audio/*" />
+
 @code {
     [CascadingParameter] public OpenClServiceInfo? LayoutOpenClInfo { get; set; }
     [CascadingParameter] public List<OpenClKernelInfo>? LayoutKernelInfos { get; set; }
@@ -94,10 +147,41 @@
         {
             selectedId = VM.AudioEntries.FirstOrDefault()?.Id ?? Guid.Empty;
             selected = VM.AudioEntries.FirstOrDefault();
+            VM.SetSelectedTrack(selected);
         }
     }
 
     private void ShowFileDialog() => JS.InvokeVoidAsync("eval", "document.getElementById('fileInputHidden').click()");
+    private async Task OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        var browserFile = e.File;
+        if (browserFile == null)
+        {
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "No file selected", Duration = 2000 });
+            return;
+        }
+
+        try
+        {
+            // Optional: Größe prüfen gegen ApiConfig.MaxUploadSizeMb
+            var apiConfig = await Api.GetApiConfigAsync();
+            if (apiConfig?.MaxUploadSizeMb != null && browserFile.Size > (long) apiConfig.MaxUploadSizeMb.Value * 1024 * 1024)
+            {
+                Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "File too large for server", Duration = 3000 });
+                return;
+            }
+
+            // Upload via ApiClient (IBrowserFile overload)
+            await VM.UploadAudioAsync(browserFile);
+
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Upload successful", Duration = 2000 });
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Notifications.Notify(new NotificationMessage { Severity = NotificationSeverity.Error, Summary = "Upload error: " + ex.Message, Duration = 3500 });
+        }
+    }
 
     private async Task Reload()
     {
@@ -111,6 +195,7 @@
         {
             selectedId = g;
             selected = VM.AudioEntries.FirstOrDefault(a => a.Id == g);
+            VM.SetSelectedTrack(selected);
             StateHasChanged();
         }
 
@@ -121,6 +206,20 @@
     {
         await VM.RemoveAsync(id);
         if (selectedId == id) { selectedId = Guid.Empty; selected = null; }
+        StateHasChanged();
+    }
+
+    private void OnTargetBpmChanged(decimal value)
+    {
+        VM.TargetBpm = value;
+        VM.UpdateStretchFromTarget();
+        StateHasChanged();
+    }
+
+    private void OnStretchFactorChanged(decimal value)
+    {
+        VM.StretchFactor = value;
+        VM.UpdateTargetFromStretch();
         StateHasChanged();
     }
 }

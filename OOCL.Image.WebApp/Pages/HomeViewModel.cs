@@ -240,7 +240,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			// Die Basis-Klasse für die Liste, die angezeigt wird (vermutlich ImageObjInfo)
 			// Dies muss auf der Client-Seite die Quelldaten von der API (true) ODER vom Client-Store (false) sein.
-			List<ImageObjInfo> imageInfoList = new();
+			List<ImageObjInfo> imageInfoList = [];
 
 			if (await this.Api.IsServersidedDataAsync())
 			{
