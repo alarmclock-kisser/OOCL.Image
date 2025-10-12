@@ -274,6 +274,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			this.IsUploading = false;
             execTimes = execTimes + "Process: "+ sw.Elapsed.TotalMilliseconds.ToString("F1") + " ms";
+            sw.Restart();
             this.IsDownloading = true;
 
             if (result == null)

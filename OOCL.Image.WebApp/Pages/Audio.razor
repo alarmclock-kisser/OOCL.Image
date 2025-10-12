@@ -153,17 +153,6 @@ else
                                 <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
                                 <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await OnProcessClick())" Style="margin-left:.5rem;" Disabled="@(isProcessing || VM.IsProcessing || selected == null)" />
                                 <RadzenButton Icon="download" Click="@(async () => await OnDownloadClick())" Disabled="@(isDownloading || VM.IsDownloading || selected == null)" />
-                                <RadzenDropDown TValue="string"
-                                                Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
-                                                Value="@VM.DownloadAudioType"
-                                                Change="@((args) => OnFormatChanged(args as string))"
-                                                Style="width:100px;"
-                                                Placeholder="Format" />
-                                <RadzenDropDown TValue="int"
-                                                Data="@( GetBitsForSelected() )"
-                                                @bind-Value="VM.DownloadAudioBits"
-                                                Style="width:100px;"
-                                                Placeholder="Bits" />
                             </div>
                         </div>
                     }
@@ -171,14 +160,25 @@ else
                     {
                         <div style="color:gray;">No selection</div>
                     }
+                    <RadzenDropDown TValue="string"
+                                    Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
+                                    Value="@VM.DownloadAudioType"
+                                    Change="@((args) => OnFormatChanged(args as string))"
+                                    Style="width:100px;"
+                                    Placeholder="Format" />
+                    <RadzenDropDown TValue="int"
+                                    Data="@( GetBitsForSelected() )"
+                                    @bind-Value="VM.DownloadAudioBits"
+                                    Style="width:100px;"
+                                    Placeholder="Bits" />
                 </RadzenCard>
             </div>
             <div style="margin-bottom:12px;">
                 <RadzenCard>
                     <div style="display:flex;align-items:center;gap:12px;">
-                        <div style="font-weight:600;">Upload & Exec</div>
+                        <div style="font-weight:600;">Upload & Stretch & Download</div>
                         <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
-                            <RadzenButton Icon="upload" Text="Upload & Exec" Click="@ShowUploadAndExecDialog" Disabled="@(VM.IsUploading || VM.IsProcessing)" />
+                            <RadzenButton Icon="upload" Text="Upload & Stretch" Click="@ShowUploadAndExecDialog" Disabled="@(VM.IsUploading || VM.IsProcessing)" />
                         </div>
                     </div>
                     <div style="margin-top:.6rem;color:gray;font-size:.9rem;">
