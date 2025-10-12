@@ -831,7 +831,41 @@ namespace OOCL.Image.Client
 			}
 		}
 
-		// Helpers
+		public async Task<(int StatusCode, string Body)> TestRequestCuFftRawAsync(int fftSize, int batchSize, bool doInverseAfterwards, string? preferredClientApiUrl, string? forceDeviceName = null)
+		{
+			if (string.IsNullOrWhiteSpace(preferredClientApiUrl))
+			{
+				await this.logger.LogAsync("TestRequestCuFftRawAsync called with no preferredClientApiUrl", nameof(ApiClient));
+				return (0, "no url");
+			}
+
+			try
+			{
+				var baseUrl = preferredClientApiUrl.TrimEnd('/');
+				var url = $"{baseUrl}/api/ExternalCuda/test-request-cufft?fftSize={fftSize}&batchSize={batchSize}&doInverseAfterwards={(doInverseAfterwards ? "true" : "false")}";
+				if (!string.IsNullOrWhiteSpace(forceDeviceName))
+				{
+					url += "&specificCudaDevice=" + Uri.EscapeDataString(forceDeviceName);
+				}
+
+				// New HttpClient to show raw response (optionally accept self-signed certs for debug)
+				using var handler = new HttpClientHandler();
+				// handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator; // nur zu Debug-Zwecken
+				using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+				var resp = await client.GetAsync(url);
+				var body = await resp.Content.ReadAsStringAsync();
+
+				await this.logger.LogAsync($"Raw test request {url} => {(int)resp.StatusCode}. Body len={body?.Length ?? 0}", nameof(ApiClient));
+				return ((int)resp.StatusCode, body ?? string.Empty);
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return (-1, ex.Message);
+			}
+		}
+
+
 		public async Task<bool> GetBrowserSettingDarkMode(IJSRuntime js)
 		{
 			if (js == null)
