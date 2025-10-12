@@ -109,54 +109,86 @@ namespace OOCL.Image.WebApp.Pages
 
 		private int lastFftSize = 4096;
 
-		public void SetFftSize(int newValue)
-		{
-			// aktuelle FFT merken (Initialwert oder letzte Runde)
+		public void SetFftSize(decimal value)
+        {
+            const int MinFfiSize = 32;
+            const int MaxFftSize = 65536;
+
+            int intValue = (int)value;
+            if (intValue < MinFfiSize)
+			{
+				intValue = MinFfiSize;
+			}
+
+			if (intValue > MaxFftSize)
+			{
+				intValue = MaxFftSize;
+			}
+
+			// Aktuellen ChunkSize in gültigen Bereich bringen
 			int current = this.FftSize;
-
-			// Schritt erkannt?
-			bool increased = newValue > current;
-
-			// Alle erlaubten Zweierpotenzen (du kannst den Bereich nach oben erweitern)
-			int[] powers =
-			[32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456];
-
-			// aktuelle Position im Array finden
-			int idx = Array.FindIndex(powers, p => p == current);
-			if (idx < 0)
+            if (current < MinFfiSize)
 			{
-				// falls kein exakter Match → nächste passende PowerOfTwo
-				current = PrevPowerOfTwo(newValue);
-				idx = Array.FindIndex(powers, p => p == current);
-				if (idx < 0)
-					idx = 0;
+				current = MinFfiSize;
 			}
 
-			if (increased)
+			if (current > MaxFftSize)
 			{
-				// +1 gedrückt → nächstgrößere PowerOfTwo
-				if (idx < powers.Length - 1)
-					this.FftSize = powers[idx + 1];
-			}
-			else
-			{
-				// -1 gedrückt → nächstkleinere PowerOfTwo
-				if (idx > 0)
-					this.FftSize = powers[idx - 1];
+				current = MaxFftSize;
 			}
 
-			this.lastFftSize = this.FftSize;
-		}
+			// Sicherstellen, dass current eine Zweierpotenz ist (ansonsten auf nächstkleinere potenz setzen)
+			if (!IsPowerOfTwo(current))
+            {
+                current = PrevPowerOfTwo(current);
+            }
 
+            // Benutzer hat inkrementiert -> eine Stufe (Faktor 2) nach oben
+            if (intValue > current)
+            {
+                long next = (long)current * 2;
+                if (next > MaxFftSize)
+				{
+					next = MaxFftSize;
+				}
 
-		private static int PrevPowerOfTwo(int x)
-		{
-			if (x < 1) return 1;
+				this.FftSize = (int)next;
+                return;
+            }
+
+            // Benutzer hat dekrementiert -> eine Stufe (Faktor 2) nach unten
+            if (intValue < current)
+            {
+                int prev = current / 2;
+                if (prev < MinFfiSize)
+				{
+					prev = MinFfiSize;
+				}
+
+				this.FftSize = prev;
+                return;
+            }
+
+            // unverändert: nichts tun
+        }
+
+        private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
+
+        private static int PrevPowerOfTwo(int x)
+        {
+            if (x < 1)
+			{
+				return 1;
+			}
+
 			int p = 1;
-			while ((p << 1) <= x)
+            while ((p << 1) <= x)
+			{
 				p <<= 1;
+			}
+
 			return p;
-		}
+        }
 
 		public async Task RequestFftTestAsync()
 		{
