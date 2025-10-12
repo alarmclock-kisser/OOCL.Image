@@ -49,7 +49,7 @@ namespace OOCL.Image.WebApp.Pages
         public bool EnableStretchControls { get; set; } = true;
         public string DownloadAudioType { get; set; } = "wav";
         public int DownloadAudioBits { get; set; } = 24;
-        public string CompressionInfoText => this.config.DefaultCompressionBits > 0 ? $" (default {this.config.DefaultCompressionBits} bits{(this.config.UseCompressionMusLaw ? ", (mu-law)" : "")})" : " (no compression)";
+        public string CompressionInfoText => this.config.DefaultCompressionBits > 0 ? $" (default {this.config.DefaultCompressionBits} bits{(this.config.UseCompressionMusLaw ? ", (mu-law)" : "")} compression)" : " (no compression)";
 
 		// Indicates a download is in progress
 		public bool IsDownloading { get; set; } = false;

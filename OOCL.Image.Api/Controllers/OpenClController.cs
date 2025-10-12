@@ -386,6 +386,11 @@ namespace OOCL.Image.Api.Controllers
 				AudioObj? audio = null;
 				if (request.OptionalAudio != null)
 				{
+					if (request.OptionalAudio.Data.CompresionBits > 0)
+					{
+						await request.OptionalAudio.Data.DecompressAsync();
+					}
+
 					initialBpm = request.InitialBpm;
 					await this.logger.LogAsync("Creating temp audio from OptionalAudio..." + $" ({request.OptionalAudio.Data.Samples.LongLength} bytes, sr: {request.OptionalAudio.Info.SampleRate}, ch: {request.OptionalAudio.Info.Channels}, bits: {request.OptionalAudio.Info.BitDepth})", nameof(OpenClController));
 					audio = await AudioCollection.CreateFromDataAsync(request.OptionalAudio.Data.Samples, request.OptionalAudio.Info.SampleRate, request.OptionalAudio.Info.Channels, request.OptionalAudio.Info.BitDepth);
