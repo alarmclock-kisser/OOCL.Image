@@ -25,7 +25,10 @@
         <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
         <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
         <span style="margin-left:auto;font-size:.9rem;color:gray;">
-            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Tracks loaded {VM.DataLocation}")
+            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Track(s) loaded {VM.DataLocation}")
+        </span>
+        <span style="margin-left:auto;font-size:.9rem;color:gray;">
+            @("Tracks limit. " + (VM?.MaxTracks ?? 0) + " tracks allowed.")
         </span>
     </div>
 
@@ -90,7 +93,7 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem;">
                         <div>
                             <div style="font-weight:600;">@item.Name</div>
-                            <div style="font-size:.85rem;color:gray;">@item.Bpm Freq: @item.Bpm</div>
+                            <div style="font-size:.85rem;color:gray;">Bpm: @item.Bpm</div>
                         </div>
                         <div style="display:flex;gap:.35rem;">
                             <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
@@ -109,6 +112,7 @@
                     <div>
                         <div><b>Name:</b> @selected.Name</div>
                         <div><b>Duration:</b> @selected.DurationSeconds s</div>
+                        <div><b>Original BPM:</b> @selected.Bpm.ToString("F3")</div>
                         <div style="margin-top:.5rem;">
                             <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
                             <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />

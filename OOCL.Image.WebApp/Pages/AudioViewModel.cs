@@ -30,6 +30,7 @@ namespace OOCL.Image.WebApp.Pages
         public List<AudioObjDto> ClientAudioCollection { get; private set; } = [];
         public string DataLocation => this.isServerSidedData.HasValue && this.isServerSidedData.Value == true ? "Server-sided" : "Client-cached [" + this.CacheSize + "]";
         public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Info.SizeInMb).Sum().ToString("F2") + " MB";
+        public int MaxTracks => this.config.TracksLimit ?? 0;
 
 		// Controls / State
 		public decimal InitialBpm { get; set; } = 0m;
@@ -41,7 +42,8 @@ namespace OOCL.Image.WebApp.Pages
 
         // Optional cached meta
         private bool? isServerSidedData;
-        private OpenClServiceInfo? openClServiceInfo;
+        private WebApiConfig? apiConfig;
+		private OpenClServiceInfo? openClServiceInfo;
         private List<OpenClKernelInfo> kernelInfos = [];
         public string SelectedKernelName { get; set; } = "timestretch_double03";
 		private AudioEntry? selectedTrack;
@@ -74,12 +76,6 @@ namespace OOCL.Image.WebApp.Pages
                 // swallow - View sollte nicht komplett abbrechen
             }
 
-            // Falls keine Einträge, ein Platzhalter
-            if (this.AudioEntries.Count == 0)
-            {
-				this.AudioEntries.Add(new AudioEntry(Guid.NewGuid(), "Sample audio", 120f, 3.2));
-            }
-
             // Default initial/target from first entry
             var first = this.AudioEntries.FirstOrDefault();
 			this.SetSelectedTrack(first);
@@ -89,6 +85,8 @@ namespace OOCL.Image.WebApp.Pages
         {
             bool serverSidedData = await this.api.IsServersidedDataAsync();
             this.isServerSidedData = serverSidedData;
+            this.apiConfig = await this.api.GetApiConfigAsync();
+
 			if (serverSidedData)
             {
                 try
@@ -145,7 +143,7 @@ namespace OOCL.Image.WebApp.Pages
         {
 			// TargetBpm erwartet bereits gesetzt zu sein
 			this.TargetBpm = Math.Round(this.TargetBpm, 3);
-            if (this.InitialBpm < 0.001m)
+            if (this.InitialBpm > 0.001m)
             {
 				this.StretchFactor = Math.Round(this.InitialBpm / this.TargetBpm, 12);
 			}
@@ -159,7 +157,7 @@ namespace OOCL.Image.WebApp.Pages
         {
 			// StretchFactor assumed to be set
 			this.StretchFactor = Math.Round(this.StretchFactor, 12);
-			this.TargetBpm = Math.Round(this.StretchFactor * this.InitialBpm, 3);
+			this.TargetBpm = Math.Round(this.InitialBpm * this.StretchFactor, 3);
 		}
 
         public async Task EnforceTracksLimit()
@@ -264,5 +262,11 @@ namespace OOCL.Image.WebApp.Pages
 
 			await this.ReloadAsync();
 		}
-    }
+
+
+
+
+
+        // Helpers
+	}
 }
