@@ -385,10 +385,12 @@ namespace OOCL.Image.Api.Controllers
 				if (request.OptionalAudio != null)
 				{
 					audio = await AudioCollection.CreateFromDataAsync(request.OptionalAudio.Data.Samples, request.OptionalAudio.Info.SampleRate, request.OptionalAudio.Info.Channels, request.OptionalAudio.Info.BitDepth);
+					await this.logger.LogAsync("Created temp audio from OptionalAudio: " + (audio != null ? "Yes" : "No"), nameof(OpenClController));
 				}
 				else if (request.AudioId != Guid.Empty)
 				{
 					audio = this.audioCollection[request.AudioId];
+					await this.logger.LogAsync($"Found audio {request.AudioId} in collection: " + (audio != null ? "Yes" : "No"), nameof(OpenClController));
 				}
 
 				if (audio == null)

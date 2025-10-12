@@ -25,10 +25,7 @@
         <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
         <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
         <span style="margin-left:auto;font-size:.9rem;color:gray;">
-            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Track(s) loaded {VM.DataLocation}")
-        </span>
-        <span style="margin-left:auto;font-size:.9rem;color:gray;">
-            @("Tracks limit. " + (VM?.MaxTracks ?? 0) + " tracks allowed.")
+            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Track(s) loaded {VM.DataLocation} (of max. {VM?.MaxTracks ?? 0})")
         </span>
     </div>
 
