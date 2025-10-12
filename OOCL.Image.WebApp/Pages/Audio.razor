@@ -105,9 +105,7 @@ else
                                 <div style="font-size:.85rem;color:gray;">Exec: @item.LastExecTime</div>
                             </div>
                             <div style="display:flex;gap:.35rem;">
-                                <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
                                 <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
-                                <RadzenButton Size="ButtonSize.Small" Icon="download" Click="@(async () => await OnDownloadClick())" />
                             </div>
                         </div>
                     </Template>
@@ -126,6 +124,7 @@ else
                             <div style="margin-top:.5rem;">
                                 <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
                                 <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />
+                                <RadzenButton Size="ButtonSize.Small" Icon="download" Click="@(async () => await OnDownloadClick())" Disabled="@(isDownloading || VM.IsDownloading || selected == null)" />
                                 <RadzenDropDown TValue="string"
                                                 Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
                                                 Value="@VM.DownloadAudioType"
@@ -160,6 +159,9 @@ else
     private AudioViewModel VM = null!;
     private Guid selectedId = Guid.Empty;
     private AudioViewModel.AudioEntry? selected;
+
+    // Local UI flag to reflect download in progress immediately
+    private bool isDownloading = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -229,7 +231,20 @@ else
 
     private async Task OnDownloadClick()
     {
-        await VM.DownloadAudio(selectedId);
+        if (selectedId == Guid.Empty) return;
+        if (isDownloading) return;
+
+        isDownloading = true;
+        StateHasChanged();
+        try
+        {
+            await VM.DownloadAudio(selectedId);
+        }
+        finally
+        {
+            isDownloading = false;
+            StateHasChanged();
+        }
     }
 
     private IEnumerable<int> GetBitsForSelected()

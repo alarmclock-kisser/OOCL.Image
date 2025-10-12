@@ -8,6 +8,7 @@ using Radzen;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
 using Microsoft.AspNetCore.Components.Forms;
+using System.IO;
 
 namespace OOCL.Image.WebApp.Pages
 {
@@ -48,6 +49,9 @@ namespace OOCL.Image.WebApp.Pages
         public bool EnableStretchControls { get; set; } = true;
         public string DownloadAudioType { get; set; } = "wav";
         public int DownloadAudioBits { get; set; } = 24;
+
+        // Indicates a download is in progress
+        public bool IsDownloading { get; set; } = false;
 
 		// Optional cached meta
 		private bool? isServerSidedData;
@@ -276,74 +280,83 @@ namespace OOCL.Image.WebApp.Pages
 
         public async Task DownloadAudio(Guid id)
         {
-            AudioObjDto? dto = null;
-            bool serverSidedData = await this.api.IsServersidedDataAsync();
-            if (serverSidedData)
+            // Ensure only one download at a time by setting flag
+            if (this.IsDownloading) return;
+            this.IsDownloading = true;
+            try
             {
-                var file = await this.api.DownloadAudioAsync(id, this.DownloadAudioType, this.DownloadAudioBits);
-                if (file != null)
+                AudioObjDto? dto = null;
+                bool serverSidedData = await this.api.IsServersidedDataAsync();
+                if (serverSidedData)
                 {
-                    await this.DownloadFileResponseAsync(file, id.ToString() + $".{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
-				}
-			}
-            else
-            {
-                dto = this.ClientAudioCollection.FirstOrDefault(a => a.Id == id);
-                if (dto != null)
-                {
-                    var file = await this.api.DownloadAudioDataAsync(dto, this.DownloadAudioType, this.DownloadAudioBits);
+                    var file = await this.api.DownloadAudioAsync(id, this.DownloadAudioType, this.DownloadAudioBits);
                     if (file != null)
                     {
-                        await this.DownloadFileResponseAsync(file, dto.Info.Name ?? (dto.Info.Id.ToString() + $".{this.DownloadAudioType}"), "audio/" + this.DownloadAudioType);
+                        await this.DownloadFileResponseAsync(file, id.ToString() + $".{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
                     }
                 }
-			}
+                else
+                {
+                    dto = this.ClientAudioCollection.FirstOrDefault(a => a.Id == id);
+                    if (dto != null)
+                    {
+                        var file = await this.api.DownloadAudioDataAsync(dto, this.DownloadAudioType, this.DownloadAudioBits);
+                        if (file != null)
+                        {
+                            await this.DownloadFileResponseAsync(file, dto.Info.Name ?? (dto.Info.Id.ToString() + $".{this.DownloadAudioType}"), "audio/" + this.DownloadAudioType);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                this.IsDownloading = false;
+            }
+        }
 
-		}
+        public async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
+        {
+            try
+            {
+                if (file.Stream == null)
+                {
+                    return;
+                }
+                byte[] bytes;
+                if (file.Stream.CanSeek)
+                {
+                    file.Stream.Position = 0;
+                    using var ms = new MemoryStream();
+                    await file.Stream.CopyToAsync(ms);
+                    bytes = ms.ToArray();
+                }
+                else
+                {
+                    // Nicht-seekbar -> direkt komplett lesen
+                    using var ms = new MemoryStream();
+                    await file.Stream.CopyToAsync(ms);
+                    bytes = ms.ToArray();
+                }
 
-		public async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
-		{
-			try
-			{
-				if (file.Stream == null)
-				{
-					return;
-				}
-				byte[] bytes;
-				if (file.Stream.CanSeek)
-				{
-					file.Stream.Position = 0;
-					using var ms = new MemoryStream();
-					await file.Stream.CopyToAsync(ms);
-					bytes = ms.ToArray();
-				}
-				else
-				{
-					// Nicht-seekbar -> direkt komplett lesen
-					using var ms = new MemoryStream();
-					await file.Stream.CopyToAsync(ms);
-					bytes = ms.ToArray();
-				}
+                if (bytes.Length == 0)
+                {
+                    return;
+                }
 
-				if (bytes.Length == 0)
-				{
-					return;
-				}
-
-				string mime = HomeViewModel.DetectMimeFromHeaders(file) ?? fallbackMime;
-				string base64 = Convert.ToBase64String(bytes);
-				string dataUri = $"data:{mime};base64,{base64}";
-				await this.js.InvokeVoidAsync("downloadFileFromDataUri", suggestedFileName, dataUri);
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine(ex);
-			}
-			finally
-			{
-				file.Dispose();
-			}
-		}
+                string mime = HomeViewModel.DetectMimeFromHeaders(file) ?? fallbackMime;
+                string base64 = Convert.ToBase64String(bytes);
+                string dataUri = $"data:{mime};base64,{base64}";
+                await this.js.InvokeVoidAsync("downloadFileFromDataUri", suggestedFileName, dataUri);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+            finally
+            {
+                file.Dispose();
+            }
+        }
 
 
 
