@@ -498,7 +498,6 @@ namespace OOCL.Image.Client
 			}
 			catch (Exception ex)
 			{
-				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return new OpenClServiceInfo();
 			}
 		}
