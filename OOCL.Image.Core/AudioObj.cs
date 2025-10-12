@@ -1793,6 +1793,7 @@ namespace OOCL.Image.Core
 
 		public string? ContentHash { get; internal set; } // SHA256 of original file
 		public string ErrorMessage { get; set; } = string.Empty;
+		public double? LastExecutionTime { get; set; } = null;
 
 		internal static string? ComputeFileHash(string filePath)
 		{

@@ -19,113 +19,135 @@
 
 <link rel="stylesheet" href="/css/site.css" />
 
-<RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
-    <h3>Audio</h3>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
-        <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
-        <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
-        <span style="margin-left:auto;font-size:.9rem;color:gray;">
-            @(VM == null ? "Loading..." : $"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks}) ca. {VM.DataLocation} (max. API request size: {VM.MaxUploadSizeMb} MB)")
-        </span>
-    </div>
-
-    <!-- Neu: Card mit BPM / Stretch Controls (Toggle + 3 Numerics) -->
-    <div style="margin-bottom:12px;">
-        <RadzenCard>
-            <div style="display:flex;align-items:center;gap:12px;">
-                <div style="font-weight:600;">Stretch / BPM</div>
-                <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
-                    <label style="font-size:.9rem;margin:0;">Enable</label>
-                    <RadzenCheckBox @bind-Value="VM.EnableStretchControls" TValue="bool" />
-                </div>
-            </div>
-
-            @if (VM.EnableStretchControls)
-            {
-                <div style="display:flex;gap:12px;align-items:center;margin-top:.6rem;">
-                    <div style="min-width:140px;">
-                        <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Initial BPM</label>
-                        <RadzenNumeric TValue="decimal"
-                                       @bind-Value="VM.InitialBpm"
-                                       Min="0"
-                                       Max="360"
-                                       Step="0.001"
-                                       Style="width:140px;" Disabled="true" />
-                    </div>
-
-                    <div style="min-width:160px;">
-                        <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
-                        <RadzenNumeric TValue="decimal"
-                                       Value="VM.TargetBpm"
-                                       Change="@( (decimal v) => OnTargetBpmChanged(v) )"
-                                       Min="0"
-                                       Max="360"
-                                       Step="0.001"
-                                       Style="width:160px;" />
-                    </div>
-
-                    <div style="min-width:260px;">
-                        <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Stretch Factor</label>
-                        <RadzenNumeric TValue="decimal"
-                                       Value="VM.StretchFactor"
-                                       Change="@( (decimal v) => OnStretchFactorChanged(v) )"
-                                       Min="0.01m"
-                                       Max="10m"
-                                       Step="0.000000000001"
-                                       Style="width:260px;" />
-                    </div>
-                </div>
-            }
-        </RadzenCard>
-    </div>
-
-    <div style="display:flex;gap:12px;">
-        <div style="flex:1 1 300px;">
-            <RadzenListBox Data="@VM.AudioEntries"
-                           @bind-Value="selectedId"
-                           ValueProperty="Id"
-                           Style="width:100%;min-height:200px;"
-                           Change="@OnSelectionChanged">
-                <Template Context="item">
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem;">
-                        <div>
-                            <div style="font-weight:600;">@item.Name</div>
-                            <div style="font-size:.85rem;color:gray;">Bpm: @item.Bpm</div>
-                            <div style="font-size:.85rem;color:gray;">Duration: @item.DurationSeconds s</div>
-                            <div style="font-size:.85rem;color:gray;">Bytes: @item.BytesCount</div>
-                        </div>
-                        <div style="display:flex;gap:.35rem;">
-                            <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
-                            <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
-                        </div>
-                    </div>
-                </Template>
-            </RadzenListBox>
+@if (VM == null)
+{
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        <h3>Audio</h3>
+        <div>Loading...</div>
+    </RadzenCard>
+}
+else
+{
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        <h3>Audio</h3>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+            <RadzenButton Icon="upload" Text="Upload" Click="@ShowFileDialog" />
+            <RadzenButton Icon="refresh" Text="Reload" Click="@Reload" />
+            <span style="margin-left:auto;font-size:.9rem;color:gray;">
+                @($"{VM.AudioEntries?.Count ?? 0} Track(s) loaded (of max. {VM.MaxTracks}) ca. {VM.DataLocation} (max. API request size: {VM.MaxUploadSizeMb} MB)")
+            </span>
         </div>
 
-        <div style="flex:2 1 500px;">
+        <!-- Neu: Card mit BPM / Stretch Controls (Toggle + 3 Numerics) -->
+        <div style="margin-bottom:12px;">
             <RadzenCard>
-                <h4>Selected audio</h4>
-                @if (selected != null)
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="font-weight:600;">Stretch / BPM</div>
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;">
+                        <label style="font-size:.9rem;margin:0;">Enable</label>
+                        <RadzenCheckBox @bind-Value="VM.EnableStretchControls" TValue="bool" />
+                    </div>
+                </div>
+
+                @if (VM.EnableStretchControls)
                 {
-                    <div>
-                        <div><b>Name:</b> @selected.Name</div>
-                        <div><b>Duration:</b> @selected.DurationSeconds s</div>
-                        <div><b>Original BPM:</b> @selected.Bpm.ToString("F3")</div>
-                        <div style="margin-top:.5rem;">
-                            <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
-                            <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />
+                    <div style="display:flex;gap:12px;align-items:center;margin-top:.6rem;">
+                        <div style="min-width:140px;">
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Initial BPM</label>
+                            <RadzenNumeric TValue="decimal"
+                                           @bind-Value="VM.InitialBpm"
+                                           Min="0"
+                                           Max="360"
+                                           Step="0.001"
+                                           Style="width:140px;" Disabled="true" />
+                        </div>
+
+                        <div style="min-width:160px;">
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Target BPM</label>
+                            <RadzenNumeric TValue="decimal"
+                                           Value="VM.TargetBpm"
+                                           Change="@( (decimal v) => OnTargetBpmChanged(v) )"
+                                           Min="0"
+                                           Max="360"
+                                           Step="0.001"
+                                           Style="width:160px;" />
+                        </div>
+
+                        <div style="min-width:260px;">
+                            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;">Stretch Factor</label>
+                            <RadzenNumeric TValue="decimal"
+                                           Value="VM.StretchFactor"
+                                           Change="@( (decimal v) => OnStretchFactorChanged(v) )"
+                                           Min="0.01m"
+                                           Max="10m"
+                                           Step="0.000000000001"
+                                           Style="width:260px;" />
                         </div>
                     </div>
-                }
-                else
-                {
-                    <div style="color:gray;">No selection</div>
                 }
             </RadzenCard>
         </div>
-    </div>
-</RadzenCard>
+
+        <div style="display:flex;gap:12px;">
+            <div style="flex:1 1 300px;">
+                <RadzenListBox Data="@VM.AudioEntries"
+                               @bind-Value="selectedId"
+                               ValueProperty="Id"
+                               Style="width:100%;min-height:200px;"
+                               Change="@OnSelectionChanged">
+                    <Template Context="item">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem;">
+                            <div>
+                                <div style="font-weight:600;">@item.Name</div>
+                                <div style="font-size:.85rem;color:gray;">Bpm: @item.Bpm</div>
+                                <div style="font-size:.85rem;color:gray;">Duration: @item.DurationSeconds s</div>
+                                <div style="font-size:.85rem;color:gray;">Bytes: @item.BytesCount</div>
+                                <div style="font-size:.85rem;color:gray;">Exec: @item.LastExecTime</div>
+                            </div>
+                            <div style="display:flex;gap:.35rem;">
+                                <RadzenButton Size="ButtonSize.Small" Icon="play_arrow" Click="@(async () => await VM.PlayAsync(item.Id))" />
+                                <RadzenButton Size="ButtonSize.Small" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@(async () => await Remove(item.Id))" />
+                                <RadzenButton Size="ButtonSize.Small" Icon="download" Click="@(async () => await OnDownloadClick())" />
+                                <RadzenDropDown TValue="string"
+                                    Data="@(VM.AvailableDownloadFormats?.Keys ?? Enumerable.Empty<string>())"
+                                    @bind-Value="VM.DownloadAudioType"
+                                    Style="width:120px;"
+                                    Placeholder="Format" />
+                                <RadzenDropDown TValue="int"
+                                    Data="@( GetBitsForSelected() )"
+                                    @bind-Value="VM.DownloadAudioBits"
+                                    Style="width:140px;"
+                                    Placeholder="Bits" />
+                            </div>
+                        </div>
+                    </Template>
+                </RadzenListBox>
+            </div>
+
+            <div style="flex:2 1 500px;">
+                <RadzenCard>
+                    <h4>Selected audio</h4>
+                    @if (selected != null)
+                    {
+                        <div>
+                            <div><b>Name:</b> @selected.Name</div>
+                            <div><b>Duration:</b> @selected.DurationSeconds s</div>
+                            <div><b>Original BPM:</b> @selected.Bpm.ToString("F3")</div>
+                            <div style="margin-top:.5rem;">
+                                <RadzenButton Icon="play_arrow" Text="Play" Click="@(async () => await VM.PlayAsync(selected.Id))" />
+                                <RadzenButton Icon="audiotrack" Text="Process" Click="@(async () => await VM.ProcessAsync(selected.Id))" Style="margin-left:.5rem;" />
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="color:gray;">No selection</div>
+                    }
+                </RadzenCard>
+            </div>
+        </div>
+    </RadzenCard>
+}
 
 <!-- Hidden file input used by Upload button -->
 <InputFile id="fileInputHidden" style="display:none" OnChange="@OnInputFileChange" accept="audio/*" />
@@ -201,6 +223,33 @@
     {
         VM.StretchFactor = value;
         VM.UpdateTargetFromStretch();
+        StateHasChanged();
+    }
+
+    private async Task OnDownloadClick()
+    {
+        await VM.DownloadAudio(selectedId);
+    }
+
+    private IEnumerable<int> GetBitsForSelected()
+    {
+        if (VM?.AvailableDownloadFormats == null) return Enumerable.Empty<int>();
+        if (string.IsNullOrWhiteSpace(VM.DownloadAudioType)) return Enumerable.Empty<int>();
+        return VM.AvailableDownloadFormats.TryGetValue(VM.DownloadAudioType, out var arr) ? arr : Enumerable.Empty<int>();
+    }
+
+    private void OnFormatChanged(string value)
+    {
+        if (VM == null) return;
+        VM.DownloadAudioType = value;
+        if (VM.AvailableDownloadFormats != null && VM.AvailableDownloadFormats.TryGetValue(value, out var bits) && bits.Length > 0)
+        {
+            VM.DownloadAudioBits = bits[0];
+        }
+        else
+        {
+            VM.DownloadAudioBits = 0;
+        }
         StateHasChanged();
     }
 }

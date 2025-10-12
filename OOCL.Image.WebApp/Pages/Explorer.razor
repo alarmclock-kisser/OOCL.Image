@@ -47,7 +47,7 @@ else
                 <div>OffY: @VM.OffsetY.ToString("F3")</div>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;">
-                <RadzenColorPicker @bind-Value="VM.ColorHex"
+                <RadzenColorPicker @bind-Value="ColorHexProxy"
                                    Disabled="@(!VM.HasColorGroup)"
                                    Style="width:140px;"
                                    ShowRGBA="true"
@@ -73,7 +73,7 @@ else
             <div>
                 <RadzenButton Text="Render" Icon="play_arrow" Click="async ()=> await VM.RenderAsync(true)" Disabled="@(VM == null)" />
                 <label style="font-size:0.75rem;margin-left:0.5rem;">Auto-Refresh</label>
-                <RadzenCheckBox @bind-Value="VM.RefreshEveryMove" TValue="bool" Style="margin-left:0.5rem;vertical-align:middle;" />
+                <RadzenCheckBox @bind-Value="RefreshEveryMoveProxy" TValue="bool" Style="margin-left:0.5rem;vertical-align:middle;" />
             </div>
         </div>
 
@@ -110,17 +110,17 @@ else
         </div>
         <div>
             <!-- Label with VM.RecordedStatus + CheckBox for recording -->
-            <RadzenCheckBox @bind-Value="VM.RecordToClientCollection" TValue="bool" Style="margin-top:8px" Change="@VM.OnRecordToClientCollectionChanged"></RadzenCheckBox>
-            <label style="font-size:0.9em;margin-right:4px;">Recording: @(VM.RecordedStatus)</label>
+            <RadzenCheckBox @bind-Value="RecordToClientCollectionProxy" TValue="bool" Style="margin-top:8px" Change="@OnRecordToClientCollectionChangedHandler"></RadzenCheckBox>
+            <label style="font-size:0.9em;margin-right:4px;">Recording: @(VM?.RecordedStatus ?? "-")</label>
             <div>
                 <!-- Download as Gif button with checkbox doLoop, numericUD frameRate, numericUD rescaleFactor -->
                 <RadzenButton Icon="gif" Text="Download GIF" Click="@DownloadGif" Disabled="@(!CanDownload)" Style="margin-top:8px;" />
                 <label style="font-size:0.9em;margin-right:4px;">FrameRate:</label>
-                <RadzenNumeric TValue="int" @bind-Value="VM.GifFrameRate" Min="1" Max="144" Style="width:80px;" Disabled="@(VM == null)" />
+                <RadzenNumeric TValue="int" @bind-Value="GifFrameRateProxy" Min="1" Max="144" Style="width:80px;" Disabled="@(VM == null)" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Rescale:</label>
-                <RadzenNumeric TValue="double" @bind-Value="VM.GifScalingFactor" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
+                <RadzenNumeric TValue="double" @bind-Value="GifScalingFactorProxy" Min="@(GifRescaleMin)" Max="@(GifRescaleMax)" Step="0.01" Style="width:80px;" />
                 <label style="font-size:0.9em;margin:0 8px 0 16px;">Loop:</label>
-                <RadzenCheckBox @bind-Value="VM.GifDoLoop" TValue="bool" Style="margin-top:8px;" />
+                <RadzenCheckBox @bind-Value="GifDoLoopProxy" TValue="bool" Style="margin-top:8px;" />
             </div>
         </div>
 
@@ -204,6 +204,61 @@ else
     private bool CanDownload => VM != null && VM.ClientImageCollection != null && VM.ClientImageCollection.Count > 0;
     private decimal GifRescaleMin = 0.1m;
     private decimal GifRescaleMax = 5.0m;
+
+    // Proxy properties to safely bind UI controls while VM may be null initially
+    private bool RefreshEveryMoveProxy
+    {
+        get => VM?.RefreshEveryMove ?? false;
+        set
+        {
+            if (VM != null) VM.RefreshEveryMove = value;
+        }
+    }
+
+    private string ColorHexProxy
+    {
+        get => VM?.ColorHex ?? "#00000000";
+        set
+        {
+            if (VM != null) VM.ColorHex = value;
+        }
+    }
+
+    private bool RecordToClientCollectionProxy
+    {
+        get => VM?.RecordToClientCollection ?? false;
+        set
+        {
+            if (VM != null) VM.RecordToClientCollection = value;
+        }
+    }
+
+    private int GifFrameRateProxy
+    {
+        get => VM?.GifFrameRate ?? 30;
+        set
+        {
+            if (VM != null) VM.GifFrameRate = value;
+        }
+    }
+
+    private double GifScalingFactorProxy
+    {
+        get => VM?.GifScalingFactor ?? 1.0;
+        set
+        {
+            if (VM != null) VM.GifScalingFactor = value;
+        }
+    }
+
+    private bool GifDoLoopProxy
+    {
+        get => VM?.GifDoLoop ?? false;
+        set
+        {
+            if (VM != null) VM.GifDoLoop = value;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -300,6 +355,13 @@ else
     {
         if (VM == null) return;
         await VM.AdjustIterationsAsync(dir);
+        StateHasChanged();
+    }
+
+    private async Task OnRecordToClientCollectionChangedHandler(bool value)
+    {
+        if (VM == null) return;
+        await VM.OnRecordToClientCollectionChanged(value);
         StateHasChanged();
     }
 

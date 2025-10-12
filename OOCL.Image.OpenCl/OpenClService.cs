@@ -592,12 +592,17 @@ namespace OOCL.Image.OpenCl
 				}
 
 				// Execute time stretch kernel
+				Stopwatch sw = Stopwatch.StartNew();
+
 				var ptr = (await this.ExecuteAudioKernel(obj, kernelName, "", chunkSize, overlap, optionalArgs, true, progress)).Pointer;
 				if (ptr == IntPtr.Zero)
 				{
 					obj.ErrorMessage = obj.ErrorMessage + " (Failed to execute time-stretch kernel: " + kernelName + ")";
 					return obj;
 				}
+
+				sw.Stop();
+				obj.LastExecutionTime = sw.Elapsed.TotalMilliseconds;
 
 				// Optionally move obj back to host
 				if (moved && obj.OnDevice)

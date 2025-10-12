@@ -17,7 +17,7 @@ namespace OOCL.Image.WebApp.Pages
     /// </summary>
     public class AudioViewModel
     {
-        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds, long BytesCount);
+        public record AudioEntry(Guid Id, string Name, float Bpm, double DurationSeconds, long BytesCount, double lastExecTime);
 
         private readonly ApiClient api;
         private readonly WebAppConfig config;
@@ -32,6 +32,12 @@ namespace OOCL.Image.WebApp.Pages
         public string CacheSize => this.ClientAudioCollection.Select(dto => dto.Info.SizeInMb).Sum().ToString("F2") + " MB";
         public int MaxTracks => this.config.TracksLimit ?? 0;
         public double MaxUploadSizeMb => this.apiConfig?.MaxUploadSizeMb ?? 0;
+		public Dictionary<string, int[]> AvailableDownloadFormats { get; private set; } = new()
+		{
+			["wav"] = [8, 16, 24, 32],
+			["mp3"] = [64, 96, 128, 192, 256, 320]
+		};
+
 
 		// Controls / State
 		public decimal InitialBpm { get; set; } = 0m;
@@ -40,9 +46,11 @@ namespace OOCL.Image.WebApp.Pages
         public int ChunkSize { get; set; } = 8192;
         public decimal Overlap { get; set; } = 0.5m;
         public bool EnableStretchControls { get; set; } = true;
+        public string DownloadAudioType { get; set; } = "wav";
+        public int DownloadAudioBits { get; set; } = 24;
 
-        // Optional cached meta
-        private bool? isServerSidedData;
+		// Optional cached meta
+		private bool? isServerSidedData;
         private WebApiConfig? apiConfig;
 		private OpenClServiceInfo? openClServiceInfo;
         private List<OpenClKernelInfo> kernelInfos = [];
@@ -72,7 +80,7 @@ namespace OOCL.Image.WebApp.Pages
             try
             {
                 var list = (await this.api.GetAudioListAsync(false))?.ToList() ?? [];
-				this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds, 0)).ToList();
+				this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds, 0, 0)).ToList();
             }
             catch
             {
@@ -95,7 +103,7 @@ namespace OOCL.Image.WebApp.Pages
                 try
                 {
                     var list = (await this.api.GetAudioListAsync(false))?.ToList() ?? [];
-                    this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds, 0)).ToList();
+                    this.AudioEntries = list.Select(t => new AudioEntry(t.Id, t.Name ?? t.Id.ToString(), t.Bpm, t.DurationSeconds, 0, t.LastExecutionTime ?? 0)).ToList();
                 }
                 catch
                 {
@@ -105,7 +113,7 @@ namespace OOCL.Image.WebApp.Pages
             else
             {
                 // Client-seitige Collection
-                this.AudioEntries = this.ClientAudioCollection.Select(t => new AudioEntry(t.Info.Id, t.Info.Name ?? t.Info.Id.ToString(), t.Info.Bpm, t.Info.DurationSeconds, (t.Data.Samples.LongLength > 0 ? t.Data.Samples.LongLength : -1))).ToList();
+                this.AudioEntries = this.ClientAudioCollection.Select(t => new AudioEntry(t.Info.Id, t.Info.Name ?? t.Info.Id.ToString(), t.Info.Bpm, t.Info.DurationSeconds, (t.Data.Samples.LongLength > 0 ? t.Data.Samples.LongLength : -1), t.Info.LastExecutionTime ?? 0)).ToList();
             }
 
             if (this.selectedTrack == null)
@@ -199,7 +207,7 @@ namespace OOCL.Image.WebApp.Pages
                 {
                     this.ClientAudioCollection.Add(dto);
                 }
-                this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds, dto.Data.Samples.LongLength));
+                this.AudioEntries.Add(new AudioEntry(dto.Info.Id, dto.Info.Name ?? dto.Info.Id.ToString(), dto.Info.Bpm, dto.Info.DurationSeconds, dto.Data.Samples.LongLength, 0));
 			}
 
             await this.EnforceTracksLimit();
@@ -266,10 +274,79 @@ namespace OOCL.Image.WebApp.Pages
 			await this.ReloadAsync();
 		}
 
+        public async Task DownloadAudio(Guid id)
+        {
+            AudioObjDto? dto = null;
+            bool serverSidedData = await this.api.IsServersidedDataAsync();
+            if (serverSidedData)
+            {
+                var file = await this.api.DownloadAudioAsync(id, this.DownloadAudioType, this.DownloadAudioBits);
+                if (file != null)
+                {
+                    await this.DownloadFileResponseAsync(file, id.ToString() + $".{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
+				}
+			}
+            else
+            {
+                dto = this.ClientAudioCollection.FirstOrDefault(a => a.Id == id);
+                if (dto != null)
+                {
+                    var file = await this.api.DownloadAudioDataAsync(dto, this.DownloadAudioType, this.DownloadAudioBits);
+                    if (file != null)
+                    {
+                        await this.DownloadFileResponseAsync(file, dto.Info.Name ?? (dto.Info.Id.ToString() + $".{this.DownloadAudioType}"), "audio/" + this.DownloadAudioType);
+                    }
+                }
+			}
+
+		}
+
+		public async Task DownloadFileResponseAsync(FileResponse file, string suggestedFileName, string fallbackMime = "application/octet-stream")
+		{
+			try
+			{
+				if (file.Stream == null)
+				{
+					return;
+				}
+				byte[] bytes;
+				if (file.Stream.CanSeek)
+				{
+					file.Stream.Position = 0;
+					using var ms = new MemoryStream();
+					await file.Stream.CopyToAsync(ms);
+					bytes = ms.ToArray();
+				}
+				else
+				{
+					// Nicht-seekbar -> direkt komplett lesen
+					using var ms = new MemoryStream();
+					await file.Stream.CopyToAsync(ms);
+					bytes = ms.ToArray();
+				}
+
+				if (bytes.Length == 0)
+				{
+					return;
+				}
+
+				string mime = HomeViewModel.DetectMimeFromHeaders(file) ?? fallbackMime;
+				string base64 = Convert.ToBase64String(bytes);
+				string dataUri = $"data:{mime};base64,{base64}";
+				await this.js.InvokeVoidAsync("downloadFileFromDataUri", suggestedFileName, dataUri);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine(ex);
+			}
+			finally
+			{
+				file.Dispose();
+			}
+		}
 
 
 
-
-        // Helpers
+		// Helpers
 	}
 }

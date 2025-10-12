@@ -35,6 +35,8 @@ namespace OOCL.Image.Shared
         public string CurrentTime { get; set; } = "0:00:00.000";
         public int SamplesPerSecond { get; set; } = 0;
 
+        public double? LastExecutionTime { get; set; } = null;
+
 		public IEnumerable<string> Metrics { get; set; } = [];
         public IEnumerable<string> MetricValues { get; set; } = [];
 
@@ -85,6 +87,8 @@ namespace OOCL.Image.Shared
                 this.Metrics = obj.Metrics.Keys.ToList();
                 this.MetricValues = obj.Metrics.Values.Select(v => v.ToString()).ToList();
 			}
+
+            this.LastExecutionTime = obj.LastExecutionTime;
 		}
 
     }
