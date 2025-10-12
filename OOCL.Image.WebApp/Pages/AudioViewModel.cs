@@ -284,7 +284,7 @@ namespace OOCL.Image.WebApp.Pages
                 return;
             }
 
-            await this.DownloadFileResponseAsync(result, fileParameter.FileName + $".{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
+            await this.DownloadFileResponseAsync(result, fileParameter.FileName + $"_stretched_{(this.StretchFactor.ToString("F5"))}.{this.DownloadAudioType}", "audio/" + this.DownloadAudioType);
 
             this.IsDownloading = false;
 			execTimes = execTimes + ", Download: " + sw.Elapsed.TotalMilliseconds.ToString("F1") + " ms";
