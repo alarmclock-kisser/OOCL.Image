@@ -1,4 +1,5 @@
 ﻿using alarmclockkisser.KernelDtos;
+using ManagedCuda.CudaFFT;
 using Microsoft.JSInterop;
 using OOCL.Image.Client;
 using OOCL.Image.Shared;
@@ -34,10 +35,10 @@ namespace OOCL.Image.WebApp.Pages
 		public bool DoInverseAfterwards { get; set; } = false;
 		public string ForceDeviceName { get; set; } = string.Empty;
 		public string PreferredClientApiUrl { get; set; } = string.Empty;
-		public double ExecutionTimeMs { get; private set; } = 0.0;
+		public double ExecutionTimeMs { get; set; } = 0.0;
 		public string PreviewText { get; private set; } = string.Empty;
 		public bool SerializeAsBase64 { get; set; } = false;
-		public bool RequestTestMode { get; set; } = true;
+		public bool RequestTestMode { get; set; } = false;
 		public string? PreferredClientSwaggerLink => this.RegisteredWorkers != null && this.RegisteredWorkers.Count > 0
 			? (this.PreferredClientApiUrl.TrimEnd('/') + ":32141/api/swagger")
 			: null;
@@ -46,6 +47,7 @@ namespace OOCL.Image.WebApp.Pages
 		public bool HasWorkerApi => this.workerApi != null;
 		public bool ShowLogRefreshedMsg { get; set; } = true;
 		public bool UseClientApiHttpNoCert => this.config.UseClientApiHttpNoCert;
+		public bool SuppressWorkerApiClient { get; set; } = true;
 
 		private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
@@ -69,6 +71,29 @@ namespace OOCL.Image.WebApp.Pages
 			// default preferred client api url to first available
 			this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
 			await this.CreateWorkerApiClient(this.PreferredClientApiUrl, this.config.UseClientApiHttpNoCert);
+		}
+
+		public Task ToggleSuppressWorkerApiClientAsync(bool v)
+		{
+			this.SuppressWorkerApiClient = v;
+
+			if (v)
+			{
+				this.workerApi = null;
+			}
+			else
+			{
+				_ = Task.Run(async () =>
+				{
+					await this.CreateWorkerApiClient(this.PreferredClientApiUrl, this.config.UseClientApiHttpNoCert);
+					if (this.workerApi != null)
+					{
+						await this.RefreshWorkerApiLog();
+					}
+				});
+			}
+
+			return Task.CompletedTask;
 		}
 
 		public async Task RefreshRegisteredWorkersAsync()
@@ -99,6 +124,11 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task RefreshWorkerApiLog(bool tryInitialize = true)
 		{
+			if (this.SuppressWorkerApiClient)
+			{
+				return;
+			}
+
 			if (this.workerApi == null && tryInitialize)
 			{
 				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
@@ -116,6 +146,11 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task CreateWorkerApiClient(string workerUrl, bool useNoCertHttp = false)
 		{
+			if (this.SuppressWorkerApiClient)
+			{
+				return;
+			}
+
 			try
 			{
 				HttpClient httpClient;
@@ -334,24 +369,22 @@ namespace OOCL.Image.WebApp.Pages
 					DeviceName = string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.apiConfig?.PreferredDevice,
 				};
 				var result = await this.workerApi.RequestCuFftAsync(request);
-				if (result == null)
+				if (result == null || (result.ExecutionTimeMs == null && result.DataChunks == null))
 				{
-					await this.LogAsync("ExecuteTestFftWorkerApiAsync: result is null", false);
+					string msg = "";
+					if (result?.ErrorMessage != null)
+					{
+						msg = " Error: " + result.ErrorMessage;
+					}
+					await this.LogAsync("ExecuteTestFftWorkerApiAsync: result is null with ErrMsg: " + msg, false);
+					this.ExecutionTimeMs = -1;
 					return;
 				}
 
 				inverted = result.DataForm == "c";
 				this.ExecutionTimeMs = result.ExecutionTimeMs ?? 0.0;
 
-				// FFT-Vorschau: max 32 Werte pro Chunk, sonst 16 vorne, [...], 16 hinten
-				// FFT-Vorschau für komplexe Daten (float2)
-				string fftPreview = "";
-				if (result.DataChunks != null && result.DataChunks.Count() > 0)
-				{
-					var firstChunk = result.DataChunks.FirstOrDefault();
-					fftPreview = FormatComplexPreview(firstChunk, 16);
-				}
-				this.PreviewText = $"FFT-Ergebnis: {fftPreview}";
+				this.PreviewText = FormatFftPreview(result.DataChunks?.ToList());
 
 				this.notifications.Notify(new NotificationMessage
 				{
@@ -378,41 +411,27 @@ namespace OOCL.Image.WebApp.Pages
 					};
 
 					var ifftResult = await this.workerApi.RequestCuFftAsync(request);
-					if (ifftResult == null)
+					if (ifftResult == null || (ifftResult.ExecutionTimeMs == null && ifftResult.DataChunks == null))
 					{
-						await this.LogAsync("ExecuteTestFftWorkerApiAsync: ifftResult is null", false);
+						string msg = "";
+						if (ifftResult?.ErrorMessage != null)
+						{
+							msg = " Error: " + ifftResult.ErrorMessage;
+						}
+						await this.LogAsync("ExecuteTestFftWorkerApiAsync: ifftResult is null with ErrMsg: " + msg, false);
+
+						this.ExecutionTimeMs = -1;
 						return;
 					}
 
 					this.ExecutionTimeMs = ifftResult.ExecutionTimeMs ?? this.ExecutionTimeMs;
 
-					// Vorschau für IFFT analog
-					string ifftPreview = "";
-					if (ifftResult.DataChunks != null && ifftResult.DataChunks.Count() > 0)
-					{
-						var firstChunk = ifftResult.DataChunks.FirstOrDefault();
-						if (firstChunk != null)
-						{
-							int len = firstChunk.Length;
-							if (len <= 32)
-							{
-								ifftPreview = string.Join(", ", firstChunk);
-							}
-							else
-							{
-								var first16 = firstChunk.Take(16);
-								var last16 = firstChunk.Skip(len - 16);
-								ifftPreview = string.Join(", ", first16) + ", [...], " + string.Join(", ", last16);
-							}
-						}
-					}
-
-					this.PreviewText = $"Inverse FFT-Ergebnis: {ifftPreview}\nZeit: {this.ExecutionTimeMs} ms";
+					this.PreviewText = FormatFftPreview(ifftResult.DataChunks?.ToList());
 
 					this.notifications.Notify(new NotificationMessage
 					{
 						Summary = "Success",
-						Detail = $"Test inverse FFT executed on worker.",
+						Detail = $"Test I-FFT executed on worker.",
 						Duration = 4000,
 						Severity = NotificationSeverity.Success
 					});
@@ -430,7 +449,7 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task RequestFftTestAsync()
 		{
-			if (this.workerApi != null)
+			if (this.workerApi != null &! this.SuppressWorkerApiClient)
 			{
 				await this.LogAsync("RequestFftTestAsync: Redirecting to worker API", true);
 				await this.ExecuteTestFftWorkerApiAsync();
@@ -447,10 +466,9 @@ namespace OOCL.Image.WebApp.Pages
 				}
 
 				this.ExecutionTimeMs = result.ExecutionTimeMs ?? 0.0;
-				this.PreviewText = JsonSerializer.Serialize(result, this.jsonOptions);
 				
 				// If more than 48 elements, split and short middle entries with [...]
-				this.PreviewText = result.DataChunks.FirstOrDefault()?.Length <= 48 ? string.Join(", ", result.DataChunks) : string.Join(", ", result.DataChunks.Select(c => c.Take(47) + ", ..."));
+				this.PreviewText = FormatFftPreview(result.DataChunks?.ToList());
 			}
 			catch (Exception ex)
 			{
@@ -462,7 +480,7 @@ namespace OOCL.Image.WebApp.Pages
 
 		public async Task RunCufftTestAsync()
 		{
-			if (this.workerApi != null)
+			if (this.workerApi != null && !this.SuppressWorkerApiClient)
 			{
 				await this.LogAsync("RunCufftTestAsync: Redirecting to worker API", true);
 				await this.ExecuteTestFftWorkerApiAsync();
@@ -541,12 +559,8 @@ namespace OOCL.Image.WebApp.Pages
 					return;
 				}
 
-				this.ExecutionTimeMs = fftResult?.ExecutionTimeMs ?? 0.0;
-				this.PreviewText = JsonSerializer.Serialize(fftResult, this.jsonOptions);
-				if (this.PreviewText.Length > 48)
-				{
-					this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
-				}
+				this.ExecutionTimeMs = fftResult.ExecutionTimeMs ?? -1;
+				this.PreviewText = FormatFftPreview(fftResult.DataChunks?.ToList());
 
 				// optionally do inverse FFT
 				if (this.DoInverseAfterwards && fftResult?.DataChunks != null)
@@ -566,12 +580,8 @@ namespace OOCL.Image.WebApp.Pages
 						return;
 					}
 
-					this.ExecutionTimeMs = ifftResult?.ExecutionTimeMs ?? this.ExecutionTimeMs;
-					this.PreviewText = JsonSerializer.Serialize(ifftResult, this.jsonOptions);
-					if (this.PreviewText.Length > 48)
-					{
-						this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
-					}
+					this.ExecutionTimeMs = ifftResult.ExecutionTimeMs ?? -1;
+					this.PreviewText = FormatFftPreview(ifftResult.DataChunks?.ToList());
 				}
 
 				await this.LogAsync("RunCufftTestAsync: FFT executed successfully", true);
@@ -626,6 +636,44 @@ namespace OOCL.Image.WebApp.Pages
 				}
 			}
 			return chunkObj.ToString() ?? string.Empty;
+		}
+
+		private static string FormatFftPreview(IReadOnlyList<object[]>? chunks, int maxRows = 8, int maxCols = 8)
+		{
+			if (chunks == null || chunks.Count == 0)
+				return "Keine FFT-Daten.";
+
+			var sb = new System.Text.StringBuilder();
+			int stride = chunks[0].Length;
+			sb.AppendLine($"Batches: {chunks.Count}, Stride: {stride}");
+
+			int rows = Math.Min(maxRows, chunks.Count);
+			int cols = Math.Min(maxCols, stride);
+
+			for (int i = 0; i < rows; i++)
+			{
+				var chunk = chunks[i];
+				sb.Append($"Chunk {i + 1}: ");
+				// Zeige die ersten und letzten 8 Werte, falls stride > 16
+				if (stride > 16)
+				{
+					var firstVals = chunk.Take(8).Select(v => $"{v:0.###}");
+					var lastVals = chunk.Skip(stride - 8).Select(v => $"{v:0.###}");
+					sb.Append(string.Join(", ", firstVals));
+					sb.Append(", [...], ");
+					sb.Append(string.Join(", ", lastVals));
+				}
+				else
+				{
+					var vals = chunk.Take(cols).Select(v => $"{v:0.###}");
+					sb.Append(string.Join(", ", vals));
+				}
+				sb.AppendLine();
+			}
+			if (chunks.Count > rows)
+				sb.AppendLine($"... ({chunks.Count - rows} weitere Chunks)");
+
+			return sb.ToString();
 		}
 
 	}

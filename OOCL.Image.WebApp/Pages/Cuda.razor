@@ -162,6 +162,8 @@ else
                 <span class="panel-sub">@GetWorkerApiLogInfoString()</span>
                 <span class="spacer"></span>
                 <!-- NEU: Clear Log Button (rot, links vor +/-) -->
+                <span style="margin-left:4px;font-size:0.95em;">Suppress WorkerApiClient</span>
+                <RadzenCheckBox @bind-Value="VM.SuppressWorkerApiClient" Style="margin-left:12px;" />
                 <RadzenButton ButtonStyle="ButtonStyle.Danger"
                               Size="ButtonSize.Small"
                               Icon="delete"
