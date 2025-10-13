@@ -71,22 +71,30 @@ namespace OOCL.Image.WebApp.Pages
 		public async Task RefreshRegisteredWorkersAsync()
 		{
 			this.RegisteredWorkers = (await this.api.RefreshCudaWorkersAsync()).ToList();
-			if (string.IsNullOrWhiteSpace(this.PreferredClientApiUrl))
+			this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
+
+			await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
+			if (this.workerApi != null)
 			{
-				await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
-				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
+				await this.RefreshWorkerApiLog();
 			}
 		}
 
-		public async Task RefreshWorkerApiLog()
+		public async Task RefreshWorkerApiLog(bool tryInitialize = true)
 		{
+			if (this.workerApi == null && tryInitialize)
+			{
+				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
+				await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
+			}
+
 			if (this.workerApi == null)
 			{
 				this.WorkerApiLog = [];
 				return;
 			}
 
-			this.WorkerApiLog = (await this.workerApi.GetWorkerLogAsync(256)).ToList();
+			this.WorkerApiLog = (await this.workerApi.GetWorkerLogAsync(1024)).ToList();
 		}
 
 		public async Task CreateWorkerApiClient(string workerUrl)
