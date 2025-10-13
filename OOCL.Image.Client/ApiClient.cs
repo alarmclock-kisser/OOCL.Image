@@ -137,9 +137,12 @@ namespace OOCL.Image.Client
 			else
 			{
 				var data = await new StreamContent(file.Data).ReadAsByteArrayAsync();
-				var ints = data.Select(b => (int)b).ToArray();
-				var dto = await this.internalClient.CreateImageFromDataAsync(ints, file.FileName, file.ContentType, false);
-				
+				var ints = data.Select(b => (int) b).ToArray();
+				// Expliziter Zugriff auf die Property, um die Mehrdeutigkeit zu vermeiden
+				var fileName = file.GetType().GetProperty("FileName")?.GetValue(file) as string ?? file.FileName;
+				var contentType = file.GetType().GetProperty("ContentType")?.GetValue(file) as string ?? file.ContentType;
+				var dto = await this.internalClient.CreateImageFromDataAsync(ints, fileName, contentType, false);
+
 				return dto ?? new ImageObjDto();
 			}
 		}
