@@ -5,6 +5,7 @@ using OOCL.Image.Shared;
 using Radzen;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 
 namespace OOCL.Image.WebApp.Pages
 {
@@ -66,6 +67,8 @@ namespace OOCL.Image.WebApp.Pages
 			// default preferred client api url to first available
 			this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
 			await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
+
+			await this.LogAsync("WebApp/Cuda initialized", true);
 		}
 
 		public async Task RefreshRegisteredWorkersAsync()
@@ -77,6 +80,20 @@ namespace OOCL.Image.WebApp.Pages
 			if (this.workerApi != null)
 			{
 				await this.RefreshWorkerApiLog();
+			}
+
+			await this.LogAsync("Refreshed registered workers", true);
+		}
+
+		public async Task LogAsync(string message, bool bothClients = false)
+		{
+			if (this.workerApi != null)
+			{
+				await this.workerApi.LogAsync(message);
+			}
+			if (bothClients || this.workerApi == null)
+			{
+				await this.api.LogAsync(message);
 			}
 		}
 
@@ -95,6 +112,8 @@ namespace OOCL.Image.WebApp.Pages
 			}
 
 			this.WorkerApiLog = (await this.workerApi.GetWorkerLogAsync(1024)).ToList();
+
+			await this.LogAsync("Refreshed worker API log", false);
 		}
 
 		public async Task CreateWorkerApiClient(string workerUrl)
@@ -108,6 +127,8 @@ namespace OOCL.Image.WebApp.Pages
 				this.workerApi = new WorkerApiClient(new RollingFileLogger(1024, false, null, "log_workerclient_"), httpClient, initializeApiConfig: true);
 
 				var status = await this.workerApi.GetStatusAsync();
+
+				await this.LogAsync($"Created WorkerApiClient for {workerUrl}. Worker reports {status.AvailableDevices.Count()} CUDA devices.", false);
 			}
 			catch (Exception ex)
 			{
@@ -118,6 +139,8 @@ namespace OOCL.Image.WebApp.Pages
 					Duration = 8000,
 					Severity = NotificationSeverity.Error
 				});
+
+				await this.LogAsync("Error creating WorkerApiClient for " + workerUrl + ": " + ex.Message, false);
 			}
 		}
 
@@ -144,21 +167,27 @@ namespace OOCL.Image.WebApp.Pages
 				{
 					this.RegistrationMessage = string.IsNullOrWhiteSpace(msg) ? "Registered" : msg;
 					this.RegistrationColor = "color:green";
+
+					await this.LogAsync("Registered new worker URL " + this.NewWorkerUrl + ".", true);
 				}
 				else
 				{
 					this.RegistrationMessage = string.IsNullOrWhiteSpace(msg) ? "Registration failed" : msg;
 					this.RegistrationColor = "color:darkred";
+
+					await this.LogAsync("Registration of worker URL " + this.NewWorkerUrl + " did not succeed (not present after registration).", true);
 				}
 			}
 			catch (Exception ex)
 			{
 				this.RegistrationMessage = ex.Message;
 				this.RegistrationColor = "color:darkred";
+
+				await this.LogAsync("Error registering worker URL " + this.NewWorkerUrl + ": " + ex.Message, true);
 			}
 		}
 
-		public void SetFftSize(decimal value)
+		public async Task SetFftSize(decimal value)
 		{
 			const int MinFftSize = 32;
 			const int MaxFftSize = 256 * 1024 * 1024; // 256k
@@ -202,6 +231,8 @@ namespace OOCL.Image.WebApp.Pages
 				}
 
 				this.FftSize = (int) next;
+
+				await this.LogAsync($"Set FFT size to INC {this.FftSize}", true);
 				return;
 			}
 
@@ -215,10 +246,12 @@ namespace OOCL.Image.WebApp.Pages
 				}
 
 				this.FftSize = prev;
+				await this.LogAsync($"Set FFT size to DEC {this.FftSize}", true);
 				return;
 			}
 
 			// unverändert: nichts tun
+			await this.LogAsync($"Set FFT size to UNCH {this.FftSize}", true);
 		}
 
 		private static bool IsPowerOfTwo(int x) => x > 0 && (x & (x - 1)) == 0;
@@ -243,6 +276,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			if (this.workerApi == null)
 			{
+				await this.LogAsync("ExecuteTestFftWorkerApiAsync called but workerApi is null", false);
 				return;
 			}
 
@@ -281,6 +315,7 @@ namespace OOCL.Image.WebApp.Pages
 				var result = await this.workerApi.RequestCuFftAsync(request);
 				if (result == null)
 				{
+					await this.LogAsync("ExecuteTestFftWorkerApiAsync: result is null", false);
 					return;
 				}
 
@@ -288,7 +323,9 @@ namespace OOCL.Image.WebApp.Pages
 				this.ExecutionTimeMs = result.ExecutionTimeMs ?? 0.0;
 				this.PreviewText = JsonSerializer.Serialize(result, this.jsonOptions);
 				if (this.PreviewText.Length > 48)
+				{
 					this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+				}
 
 				// If more than 48 elements, split and short middle entries with [...]
 				this.PreviewText = result.DataChunks.FirstOrDefault()?.Length <= 48 ? string.Join(", ", result.DataChunks) : string.Join(", ", result.DataChunks.Select(c => c.Take(47) + ", ..."));
@@ -320,13 +357,17 @@ namespace OOCL.Image.WebApp.Pages
 					var ifftResult = await this.workerApi.RequestCuFftAsync(request);
 					if (ifftResult == null)
 					{
+						await this.LogAsync("ExecuteTestFftWorkerApiAsync: ifftResult is null", false);
 						return;
 					}
 
 					this.ExecutionTimeMs = ifftResult.ExecutionTimeMs ?? this.ExecutionTimeMs;
 					this.PreviewText = JsonSerializer.Serialize(ifftResult, this.jsonOptions);
 					if (this.PreviewText.Length > 48)
+					{
 						this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+					}
+
 					this.notifications.Notify(new NotificationMessage
 					{
 						Summary = "Success",
@@ -336,10 +377,13 @@ namespace OOCL.Image.WebApp.Pages
 					});
 				}
 
+				await this.LogAsync($"Executed test FFT on worker (inverse: {inverted}).", false);
 			}
 			catch (Exception ex)
 			{
 				Console.WriteLine(ex);
+				this.PreviewText = "Error (test-request-cufft-worker): " + ex.Message;
+				await this.LogAsync("Error executing test-worker FFT on worker: " + ex.Message, false);
 			}
 		}
 
@@ -347,6 +391,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			if (this.workerApi != null)
 			{
+				await this.LogAsync("RequestFftTestAsync: Redirecting to worker API", true);
 				await this.ExecuteTestFftWorkerApiAsync();
 				return;
 			}
@@ -356,6 +401,7 @@ namespace OOCL.Image.WebApp.Pages
 				var result = await this.api.TestRequestCuFftAsync(this.FftSize, this.BatchSize, this.DoInverseAfterwards, this.PreferredClientApiUrl, this.ForceDeviceName);
 				if (result == null)
 				{
+					await this.LogAsync("RequestFftTestAsync: result is null", true);
 					return;
 				}
 
@@ -369,6 +415,7 @@ namespace OOCL.Image.WebApp.Pages
 			{
 				Console.WriteLine(ex);
 				this.PreviewText = "Error (test-request-cufft): " + ex.Message;
+				await this.LogAsync("Error executing request-test FFT via API: " + ex.Message, true);
 			}
 		}
 
@@ -376,6 +423,7 @@ namespace OOCL.Image.WebApp.Pages
 		{
 			if (this.workerApi != null)
 			{
+				await this.LogAsync("RunCufftTestAsync: Redirecting to worker API", true);
 				await this.ExecuteTestFftWorkerApiAsync();
 				return;
 			}
@@ -387,6 +435,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			if (this.RequestTestMode)
 			{
+				await this.LogAsync("RunCufftTestAsync: Using RequestTestMode", true);
 				await this.RequestFftTestAsync();
 				return;
 			}
@@ -445,10 +494,18 @@ namespace OOCL.Image.WebApp.Pages
 					preferredClientApiUrl: string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.PreferredClientApiUrl
 				);
 
+				if (fftResult == null)
+				{
+					await this.LogAsync("RunCufftTestAsync: fftResult is null", true);
+					return;
+				}
+
 				this.ExecutionTimeMs = fftResult?.ExecutionTimeMs ?? 0.0;
 				this.PreviewText = JsonSerializer.Serialize(fftResult, this.jsonOptions);
 				if (this.PreviewText.Length > 48)
+				{
 					this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+				}
 
 				// optionally do inverse FFT
 				if (this.DoInverseAfterwards && fftResult?.DataChunks != null)
@@ -462,15 +519,26 @@ namespace OOCL.Image.WebApp.Pages
 						preferredClientApiUrl: string.IsNullOrWhiteSpace(this.PreferredClientApiUrl) ? null : this.RegisteredWorkers.FirstOrDefault()
 					);
 
+					if (ifftResult == null)
+					{
+						await this.LogAsync("RunCufftTestAsync: ifftResult is null", true);
+						return;
+					}
+
 					this.ExecutionTimeMs = ifftResult?.ExecutionTimeMs ?? this.ExecutionTimeMs;
 					this.PreviewText = JsonSerializer.Serialize(ifftResult, this.jsonOptions);
 					if (this.PreviewText.Length > 48)
+					{
 						this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+					}
 				}
+
+				await this.LogAsync("RunCufftTestAsync: FFT executed successfully", true);
 			}
 			catch (Exception ex)
 			{
 				this.PreviewText = "Error: " + ex.Message;
+				await this.LogAsync("Error executing FFT run-test via API: " + ex.Message, true);
 			}
 		}
 

@@ -40,6 +40,11 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task LogAsync(string message)
+		{
+			await this.logger.LogAsync("APICLIENT:" + message, nameof(ApiClient) + "*");
+		}
+
 
 		public async Task<WebApiConfig> GetApiConfigAsync(bool forceReload = false)
 		{

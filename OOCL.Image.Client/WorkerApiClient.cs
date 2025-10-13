@@ -38,6 +38,12 @@ namespace OOCL.Image.Client
 			}
 		}
 
+		public async Task LogAsync(string message)
+		{
+			await this.logger.LogAsync("WORKERAPI:" + message, nameof(WorkerApiClient) + "*");
+		}
+
+
 		public async Task<string[]> GetWorkerLogAsync(int maxEntries = 1024)
 		{
 			await this.logger.LogAsync($"WORKERAPI: Called GetWorkerLogAsync(maxEntries: {maxEntries})", nameof(WorkerApiClient));

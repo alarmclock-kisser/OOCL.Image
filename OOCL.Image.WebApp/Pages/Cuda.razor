@@ -98,10 +98,11 @@ else
 
                                 @if (!string.IsNullOrWhiteSpace(VM.PreferredClientSwaggerLink))
                                 {
-                                    <a href="@VM.PreferredClientSwaggerLink"
+                                    var httpSwaggerLink = VM.PreferredClientSwaggerLink.Replace("https://", "http://");
+                                    <a href="@httpSwaggerLink"
                                        target="_blank"
                                        rel="noopener noreferrer"
-                                       title="@VM.PreferredClientSwaggerLink"
+                                       title="@httpSwaggerLink"
                                        style="color:var(--link-color, #0a66c2);text-decoration:underline;margin-left:.25rem;">
                                         Swagger
                                     </a>
