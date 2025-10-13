@@ -21,7 +21,7 @@ namespace OOCL.Image.Core
 		// Async method to measure data throughput via stream or idk
 		public async Task<double?> MeasureDataThroughputAsync()
 		{
-			
+			return null;
 		}
 
 	}
