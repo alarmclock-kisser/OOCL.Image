@@ -31,21 +31,16 @@ namespace OOCL.Image.Client
 
 			if (useNoCertHttpClient)
 			{
-				var handler = new HttpClientHandler
-				{
-					ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
-				};
-				this.httpClient = new HttpClient(handler)
-				{
-					BaseAddress = httpClient?.BaseAddress ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.")
-				};
+				var handler = new HttpClientHandler();
+				handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+				httpClient = new HttpClient(handler) { BaseAddress = httpClient?.BaseAddress ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.") };
 			}
 			else
 			{
 				this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 			}
 
-			this.baseUrl = this.httpClient.BaseAddress?.ToString().TrimEnd('/') ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.");
+			this.baseUrl = this.httpClient?.BaseAddress?.ToString().TrimEnd('/') ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.");
 			this.internalClient = new internalWorkerClient(this.baseUrl, this.httpClient);
 
 			if (initializeApiConfig)
