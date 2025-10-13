@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using OOCL.Image.Core;
 using OOCL.Image.OpenCl;
@@ -23,6 +24,10 @@ namespace OOCL.Image.Api
 			bool   usePathBase      = builder.Configuration.GetValue("UsePathBase", false);
 			int maxLogLines = builder.Configuration.GetValue("MaxLogLines", 1024);
 			bool cleanupPreviousLogs = builder.Configuration.GetValue("CleanupPreviousLogs", true);
+			string? loggingDbConnectionString = builder.Configuration.GetValue<string>("LoggingDbConnectionString", "");
+
+			// DbLoggingContext DI
+			
 
 			if (!serverSidedData)
 			{

@@ -21,7 +21,7 @@ namespace OOCL.Image.WebApp.Pages
 		private WebApiConfig? apiConfig = null;
 		private DateTime lastConfigFetch = DateTime.MinValue;
 
-		public List<string> RegisteredWorkers { get; set; } = new();
+		public List<string> RegisteredWorkers { get; set; } = [];
 
 		// Registration UI
 		public string NewWorkerUrl { get; set; } = string.Empty;
@@ -44,6 +44,8 @@ namespace OOCL.Image.WebApp.Pages
 
 		public List<string> WorkerApiLog { get; private set; } = [];
 		public bool HasWorkerApi => this.workerApi != null;
+		public bool ShowLogRefreshedMsg { get; set; } = true;
+		public bool UseClientApiHttpNoCert => this.config.UseClientApiHttpNoCert;
 
 		private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
@@ -66,9 +68,7 @@ namespace OOCL.Image.WebApp.Pages
 
 			// default preferred client api url to first available
 			this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
-			await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
-
-			await this.LogAsync("WebApp/Cuda initialized", true);
+			await this.CreateWorkerApiClient(this.PreferredClientApiUrl, this.config.UseClientApiHttpNoCert);
 		}
 
 		public async Task RefreshRegisteredWorkersAsync()
@@ -102,7 +102,7 @@ namespace OOCL.Image.WebApp.Pages
 			if (this.workerApi == null && tryInitialize)
 			{
 				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
-				await this.CreateWorkerApiClient(this.PreferredClientApiUrl);
+				await this.CreateWorkerApiClient(this.PreferredClientApiUrl, this.config.UseClientApiHttpNoCert);
 			}
 
 			if (this.workerApi == null)
@@ -111,20 +111,31 @@ namespace OOCL.Image.WebApp.Pages
 				return;
 			}
 
-			this.WorkerApiLog = (await this.workerApi.GetWorkerLogAsync(1024)).ToList();
-
-			await this.LogAsync("Refreshed worker API log", false);
+			this.WorkerApiLog = (await this.workerApi.GetWorkerLogAsync(1024, this.ShowLogRefreshedMsg)).ToList();
 		}
 
-		public async Task CreateWorkerApiClient(string workerUrl)
+		public async Task CreateWorkerApiClient(string workerUrl, bool useNoCertHttp = false)
 		{
 			try
 			{
-				var httpClient = new HttpClient
+				HttpClient httpClient;
+				if (useNoCertHttp)
 				{
-					BaseAddress = new Uri(workerUrl)
-				};
-				this.workerApi = new WorkerApiClient(new RollingFileLogger(1024, false, null, "log_workerclient_"), httpClient, initializeApiConfig: true);
+					var handler = new HttpClientHandler();
+					handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+					httpClient = new HttpClient(handler)
+					{
+						BaseAddress = new Uri(workerUrl)
+					};
+				}
+				else
+				{
+					httpClient = new HttpClient
+					{
+						BaseAddress = new Uri(workerUrl)
+					};
+				}
+				this.workerApi = new WorkerApiClient(new RollingFileLogger(1024, false, null, "log_workerclient_"), httpClient, true, useNoCertHttp);
 
 				var status = await this.workerApi.GetStatusAsync();
 
@@ -158,7 +169,21 @@ namespace OOCL.Image.WebApp.Pages
 			try
 			{
 				var msg = await this.api.RegisterCudaWorkerUrlAsync(this.NewWorkerUrl);
-				await this.RefreshRegisteredWorkersAsync();
+
+				// WICHTIG: Worker-Refresh und Log NICHT synchron im UI-Thread ausführen!
+				// Stattdessen: nur Worker-Liste aktualisieren, WorkerApiClient im Hintergrund initialisieren
+				this.RegisteredWorkers = (await this.api.RefreshCudaWorkersAsync()).ToList();
+				this.PreferredClientApiUrl = this.RegisteredWorkers.FirstOrDefault() ?? string.Empty;
+
+				// WorkerApiClient im Hintergrund initialisieren, UI bleibt responsiv
+				_ = Task.Run(async () =>
+				{
+					await this.CreateWorkerApiClient(this.PreferredClientApiUrl, this.config.UseClientApiHttpNoCert);
+					if (this.workerApi != null)
+					{
+						await this.RefreshWorkerApiLog();
+					}
+				});
 
 				// check presence
 				var normalized = this.NewWorkerUrl.Trim().TrimEnd('/');
@@ -167,14 +192,12 @@ namespace OOCL.Image.WebApp.Pages
 				{
 					this.RegistrationMessage = string.IsNullOrWhiteSpace(msg) ? "Registered" : msg;
 					this.RegistrationColor = "color:green";
-
 					await this.LogAsync("Registered new worker URL " + this.NewWorkerUrl + ".", true);
 				}
 				else
 				{
 					this.RegistrationMessage = string.IsNullOrWhiteSpace(msg) ? "Registration failed" : msg;
 					this.RegistrationColor = "color:darkred";
-
 					await this.LogAsync("Registration of worker URL " + this.NewWorkerUrl + " did not succeed (not present after registration).", true);
 				}
 			}
@@ -182,7 +205,6 @@ namespace OOCL.Image.WebApp.Pages
 			{
 				this.RegistrationMessage = ex.Message;
 				this.RegistrationColor = "color:darkred";
-
 				await this.LogAsync("Error registering worker URL " + this.NewWorkerUrl + ": " + ex.Message, true);
 			}
 		}
@@ -284,10 +306,10 @@ namespace OOCL.Image.WebApp.Pages
 			try
 			{
 				// create sine wave batch * fftsize → input data
-				var inputData = new List<float[]>()
-				{
-					Enumerable.Range(0, this.FftSize).Select(i => (float) Math.Sin(2.0 * Math.PI * 5.0 * (double) i / (double) this.FftSize)).ToArray()
-				};
+				var inputData = new List<float[]>
+		{
+			Enumerable.Range(0, this.FftSize).Select(i => (float)Math.Sin(2.0 * Math.PI * 5.0 * (double)i / (double)this.FftSize)).ToArray()
+		};
 
 				for (int b = 1; b < this.BatchSize; b++)
 				{
@@ -298,7 +320,6 @@ namespace OOCL.Image.WebApp.Pages
 				IEnumerable<object[]> dataChunksAsObjects = inputData
 					.Select(ch => ch.Cast<object>().ToArray())
 					.ToArray();
-
 
 				var request = new CuFftRequest()
 				{
@@ -321,14 +342,16 @@ namespace OOCL.Image.WebApp.Pages
 
 				inverted = result.DataForm == "c";
 				this.ExecutionTimeMs = result.ExecutionTimeMs ?? 0.0;
-				this.PreviewText = JsonSerializer.Serialize(result, this.jsonOptions);
-				if (this.PreviewText.Length > 48)
-				{
-					this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
-				}
 
-				// If more than 48 elements, split and short middle entries with [...]
-				this.PreviewText = result.DataChunks.FirstOrDefault()?.Length <= 48 ? string.Join(", ", result.DataChunks) : string.Join(", ", result.DataChunks.Select(c => c.Take(47) + ", ..."));
+				// FFT-Vorschau: max 32 Werte pro Chunk, sonst 16 vorne, [...], 16 hinten
+				// FFT-Vorschau für komplexe Daten (float2)
+				string fftPreview = "";
+				if (result.DataChunks != null && result.DataChunks.Count() > 0)
+				{
+					var firstChunk = result.DataChunks.FirstOrDefault();
+					fftPreview = FormatComplexPreview(firstChunk, 16);
+				}
+				this.PreviewText = $"FFT-Ergebnis: {fftPreview}";
 
 				this.notifications.Notify(new NotificationMessage
 				{
@@ -343,7 +366,7 @@ namespace OOCL.Image.WebApp.Pages
 				{
 					request = new CuFftRequest()
 					{
-						DataChunks = result.DataChunks,
+						DataChunks = result.DataChunks ?? [],
 						DataForm = "c",
 						DataType = "float",
 						DataLength = (this.FftSize * this.BatchSize).ToString(),
@@ -353,7 +376,7 @@ namespace OOCL.Image.WebApp.Pages
 						Inverse = true,
 						DeviceName = string.IsNullOrWhiteSpace(this.ForceDeviceName) ? null : this.apiConfig?.PreferredDevice,
 					};
-					
+
 					var ifftResult = await this.workerApi.RequestCuFftAsync(request);
 					if (ifftResult == null)
 					{
@@ -362,11 +385,29 @@ namespace OOCL.Image.WebApp.Pages
 					}
 
 					this.ExecutionTimeMs = ifftResult.ExecutionTimeMs ?? this.ExecutionTimeMs;
-					this.PreviewText = JsonSerializer.Serialize(ifftResult, this.jsonOptions);
-					if (this.PreviewText.Length > 48)
+
+					// Vorschau für IFFT analog
+					string ifftPreview = "";
+					if (ifftResult.DataChunks != null && ifftResult.DataChunks.Count() > 0)
 					{
-						this.PreviewText = this.PreviewText.Substring(0, 48) + "...";
+						var firstChunk = ifftResult.DataChunks.FirstOrDefault();
+						if (firstChunk != null)
+						{
+							int len = firstChunk.Length;
+							if (len <= 32)
+							{
+								ifftPreview = string.Join(", ", firstChunk);
+							}
+							else
+							{
+								var first16 = firstChunk.Take(16);
+								var last16 = firstChunk.Skip(len - 16);
+								ifftPreview = string.Join(", ", first16) + ", [...], " + string.Join(", ", last16);
+							}
+						}
 					}
+
+					this.PreviewText = $"Inverse FFT-Ergebnis: {ifftPreview}\nZeit: {this.ExecutionTimeMs} ms";
 
 					this.notifications.Notify(new NotificationMessage
 					{
@@ -377,7 +418,7 @@ namespace OOCL.Image.WebApp.Pages
 					});
 				}
 
-				await this.LogAsync($"Executed test FFT on worker (inverse: {inverted}).", false);
+				await this.LogAsync($"Executed test FFT on worker (inverse: {inverted}) successfully.", false);
 			}
 			catch (Exception ex)
 			{
@@ -542,5 +583,51 @@ namespace OOCL.Image.WebApp.Pages
 			}
 		}
 
+
+
+		private static string FormatComplexPreview(object? chunkObj, int maxPairs = 16)
+		{
+			if (chunkObj is null) return string.Empty;
+
+			// Versuche als float[] zu casten
+			if (chunkObj is float[] floatArr && floatArr.Length >= 2)
+			{
+				int pairCount = floatArr.Length / 2;
+				if (pairCount <= maxPairs)
+				{
+					return string.Join(", ", Enumerable.Range(0, pairCount)
+						.Select(i => $"[{floatArr[2 * i]:0.###}, {floatArr[2 * i + 1]:0.###}]"));
+				}
+				else
+				{
+					var first8 = Enumerable.Range(0, 8)
+						.Select(i => $"[{floatArr[2 * i]:0.###}, {floatArr[2 * i + 1]:0.###}]");
+					var last8 = Enumerable.Range(pairCount - 8, 8)
+						.Select(i => $"[{floatArr[2 * i]:0.###}, {floatArr[2 * i + 1]:0.###}]");
+					return string.Join(", ", first8) + ", [...], " + string.Join(", ", last8);
+				}
+			}
+			// Falls chunkObj ein object[] ist, versuche float-Paare zu extrahieren
+			if (chunkObj is object[] objArr && objArr.Length >= 2)
+			{
+				int pairCount = objArr.Length / 2;
+				if (pairCount <= maxPairs)
+				{
+					return string.Join(", ", Enumerable.Range(0, pairCount)
+						.Select(i => $"[{objArr[2 * i]}, {objArr[2 * i + 1]}]"));
+				}
+				else
+				{
+					var first8 = Enumerable.Range(0, 8)
+						.Select(i => $"[{objArr[2 * i]}, {objArr[2 * i + 1]}]");
+					var last8 = Enumerable.Range(pairCount - 8, 8)
+						.Select(i => $"[{objArr[2 * i]}, {objArr[2 * i + 1]}]");
+					return string.Join(", ", first8) + ", [...], " + string.Join(", ", last8);
+				}
+			}
+			return chunkObj.ToString() ?? string.Empty;
+		}
+
 	}
 }
+

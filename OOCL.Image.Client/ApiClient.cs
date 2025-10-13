@@ -494,7 +494,7 @@ namespace OOCL.Image.Client
 
 
 
-		public async Task<OpenClServiceInfo> GetOpenClServiceInfoAsync()
+		public async Task<OpenClServiceInfo> GetOpenClServiceInfoAsync(bool suppressLog = true)
 		{
 			await this.logger.LogAsync($"Called GetOpenClServiceInfoAsync()", nameof(ApiClient));
 			try
@@ -503,6 +503,11 @@ namespace OOCL.Image.Client
 			}
 			catch (Exception ex)
 			{
+				if (!suppressLog)
+				{
+					await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				}
+
 				return new OpenClServiceInfo();
 			}
 		}

@@ -40,9 +40,36 @@ else
             <div style="flex:1 1 300px;">
                 <label style="font-weight:600;display:block;margin-bottom:6px;">Register new worker</label>
                 <input style="width:100%;padding:.4rem;" placeholder="https://worker.example" @bind="VM.NewWorkerUrl" />
+                <!-- Ergänzung unter "Register new worker" und "Refresh" Button -->
                 <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
                     <button class="rz-button rz-primary" @onclick="@(async () => { await VM.RegisterWorkerAsync(); StateHasChanged(); })">Register</button>
                     <button class="rz-button" @onclick="@(async () => { VM.NewWorkerUrl = string.Empty; await VM.RefreshRegisteredWorkersAsync(); StateHasChanged(); })">Refresh</button>
+                    <!-- NEU: Numeric für Delay -->
+                    <RadzenNumeric TValue="int"
+                                   Value="@refreshDelayMs"
+                                   Change="@( (int v) => OnRefreshDelayChanged(v) )"
+                                   Min="500"
+                                   Max="10000"
+                                   Step="250"
+                                   Style="width:90px;margin-left:12px;" />
+                    <span style="margin-left:4px;">ms</span>
+                    <!-- NEU: Checkbox für Log-Refresh-Msg -->
+                    <RadzenCheckBox @bind-Value="VM.ShowLogRefreshedMsg" Style="margin-left:12px;" />
+                    <span style="margin-left:4px;font-size:0.95em;">Log Tick Message</span>
+                </div>
+                <div style="margin-top:8px;">
+                    @if (VM.UseClientApiHttpNoCert == true)
+                    {
+                        <span style="color:red;font-weight:bold;">Achtung: Client API nutzt unsichere HTTP-Verbindung (kein Zertifikat)!</span>
+                    }
+                    else if (VM.UseClientApiHttpNoCert == false)
+                    {
+                        <span style="color:green;font-weight:bold;">Client API Verbindung ist sicher (Zertifikat aktiv).</span>
+                    }
+                    else
+                    {
+                        <span style="visibility:hidden;">&nbsp;</span>
+                    }
                 </div>
                 <div style="margin-top:8px;@(VM.RegistrationColor)">@VM.RegistrationMessage</div>
             </div>
@@ -134,6 +161,12 @@ else
                 <b class="panel-title">CUDA WorkerApi Logs: </b>
                 <span class="panel-sub">@GetWorkerApiLogInfoString()</span>
                 <span class="spacer"></span>
+                <!-- NEU: Clear Log Button (rot, links vor +/-) -->
+                <RadzenButton ButtonStyle="ButtonStyle.Danger"
+                              Size="ButtonSize.Small"
+                              Icon="delete"
+                              Style="min-width:30px;width:30px;padding:0;margin-right:8px;"
+                              Click="@OnClearWorkerApiLog" />
                 <RadzenButton ButtonStyle="ButtonStyle.Light"
                               Size="ButtonSize.Small"
                               Icon="@(isWorkerApiLogsExpanded ? "remove" : "add")"
@@ -145,37 +178,63 @@ else
             @if (isWorkerApiLogsExpanded)
             {
                 <div class="panel-body" style="max-height:300px;overflow:auto;">
-                    <textarea style="width:100%;height:200px;font-family:monospace;" readonly>@string.Join("\n", VM.WorkerApiLog)</textarea>
+                    <textarea id="workerApiLogArea"
+                              style="width:100%;height:200px;font-family:monospace;overflow-y:auto;"
+                              readonly>@string.Join("\n", VM.WorkerApiLog)</textarea>
                 </div>
             }
         </div>
     </RadzenCard>
 }
 
+@implements IDisposable
+
 @code
 {
     private CudaViewModel VM = null!;
-
+    private System.Threading.Timer? logRefreshTimer;
+    private int refreshDelayMs = 3000;
+    private bool timerStarted = false;
 
     protected override async Task OnInitializedAsync()
     {
         VM = new CudaViewModel(Api, null, Config, Notifications, JS, DialogService);
-
         await VM.InitializeAsync();
     }
 
-    private void OnFftSizeChanged(int value)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !timerStarted)
+        {
+            timerStarted = true;
+            logRefreshTimer = new System.Threading.Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await VM.RefreshWorkerApiLog();
+                    StateHasChanged();
+                    await JS.InvokeVoidAsync("scrollToBottom", "workerApiLogArea");
+                });
+            }, null, 0, refreshDelayMs);
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task OnFftSizeChanged(int value)
     {
         // VM.ToggleChunkSize expects a numeric value; it snaps to nearest power of two
-        VM.SetFftSize(value);
+        await VM.SetFftSize(value);
         StateHasChanged();
     }
 
     private bool isWorkerApiLogsExpanded = true;
 
-    private void ToggleWorkerApiLogs()
+    private async Task ToggleWorkerApiLogs()
     {
         isWorkerApiLogsExpanded = !isWorkerApiLogsExpanded;
+
+        await VM.RefreshWorkerApiLog();
         StateHasChanged();
     }
 
@@ -186,4 +245,27 @@ else
         return info;
     }
 
+    private void OnRefreshDelayChanged(int value)
+    {
+        refreshDelayMs = value;
+        logRefreshTimer?.Change(0, refreshDelayMs);
+    }
+
+    private void OnClearWorkerApiLog()
+    {
+        VM.WorkerApiLog.Clear();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        logRefreshTimer?.Dispose();
+    }
 }
+
+<script>
+    window.scrollToBottom = function (elementId) {
+        var el = document.getElementById(elementId);
+        if (el) el.scrollTop = el.scrollHeight;
+    }
+</script>

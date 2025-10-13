@@ -16,6 +16,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\OOCL.Image.Logging\OOCL.Image.Logging.csproj" />
 		<ProjectReference Include="..\OOCL.Image.OpenCl\OOCL.Image.OpenCl.csproj" />
 		<ProjectReference Include="..\OOCL.Image.Shared\OOCL.Image.Shared.csproj" />
 	</ItemGroup>

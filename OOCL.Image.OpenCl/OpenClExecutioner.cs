@@ -870,7 +870,7 @@ namespace OOCL.Image.OpenCl
 
 				if (providedArguments == null)
 				{
-					providedArguments = new Dictionary<string, string>();
+					providedArguments = [];
 				}
 
 				if (chunkSize > 0)

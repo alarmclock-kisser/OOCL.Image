@@ -11,6 +11,8 @@ namespace OOCL.Image.WebApp
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
+			builder.WebHost.UseStaticWebAssets();
+
 			string environment = builder.Environment.EnvironmentName;
 			var rawApiBaseUrl = builder.Configuration["ApiBaseUrl"];
 
@@ -48,6 +50,8 @@ namespace OOCL.Image.WebApp
 			defaultCompressionBits = Math.Clamp(defaultCompressionBits, 0, 32);
 			var useCompressionMusLaw = builder.Configuration.GetValue<bool>("UseCompressionMusLaw");
 
+			bool useHttpNoCert = builder.Configuration.GetValue<bool>("UseHttpNoCert");
+
 			builder.Services.AddSingleton(new ApiUrlConfig(effectiveBase));
 
 			WebAppConfig config = new(
@@ -67,7 +71,8 @@ namespace OOCL.Image.WebApp
 				cleanupPreviousLogs,
 				timeoutSec,
 				defaultCompressionBits,
-				useCompressionMusLaw
+				useCompressionMusLaw,
+				useHttpNoCert
 			);
 			builder.Services.AddSingleton(config);
 
@@ -101,7 +106,7 @@ namespace OOCL.Image.WebApp
 				normalizedBase,
 				effectiveBase);
 
-			// Selbsttest: erwartet funktionierende externe URL-Kette -> /api/api/OpenCl/status
+			/*// Selbsttest: erwartet funktionierende externe URL-Kette -> /api/api/OpenCl/status
 			using (var scope = app.Services.CreateScope())
 			{
 				try
@@ -115,7 +120,7 @@ namespace OOCL.Image.WebApp
 				{
 					app.Logger.LogError(ex, "API Selftest FEHLGESCHLAGEN. Base={Base}", effectiveBase);
 				}
-			}
+			}*/
 
 			if (!app.Environment.IsDevelopment())
 			{

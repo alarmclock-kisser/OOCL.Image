@@ -19,14 +19,33 @@ namespace OOCL.Image.Client
 		private JsonSerializerOptions jsonSerializerOptions = new() { PropertyNameCaseInsensitive = true };
 
 		public string BaseUrl => this.baseUrl;
-
 		private ApiConfiguration? apiConfigCache = null;
 
-		public WorkerApiClient(RollingFileLogger? logger, HttpClient httpClient, bool initializeApiConfig = true)
+
+		public bool UseNoCertHttpClient { get; }
+
+		public WorkerApiClient(RollingFileLogger? logger, HttpClient? httpClient, bool initializeApiConfig = true, bool useNoCertHttpClient = false)
 		{
 			this.logger = logger ?? new RollingFileLogger(1024, false, null, "log_worker-client_");
-			this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-			this.baseUrl = httpClient.BaseAddress?.ToString().TrimEnd('/') ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.");
+			this.UseNoCertHttpClient = useNoCertHttpClient;
+
+			if (useNoCertHttpClient)
+			{
+				var handler = new HttpClientHandler
+				{
+					ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+				};
+				this.httpClient = new HttpClient(handler)
+				{
+					BaseAddress = httpClient?.BaseAddress ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.")
+				};
+			}
+			else
+			{
+				this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+			}
+
+			this.baseUrl = this.httpClient.BaseAddress?.ToString().TrimEnd('/') ?? throw new InvalidOperationException("HttpClient.BaseAddress is not set. Configure it in DI registration.");
 			this.internalClient = new internalWorkerClient(this.baseUrl, this.httpClient);
 
 			if (initializeApiConfig)
@@ -40,13 +59,16 @@ namespace OOCL.Image.Client
 
 		public async Task LogAsync(string message)
 		{
-			await this.logger.LogAsync("WORKERAPI:" + message, nameof(WorkerApiClient) + "*");
+			await this.logger.LogAsync("WORKERAPI: " + message, nameof(WorkerApiClient) + "*");
 		}
 
 
-		public async Task<string[]> GetWorkerLogAsync(int maxEntries = 1024)
+		public async Task<string[]> GetWorkerLogAsync(int maxEntries = 1024, bool showRefreshedLogMessage = true)
 		{
-			await this.logger.LogAsync($"WORKERAPI: Called GetWorkerLogAsync(maxEntries: {maxEntries})", nameof(WorkerApiClient));
+			if (showRefreshedLogMessage)
+			{
+				await this.logger.LogAsync($" - [TICK] - Refreshed Client Logs.", nameof(WorkerApiClient) + "*");
+			}
 			try
 			{
 				var entries = await this.logger.GetRecentLogsAsync(maxEntries);
