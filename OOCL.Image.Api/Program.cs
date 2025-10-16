@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using OOCL.Image.Core;
 using OOCL.Image.OpenCl;
