@@ -3,6 +3,8 @@ using OOCL.Image.Shared;
 using OOCL.Image.Shared.CUDA;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -145,16 +147,23 @@ namespace OOCL.Image.Client
 		public async Task<KernelExecuteResult> RequestKernelExecutionAsync(KernelExecuteRequest request)
 		{
 			await this.logger.LogAsync($"WORKERAPI: Called RequestKernelExecutionAsync(Kernel: {request.KernelName}, DeviceIndex: {request.DeviceIndex}, InputDataSize: {(request.InputDataBase64 != null ? request.InputDataBase64.Length : 0)}, InputDataChunks: {(request.InputDataBase64Chunks != null ? request.InputDataBase64Chunks.Count() : 0)})", nameof(WorkerApiClient));
+			KernelExecuteResult result = new();
+			
+			Stopwatch sw = Stopwatch.StartNew();
 			try
 			{
 				if (request.InputDataBase64Chunks != null && request.InputDataBase64Chunks.Any() && request.InputDataBase64Chunks.Count() >= 1)
 				{
-					return await this.internalClient.RequestGenericExecutionBatchAsync(request);
+					result = await this.internalClient.RequestGenericExecutionBatchAsync(request);
 				}
 				else
 				{
-					return await this.internalClient.RequestGenericExecutionSingleAsync(request);
+					result = await this.internalClient.RequestGenericExecutionSingleAsync(request);
 				}
+
+				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
+
+				return result;
 			}
 			catch (Exception ex)
 			{
@@ -164,6 +173,10 @@ namespace OOCL.Image.Client
 					ErrorMessage = ex.Message
 				};
 			}
+			finally
+			{
+				sw.Stop();
+			}
 		}
 
 		public async Task<CuFftResult> RequestCuFftAsync(CuFftRequest request)
@@ -171,7 +184,12 @@ namespace OOCL.Image.Client
 			await this.logger.LogAsync($"WORKERAPI: Called RequestCuFftAsync(Batches: {request.Batches}, of Size: {request.Size})", nameof(WorkerApiClient));
 			try
 			{
-				return await this.internalClient.RequestCufftAsync(request);
+				Stopwatch sw = Stopwatch.StartNew();
+				var result = await this.internalClient.RequestCufftAsync(request);
+				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
+				sw.Stop();
+
+				return result;
 			}
 			catch (Exception ex)
 			{

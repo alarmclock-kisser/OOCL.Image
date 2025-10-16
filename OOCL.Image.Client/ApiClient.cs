@@ -5,6 +5,7 @@ using OOCL.Image.Shared;
 using OpenTK.Graphics.ES20;
 using OpenTK.Mathematics;
 using System.Data;
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
@@ -793,6 +794,8 @@ namespace OOCL.Image.Client
 		public async Task<CuFftResult> RequestCuFfftAsync(IEnumerable<object[]>? dataChunks = null, IEnumerable<string>? dataChunksBase64 = null, bool inverse = false, string? forceDeviceName = null, string? preferredClientApiUrl = null)
 		{
 			await this.logger.LogAsync($"Called RequestCuFfftAsync(dataChunks: {(dataChunks != null ? dataChunks.Count().ToString() : "null")}, dataChunksBase64: {(dataChunksBase64 != null ? dataChunksBase64.Count().ToString() : "null")}, inverse: {inverse}, forceDeviceName: {(forceDeviceName ?? "null")}, preferredClientApiUrl: {(preferredClientApiUrl ?? "null")})", nameof(ApiClient));
+
+			Stopwatch sw = Stopwatch.StartNew();
 			try
 			{
 				Type? dataFormType = dataChunks?.FirstOrDefault()?.FirstOrDefault()?.GetType();
@@ -813,10 +816,39 @@ namespace OOCL.Image.Client
 				var result = await this.internalClient.RequestCufftAsync(preferredClientApiUrl ?? "", req);
 				if (result == null)
 				{
+					await this.logger.LogAsync("CuFFT result is null.", nameof(ApiClient));
 					return new CuFftResult()
 					{
 						ErrorMessage = "Result was null: " + forceDeviceName + " @ " + preferredClientApiUrl
 					};
+				}
+
+				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
+
+				// NEU: Preview-Logging für die ersten Werte
+				if (result.DataChunks != null && result.DataChunks.Any())
+				{
+					var firstChunk = result.DataChunks.FirstOrDefault();
+					string preview = "";
+					if (firstChunk != null)
+					{
+						int len = firstChunk.Length;
+						if (len <= 32)
+						{
+							preview = string.Join(", ", firstChunk);
+						}
+						else
+						{
+							var first16 = firstChunk.Take(16);
+							var last16 = firstChunk.Skip(len - 16);
+							preview = string.Join(", ", first16) + ", [...], " + string.Join(", ", last16);
+						}
+					}
+					await this.logger.LogAsync($"CuFFT Preview: [{preview}] (Length: {firstChunk?.Length ?? 0}, Batches: {result.DataChunks.Count()}, Size: {result.DataChunks.FirstOrDefault()?.LongLength}, Time: {result.ExecutionTimeMs:F2} ms)", nameof(ApiClient));
+				}
+				else
+				{
+					await this.logger.LogAsync("CuFFT Preview: No DataChunks returned.", nameof(ApiClient));
 				}
 
 				return result;
@@ -826,20 +858,31 @@ namespace OOCL.Image.Client
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return new CuFftResult();
 			}
+			finally
+			{
+				sw.Stop();
+			}
 		}
 
 		public async Task<CuFftResult> TestRequestCuFftAsync(int fftSize = 1024, int batchSize = 4, bool doInverseAfterwards = false, string? preferredClientApiUrl = null, string? forceDeviceName = null)
 		{
 			await this.logger.LogAsync($"Called TestRequestCuFftAsync({fftSize}, {batchSize}, {doInverseAfterwards}, preferredClientApiUrl: {(preferredClientApiUrl ?? "null")}, forceDeviceName: {(forceDeviceName ?? "null")})", nameof(ApiClient));
+
+			Stopwatch sw = Stopwatch.StartNew();
 			try
 			{
 				CuFftResult result = await this.internalClient.TestRequestCufftAsync(fftSize, batchSize, doInverseAfterwards, preferredClientApiUrl, forceDeviceName);
+				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
 				return result;
 			}
 			catch (Exception ex)
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return new CuFftResult();
+			}
+			finally
+			{
+				sw.Stop();
 			}
 		}
 
@@ -851,6 +894,7 @@ namespace OOCL.Image.Client
 				return (0, "no url");
 			}
 
+			Stopwatch sw = Stopwatch.StartNew();
 			try
 			{
 				var baseUrl = preferredClientApiUrl.TrimEnd('/');
@@ -868,12 +912,16 @@ namespace OOCL.Image.Client
 				var body = await resp.Content.ReadAsStringAsync();
 
 				await this.logger.LogAsync($"Raw test request {url} => {(int)resp.StatusCode}. Body len={body?.Length ?? 0}", nameof(ApiClient));
-				return ((int)resp.StatusCode, body ?? string.Empty);
+				return ((int)resp.StatusCode, body + $" ({sw.Elapsed.TotalMilliseconds:F4} ms)" ?? string.Empty);
 			}
 			catch (Exception ex)
 			{
 				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
 				return (-1, ex.Message);
+			}
+			finally
+			{
+				sw.Stop();
 			}
 		}
 

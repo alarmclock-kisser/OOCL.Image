@@ -82,13 +82,27 @@ namespace OOCL.Image.WebApp
 			builder.Services.AddServerSideBlazor();
 			builder.Services.AddRadzenComponents();
 
-			builder.Services.AddHttpClient<ApiClient>((sp, client) =>
+			var clientBuilder = builder.Services.AddHttpClient<ApiClient>((sp, client) =>
 			{
 				var cfg = sp.GetRequiredService<ApiUrlConfig>();
 				client.BaseAddress = new Uri(cfg.BaseUrl.EndsWith("/") ? cfg.BaseUrl : (cfg.BaseUrl + "/"));
 				var configuration = sp.GetRequiredService<IConfiguration>();
 				client.Timeout = TimeSpan.FromSeconds(timeoutSec);
 			});
+
+			// Bedingte Konfiguration des HttpClientHandlers:
+			if (useHttpNoCert)
+			{
+				// WICHTIG: Dieser Handler ignoriert alle SSL/TLS-Zertifikatsfehler (DangerousAcceptAnyServerCertificateValidator)
+				clientBuilder.ConfigurePrimaryHttpMessageHandler(() =>
+				{
+					Console.WriteLine("[HttpClient] WARNUNG: Insecure HTTPS-Client Handler (NoCert) ist AKTIVIERT!");
+					return new HttpClientHandler
+					{
+						ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+					};
+				});
+			}
 
 			builder.Services.AddSignalR(o => o.MaximumReceiveMessageSize = 1024 * 1024 * 128);
 
