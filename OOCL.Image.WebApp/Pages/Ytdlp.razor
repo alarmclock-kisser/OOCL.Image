@@ -1,0 +1,108 @@
+﻿@page "/ytdlp"
+@using System.Linq
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using OOCL.Image.Client
+@using OOCL.Image.Shared
+@using Radzen.Blazor
+@using Radzen
+@using Microsoft.JSInterop
+@using System.Globalization
+@inject ApiClient Api
+@inject WebAppConfig Config
+@inject NotificationService Notifications
+@inject IJSRuntime JS
+@inject DialogService DialogService
+
+<PageTitle>OOCL.work: Ytdlp</PageTitle>
+
+<link rel="stylesheet" href="/css/site.css" />
+
+@if (VM == null)
+{
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        <h3>api.OOCL.work: Ytdlp</h3>
+        <div>Loading...</div>
+    </RadzenCard>
+}
+else
+{
+    <!-- RadzenCard with Text input box and dropdown with available formats and dropdown with bitrates for format -->
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        <RadzenTextBox Style="width:100%" Placeholder="Enter video URL" @bind-Value="VM.VideoUrl" Change="VM.OnVideoUrlChanged" />
+        <br />
+        <RadzenDropDown Style="width:100%;margin-top:1rem;" Placeholder="Select Format" @bind-Value="VM.SelectedFormat" Data="VM.AvailableFormats.Keys" Change="OnFormatChanged" />
+        <br />
+        @if (VM.SelectedFormat != null && VM.AvailableFormats.ContainsKey(VM.SelectedFormat))
+        {
+            <RadzenDropDown Style="width:100%;margin-top:1rem;" Placeholder="Select Bitrate" @bind-Value="VM.SelectedBitrate" Data="VM.AvailableFormats[VM.SelectedFormat]" Change="OnBitrateChanged" />
+        }
+    </RadzenCard>
+
+    <!-- RadzenCard with Download buttons (Trigger client browser DL // DL to server) -->
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        <RadzenButton Style="width:100%;margin-top:1rem;" Text="Download to Client" Click="OnDownloadToClientClicked" Disabled="@(VM.SelectedFormat == null || VM.SelectedBitrate <= 0 || VM.IsDownloading)" />
+        <RadzenButton Style="width:100%;margin-top:1rem;" Text="Download to Server" Click="OnDownloadToServerClicked" Disabled="@(VM.SelectedFormat == null || VM.SelectedBitrate <= 0 || VM.IsDownloading)" />
+    </RadzenCard>
+
+    <!-- RadzenCard with status message -->
+    <RadzenCard Style="max-width:1100px;margin:auto;margin-top:2rem;">
+        @if (VM.IsDownloading)
+        {
+            <div>Downloading... Please wait.</div>
+        }
+        else if (!string.IsNullOrEmpty(VM.DownloadStatus))
+        {
+            <div>@VM.DownloadStatus</div>
+        }
+    </RadzenCard>
+
+}
+
+@code {
+    private YtdlpViewModel? VM;
+
+    protected override async Task OnInitializedAsync()
+    {
+        VM = new(Api, Config, Notifications, JS, DialogService);
+
+        await VM.InitializeAsync();
+    }
+
+    private async Task OnFormatChanged(object? value)
+    {
+        if (VM == null)
+            return;
+        await VM.OnFormatChanged();
+        StateHasChanged();
+    }
+
+    private async Task OnBitrateChanged(object? value)
+    {
+        if (VM == null)
+            return;
+        await VM.OnBitrateChanged();
+        StateHasChanged();
+    }
+
+    private async Task OnDownloadToServerClicked()
+    {
+        if (VM == null)
+            return;
+
+        await VM.OnDownloadToServerClicked();
+        StateHasChanged();
+    }
+
+    private async Task OnDownloadToClientClicked()
+    {
+        if (VM == null)
+            return;
+
+        await VM.OnDownloadToClientClicked();
+        StateHasChanged();
+    }
+
+
+}

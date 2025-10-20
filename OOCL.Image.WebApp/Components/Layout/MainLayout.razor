@@ -50,6 +50,16 @@
                     }
                 </div>
             </NavLink>
+            <!-- Neu: YTDLP -->
+            <NavLink href="/ytdlp" class="nav-entry">
+                <div class="nav-link-inner @(IsActive("/ytdlp") ? "active" : null)">
+                    <span class="icon">📼</span>
+                    @if (navOpen)
+                    {
+                        <span>YTDLP</span>
+                    }
+                </div>
+            </NavLink>
         </div>
         <div style="padding:.5rem .7rem;font-size:.65rem;opacity:.55;">@DateTime.Now:HH:mm</div>
     </nav>
