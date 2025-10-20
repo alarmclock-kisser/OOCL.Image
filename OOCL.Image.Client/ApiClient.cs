@@ -871,7 +871,7 @@ namespace OOCL.Image.Client
 			Stopwatch sw = Stopwatch.StartNew();
 			try
 			{
-				CuFftResult result = await this.internalClient.TestRequestCufftAsync(fftSize, batchSize, doInverseAfterwards, preferredClientApiUrl, forceDeviceName);
+				CuFftResult result = await this.internalClient.TestRequestCufftAsync(fftSize, batchSize, true, doInverseAfterwards, preferredClientApiUrl, forceDeviceName);
 				result.ExecutionTimeMs = sw.Elapsed.TotalMilliseconds;
 				return result;
 			}
@@ -949,5 +949,51 @@ namespace OOCL.Image.Client
 				return true;
 			}
 		}
+
+		public async Task<string> YtdlpUpdateAsync()
+		{
+			await this.logger.LogAsync("Called YtdlpUpdateAsync()", nameof(ApiClient));
+			try
+			{
+				var result = await this.internalClient.UpdateExecutableAsync();
+				return result ?? "No response from server.";
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return "Error updating yt-dlp: " + ex.Message;
+			}
+		}
+
+		public async Task<string> YtdlpDownloadServerAsync(string url, string format = "mp3", int bits = 256)
+		{
+			await this.logger.LogAsync($"Called YtdlpDownloadServerAsync({url}, {format}, {bits})", nameof(ApiClient));
+			try
+			{
+				var result = await this.internalClient.DownloadAudioServerAsync(url, format, bits);
+				return result ?? "No response from server.";
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return "Error downloading via yt-dlp: " + ex.Message;
+			}
+		}
+
+		public async Task<FileResponse?> YtdlpDownloadClientAsync(string url, string format = "mp3", int bits = 256)
+		{
+			await this.logger.LogAsync($"Called YtdlpDownloadClientAsync({url}, {format}, {bits})", nameof(ApiClient));
+			try
+			{
+				var result = await this.internalClient.DownloadAudioClientAsync(url, format, bits);
+				return result;
+			}
+			catch (Exception ex)
+			{
+				await this.logger.LogExceptionAsync(ex, nameof(ApiClient));
+				return null;
+			}
+		}
+
 	}
 }
