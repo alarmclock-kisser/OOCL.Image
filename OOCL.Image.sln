@@ -15,8 +15,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.Client", "OOCL.I
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.WebApp", "OOCL.Image.WebApp\OOCL.Image.WebApp.csproj", "{1D763500-195F-4AC3-A076-658AE2FBBBA0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OOCL.Image.Logging", "OOCL.Image.Logging\OOCL.Image.Logging.csproj", "{B5CD7A95-4731-4DEB-B8BC-057C24D3F0BA}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -47,10 +45,6 @@ Global
 		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1D763500-195F-4AC3-A076-658AE2FBBBA0}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B5CD7A95-4731-4DEB-B8BC-057C24D3F0BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B5CD7A95-4731-4DEB-B8BC-057C24D3F0BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B5CD7A95-4731-4DEB-B8BC-057C24D3F0BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B5CD7A95-4731-4DEB-B8BC-057C24D3F0BA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
